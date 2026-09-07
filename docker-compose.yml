@@ -1,0 +1,23 @@
+services:
+  backend:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes: ['./backend:/app']
+    ports: ['8000:8000']
+    command: ['sh', '-c', 'if [ -f requirements.txt ]; then pip install -r requirements.txt; fi; if [ -f app.py ]; then python app.py; else python -m http.server 8000; fi']
+  voice:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes: ['./voice:/app']
+    ports: ['8001:8001']
+    command: ['sh', '-c', 'if [ -f requirements.txt ]; then pip install -r requirements.txt; fi; if [ -f app.py ]; then python app.py; else python -m http.server 8001; fi']
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    volumes: ['./frontend:/app']
+    ports: ['3000:3000']
+    command: ['sh', '-c', 'if [ -f package.json ]; then npm install && npm run dev; else python3 -m http.server 3000; fi']
+  asterisk:
+    image: andrius/asterisk:22
+    profiles: ['asterisk']
+    ports: ['8088:8088', '5060:5060/udp', '10000-10020:10000-10020/udp']

@@ -1,0 +1,20 @@
+name: Basic checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject tracked environment files
+        shell: bash
+        run: |
+          if git ls-files | grep -E '(^|/)[.]env($|[.])' | grep -vE '(^|/)[.]env[.]example$'; then exit 1; fi
+      - name: Validate YAML
+        run: python -c "import pathlib, yaml; [yaml.safe_load(p.read_text()) for p in pathlib.Path('.').rglob('*.y*ml') if '.git' not in p.parts]"
+      - name: Backend checks when configured
+        run: if [ -f backend/pyproject.toml ]; then python -m pytest backend; fi
+      - name: Frontend checks when configured
+        run: if [ -f frontend/package.json ]; then cd frontend && npm install && npm run typecheck --if-present && npm run lint --if-present; fi

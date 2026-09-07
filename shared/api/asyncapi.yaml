@@ -1,0 +1,23 @@
+asyncapi: 2.6.0
+info:
+  title: 112 AI Trainer Control Events
+  version: 0.1.0
+channels:
+  /ws/v1/voice/sessions/{session_id}:
+    publish:
+      message: {$ref: '#/components/messages/EventEnvelope'}
+    subscribe:
+      message: {$ref: '#/components/messages/EventEnvelope'}
+components:
+  messages:
+    EventEnvelope:
+      payload:
+        type: object
+        required: [event_id, seq, session_id, type, elapsed_ms, payload]
+        properties:
+          event_id: {type: string}
+          seq: {type: integer}
+          session_id: {type: string}
+          type: {type: string}
+          elapsed_ms: {type: integer}
+          payload: {type: object}

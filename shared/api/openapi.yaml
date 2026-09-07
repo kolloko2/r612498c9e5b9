@@ -1,0 +1,14 @@
+openapi: 3.0.3
+info:
+  title: 112 AI Trainer REST API
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      responses:
+        '200': {description: Healthy}
+  /scenarios:
+    get: {responses: {'200': {description: Scenario list}}}
+    post: {responses: {'201': {description: Created}}}
+  /sessions:
+    post: {responses: {'201': {description: Created}}}
