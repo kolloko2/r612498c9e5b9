@@ -1,0 +1,4 @@
+[training-only]
+; No outbound dialplan and no PSTN trunks. Gateway originates PJSIP/201 via ARI.
+exten => _X.,1,Hangup()
+exten => s,1,Hangup()

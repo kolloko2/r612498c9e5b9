@@ -1,0 +1,22 @@
+services:
+  voice:
+    build:
+      context: .
+      args:
+        INSTALL_LOCAL_PROVIDERS: "${INSTALL_LOCAL_PROVIDERS:-false}"
+    env_file: .env
+    environment:
+      RECORDING_DIR: /data/recordings
+      OUTBOX_DIR: /data/outbox
+    ports:
+      - "${VOICE_BIND_ADDRESS:-127.0.0.1}:8001:8001"
+    volumes:
+      - voice-recordings:/data/recordings
+      - voice-outbox:/data/outbox
+      # Add a read-only model mount when enabling Vosk/Piper.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+volumes:
+  voice-recordings:
+  voice-outbox:

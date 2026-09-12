@@ -1,6 +1,8 @@
 # 112 AI Trainer
 
-Bootstrap monorepo for an AI training simulator for emergency dispatch operators.
+Working local simulator for training emergency dispatch operators. The operator uses
+MicroSIP extension 201; the simulated victim is controlled manually, by the local
+scenario model, or through the authenticated External AI API.
 
 License: not specified
 
@@ -14,12 +16,10 @@ Flow: Frontend -> Backend -> Voice -> Asterisk. Control and media WebSockets are
 |---|---:|---|
 | Backend | 8000 | backend developer |
 | Voice | 8001 | voice developer |
-| Frontend | 3000 | frontend developer |
+| Local web console | 8002 | frontend/BFF |
 | Asterisk | 8088 | voice/integration |
 
-```bash
-cp .env.example .env
-docker compose up --build
-```
+The installed Windows/WSL stand is documented in `docs/Запуск-и-доступность.md`.
+For isolated Voice development and mock tests, see `voice/README.md`.
 
 Read `AGENTS.md` before changes. See `docs/` for project, architecture, contracts, scenario, integration, security and demo documentation.

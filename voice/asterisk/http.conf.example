@@ -1,0 +1,4 @@
+[general]
+enabled=yes
+bindaddr=${ASTERISK_HTTP_BIND}
+bindport=8088

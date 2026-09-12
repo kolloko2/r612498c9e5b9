@@ -1,0 +1,8 @@
+.env
+.venv
+recordings
+outbox
+asterisk/generated
+**/__pycache__
+.pytest_cache
+spike-results

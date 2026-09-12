@@ -8,13 +8,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Reject tracked environment files
         shell: bash
         run: |
           if git ls-files | grep -E '(^|/)[.]env($|[.])' | grep -vE '(^|/)[.]env[.]example$'; then exit 1; fi
       - name: Validate YAML
         run: ruby -e "require 'yaml'; Dir['**/*.{yml,yaml}'].reject { |p| p.start_with?('.git/') }.each { |p| YAML.load_file(p) }; puts 'YAML OK'"
-      - name: Backend checks when configured
-        run: if [ -f backend/pyproject.toml ]; then python -m pytest backend; fi
+      - name: Install Python checks
+        run: python -m pip install -e './voice[test]' -r backend/requirements.txt
+      - name: Voice and dialogue tests
+        run: cd voice && python -m pytest tests ../backend/test_dialogue.py -q
+      - name: Compile local services
+        run: python -m compileall -q voice/app backend/server.py frontend/server.py tools/windows-training
       - name: Frontend checks when configured
         run: if [ -f frontend/package.json ]; then cd frontend && npm install && npm run typecheck --if-present && npm run lint --if-present; fi

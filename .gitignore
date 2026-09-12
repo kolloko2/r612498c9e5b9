@@ -16,4 +16,9 @@ build/
 recordings/
 audio/tmp/
 tmp/
+tools/windows-training/MicroSIP/
+*.sqlite3
+*-verification.json
+training-last-call.json
+speech-check.wav
 .DS_Store

@@ -1,14 +1,123 @@
 openapi: 3.0.3
 info:
   title: 112 AI Trainer REST API
-  version: 0.1.0
+  version: 0.2.0
+  description: Backend scenario API and Voice Gateway API on separate ports.
+servers:
+  - {url: 'http://127.0.0.1:8000/api/v1', description: Scenario backend}
+  - {url: 'http://127.0.0.1:8001/api/v1', description: Voice Gateway}
+security:
+  - bearerAuth: []
 paths:
   /health:
     get:
-      responses:
-        '200': {description: Healthy}
+      security: []
+      responses: {'200': {description: Service health}}
   /scenarios:
     get: {responses: {'200': {description: Scenario list}}}
-    post: {responses: {'201': {description: Created}}}
-  /sessions:
-    post: {responses: {'201': {description: Created}}}
+    post:
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Scenario'}}}}
+      responses: {'201': {description: Scenario created}}
+  /scenarios/validate:
+    post:
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Scenario'}}}}
+      responses: {'200': {description: Scenario is valid}}
+  /scenarios/{scenario_id}:
+    parameters: [{name: scenario_id, in: path, required: true, schema: {type: string}}]
+    get: {responses: {'200': {description: Scenario}}}
+    put:
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Scenario'}}}}
+      responses: {'200': {description: Scenario updated}}
+    delete: {responses: {'204': {description: Scenario deleted}}}
+  /calls:
+    post:
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateCall'}}}}
+      responses: {'201': {description: Call created}}
+  /calls/{call_id}:
+    parameters: [{$ref: '#/components/parameters/CallId'}]
+    get: {responses: {'200': {description: Call snapshot}}}
+  /calls/{call_id}/hangup:
+    parameters: [{$ref: '#/components/parameters/CallId'}]
+    post: {responses: {'200': {description: Call ended}}}
+  /chat:
+    get: {responses: {'200': {description: Persistent call chats}}}
+  /chat/{call_id}:
+    parameters: [{$ref: '#/components/parameters/CallId'}]
+    get: {responses: {'200': {description: Chat and playback states}}}
+  /chat/{call_id}/say:
+    parameters: [{$ref: '#/components/parameters/CallId'}]
+    post:
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Speak'}}}}
+      responses: {'200': {description: Exact text queued for playback}}
+  /chat/{call_id}/stop:
+    parameters: [{$ref: '#/components/parameters/CallId'}]
+    post: {responses: {'200': {description: Playback stopped}}}
+  /integration/calls:
+    post:
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ExternalCall'}}}}
+      responses: {'201': {description: External-AI call created}}
+  /integration/calls/{call_id}:
+    parameters: [{$ref: '#/components/parameters/CallId'}]
+    get: {responses: {'200': {description: Call and transcript}}}
+  /integration/calls/{call_id}/speak:
+    parameters: [{$ref: '#/components/parameters/CallId'}]
+    post:
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Speak'}}}}
+      responses: {'202': {description: Victim reply accepted idempotently}}
+  /integration/calls/{call_id}/events:
+    parameters:
+      - {$ref: '#/components/parameters/CallId'}
+      - {name: after, in: query, schema: {type: integer, minimum: 0}}
+      - {name: follow, in: query, schema: {type: boolean, default: true}}
+    get:
+      responses:
+        '200': {description: SSE stream or JSON when follow=false}
+  /integration/calls/{call_id}/stop:
+    parameters: [{$ref: '#/components/parameters/CallId'}]
+    post: {responses: {'200': {description: External playback stopped}}}
+  /integration/calls/{call_id}/hangup:
+    parameters: [{$ref: '#/components/parameters/CallId'}]
+    post: {responses: {'200': {description: External call ended}}}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    CallId: {name: call_id, in: path, required: true, schema: {type: string, format: uuid}}
+  schemas:
+    CreateCall:
+      type: object
+      required: [session_id]
+      properties:
+        session_id: {type: string, format: uuid}
+        extension: {type: string, default: '201'}
+        mode: {type: string, enum: [manual, auto, external], default: auto}
+        scenario_id: {type: string, nullable: true}
+    ExternalCall:
+      type: object
+      required: [session_id]
+      properties:
+        session_id: {type: string, format: uuid}
+        extension: {type: string, default: '201'}
+    Speak:
+      type: object
+      required: [message_id, text]
+      properties:
+        message_id: {type: string, format: uuid}
+        text: {type: string, minLength: 1, maxLength: 4000}
+        interrupt: {type: boolean, default: false}
+    Scenario:
+      type: object
+      required: [id, title, victim_name, incident, location, known_facts, emotion, opening]
+      properties:
+        id: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{2,63}$'}
+        title: {type: string}
+        description: {type: string}
+        victim_name: {type: string}
+        incident: {type: string}
+        location: {type: string}
+        known_facts: {type: array, items: {type: string}}
+        unknown_facts: {type: array, items: {type: string}}
+        emotion: {type: string}
+        behavior: {type: string}
+        opening: {type: string}
+        enabled: {type: boolean, default: true}
