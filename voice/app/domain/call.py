@@ -34,6 +34,9 @@ class CallContext:
         return max(0, round((time.monotonic() - self.created_at) * 1000))
 
     def snapshot(self):
-        return {"call_id": str(self.call_id), "session_id": str(self.session_id),
-                "extension": self.extension, "status": self.status.value,
-                "elapsed_ms": self.elapsed_ms()}
+        result = {"call_id": str(self.call_id), "session_id": str(self.session_id),
+                  "extension": self.extension, "status": self.status.value,
+                  "elapsed_ms": self.elapsed_ms()}
+        if self.status in (CallStatus.ended, CallStatus.failed):
+            result["reason"] = self.stop_reason
+        return result

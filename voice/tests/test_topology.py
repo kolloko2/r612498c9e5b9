@@ -10,6 +10,8 @@ class FakeARI:
     def __init__(self, fail_at=None):
         self.requests = []
         self.deleted = []
+        self.waited = []
+        self.forgotten = []
         self.fail_at = fail_at
 
     async def request(self, method, path, **kwargs):
@@ -20,6 +22,12 @@ class FakeARI:
 
     async def delete(self, path):
         self.deleted.append(path)
+
+    async def wait_channel(self, channel_id, timeout):
+        self.waited.append((channel_id, timeout))
+
+    def forget_channel(self, channel_id):
+        self.forgotten.append(channel_id)
 
 
 async def test_directional_topology_has_no_shared_capture_bridge():
@@ -41,6 +49,10 @@ async def test_directional_topology_has_no_shared_capture_bridge():
     assert topology.phone not in capture
     assert topology.media["playback"] not in capture
     assert capture == [topology.snoops["capture"], topology.media["capture"]]
+    assert [channel_id for channel_id, _ in ari.waited] == [
+        topology.snoops["capture"], topology.snoops["monitor"],
+        topology.media["capture"], topology.media["playback"], topology.media["monitor"],
+    ]
 
 
 async def test_partial_topology_failure_can_be_cleaned():
@@ -51,3 +63,4 @@ async def test_partial_topology_failure_can_be_cleaned():
     await topology.close()
     assert set(ari.deleted) == ({f"channels/{c}" for c in topology.channel_ids}
                                 | {f"bridges/{b}" for b in topology.bridges.values()})
+    assert set(ari.forgotten) == set(topology.channel_ids)

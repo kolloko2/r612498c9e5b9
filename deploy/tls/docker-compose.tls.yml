@@ -1,0 +1,139 @@
+# Opt-in overlay. It has no effect unless explicitly supplied together with
+# --profile tls. Requires Docker Compose 2.24.4+ for !override.
+services:
+  postgres:
+    profiles: [tls]
+    image: trainer112-postgres-tls:dev
+    build:
+      context: ./deploy/postgres
+      dockerfile: Dockerfile.tls
+    volumes:
+      - ./deploy/tls/certs/postgres.cert.pem:/run/tls-source/postgres.cert.pem:ro
+      - ./deploy/tls/private/postgres.key.pem:/run/tls-source/postgres.key.pem:ro
+      - ./deploy/tls/ca/ca.cert.pem:/run/tls-source/ca.cert.pem:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          PGPASSWORD="$$POSTGRES_PASSWORD" psql
+          "host=postgres port=5432 dbname=$$POSTGRES_DB user=$$POSTGRES_USER sslmode=verify-full sslrootcert=/run/postgresql-tls/ca.crt"
+          -v ON_ERROR_STOP=1 -Atqc "select ssl from pg_stat_ssl where pid=pg_backend_pid()" | grep -qx t
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    profiles: [tls]
+    environment:
+      DATABASE_URL: postgresql://trainer:${POSTGRES_PASSWORD:?Run prepare.py}@postgres:5432/trainer?sslmode=verify-full&sslrootcert=/run/trainer-tls/ca.cert.pem
+      VOICE_URL: https://voice:8001
+      INTERNAL_CA_FILE: /run/trainer-tls/ca.cert.pem
+    user: "0:0"
+    entrypoint: [python, /run/tls-bootstrap/run_as_user.py, --user, trainer, --cert-name, backend, --]
+    command: !override
+      - uvicorn
+      - server:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "1"
+      - --ssl-certfile
+      - /run/trainer-tls/backend.cert.pem
+      - --ssl-keyfile
+      - /run/trainer-tls/backend.key.pem
+    volumes:
+      - ./deploy/tls/run_as_user.py:/run/tls-bootstrap/run_as_user.py:ro
+      - ./deploy/tls/certs/backend.cert.pem:/run/tls-source/backend.cert.pem:ro
+      - ./deploy/tls/private/backend.key.pem:/run/tls-source/backend.key.pem:ro
+      - ./deploy/tls/ca/ca.cert.pem:/run/tls-source/ca.cert.pem:ro
+    healthcheck:
+      test: [CMD, python, -c, "import ssl,urllib.request; urllib.request.urlopen('https://backend:8000/api/v1/health',timeout=3,context=ssl.create_default_context(cafile='/run/trainer-tls/ca.cert.pem'))"]
+
+  frontend:
+    profiles: [tls]
+    environment:
+      DIALOGUE_URL: https://backend:8000
+      VOICE_URL: https://voice:8001
+      INTERNAL_CA_FILE: /run/trainer-tls/ca.cert.pem
+      ALLOWED_ORIGINS: ${TLS_ALLOWED_ORIGINS:?Set exact HTTPS browser origin(s)}
+      COOKIE_SECURE: "true"
+    user: "0:0"
+    entrypoint: [python, /run/tls-bootstrap/run_as_user.py, --user, trainer, --cert-name, frontend, --]
+    command: !override
+      - uvicorn
+      - server:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "3000"
+      - --workers
+      - "1"
+      - --ssl-certfile
+      - /run/trainer-tls/frontend.cert.pem
+      - --ssl-keyfile
+      - /run/trainer-tls/frontend.key.pem
+    volumes:
+      - ./deploy/tls/run_as_user.py:/run/tls-bootstrap/run_as_user.py:ro
+      - ./deploy/tls/certs/frontend.cert.pem:/run/tls-source/frontend.cert.pem:ro
+      - ./deploy/tls/private/frontend.key.pem:/run/tls-source/frontend.key.pem:ro
+      - ./deploy/tls/ca/ca.cert.pem:/run/tls-source/ca.cert.pem:ro
+    healthcheck:
+      test: [CMD, python, -c, "import ssl,urllib.request; urllib.request.urlopen('https://localhost:3000/login',timeout=3,context=ssl.create_default_context(cafile='/run/trainer-tls/ca.cert.pem'))"]
+
+  voice:
+    profiles: [tls]
+    environment:
+      BACKEND_URL: wss://backend:8000/ws/v1/voice/sessions/{session_id}
+      ARI_URL: https://asterisk:8089/ari
+      INTERNAL_CA_FILE: /run/trainer-tls/ca.cert.pem
+    user: "0:0"
+    entrypoint: [python, /run/tls-bootstrap/run_as_user.py, --user, voice, --cert-name, voice, --]
+    command: !override
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
+      - --workers
+      - "1"
+      - --ws-max-size
+      - "65500"
+      - --ssl-certfile
+      - /run/trainer-tls/voice.cert.pem
+      - --ssl-keyfile
+      - /run/trainer-tls/voice.key.pem
+    volumes:
+      - ./deploy/tls/run_as_user.py:/run/tls-bootstrap/run_as_user.py:ro
+      - ./deploy/tls/certs/voice.cert.pem:/run/tls-source/voice.cert.pem:ro
+      - ./deploy/tls/private/voice.key.pem:/run/tls-source/voice.key.pem:ro
+      - ./deploy/tls/ca/ca.cert.pem:/run/tls-source/ca.cert.pem:ro
+    healthcheck:
+      test: [CMD, python, -c, "import ssl,urllib.request; urllib.request.urlopen('https://voice:8001/api/v1/health',timeout=3,context=ssl.create_default_context(cafile='/run/trainer-tls/ca.cert.pem'))"]
+
+  asterisk:
+    profiles: [tls]
+    environment:
+      ASTERISK_TLS_ENABLED: "true"
+      ASTERISK_TLS_CERT_FILE: /run/trainer-tls/asterisk.cert.pem
+      ASTERISK_TLS_KEY_FILE: /run/trainer-tls/asterisk.key.pem
+      ASTERISK_TLS_CA_FILE: /run/trainer-tls/ca.cert.pem
+      VOICE_MEDIA_URL: wss://voice:8001/media
+    user: "0:0"
+    entrypoint: [python3, /run/tls-bootstrap/run_as_user.py, --user, asterisk, --cert-name, asterisk, --, python3, /usr/local/bin/entrypoint.py]
+    command: !override
+      - /usr/sbin/asterisk
+      - -f
+      - -vvv
+      - -C
+      - /etc/asterisk/asterisk.conf
+    volumes:
+      - ./deploy/tls/run_as_user.py:/run/tls-bootstrap/run_as_user.py:ro
+      - ./deploy/tls/certs/asterisk.cert.pem:/run/tls-source/asterisk.cert.pem:ro
+      - ./deploy/tls/private/asterisk.key.pem:/run/tls-source/asterisk.key.pem:ro
+      - ./deploy/tls/ca/ca.cert.pem:/run/tls-source/ca.cert.pem:ro
+    ports: !override
+      - "${SIP_BIND_ADDRESS:?Set the private training-LAN bind address}:5061:5061/tcp"
+      - "${SIP_BIND_ADDRESS:?Set the private training-LAN bind address}:20000-20199:20000-20199/udp"

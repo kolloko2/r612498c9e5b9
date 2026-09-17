@@ -34,6 +34,7 @@ class Topology:
         for role, spy in (("capture", "in"), ("monitor", "out")):
             await self.ari.request("POST", f"channels/{self.phone}/snoop/{self.snoops[role]}",
                                    params={"app": cfg.ari_app, "spy": spy, "whisper": "none"})
+            await self._wait_channel(self.snoops[role])
         for role, channel_id in self.media.items():
             # d() is from the application perspective, NOT the phone perspective.
             direction = "out" if role == "playback" else "in"
@@ -44,10 +45,18 @@ class Topology:
                 "connection_type": "client", "direction": "both",
                 "transport_data": f"f(json)d({direction})",
             })
+            await self._wait_channel(channel_id)
         bridges = BridgeManager(self.ari)
         await bridges.create(self.bridges["playback"], [self.phone, self.media["playback"]])
         for role in ("capture", "monitor"):
             await bridges.create(self.bridges[role], [self.snoops[role], self.media[role]])
+
+    async def _wait_channel(self, channel_id):
+        # ARI channel creation may return before the channel has entered Stasis;
+        # adding it to a bridge in that window intermittently returns HTTP 422.
+        wait_channel = getattr(self.ari, "wait_channel", None)
+        if wait_channel:
+            await wait_channel(channel_id, min(self.settings.connect_timeout_s, 10))
 
     async def close(self):
         # Delete even ids from partially failed creation: ARI 404 is idempotent.
@@ -60,5 +69,9 @@ class Topology:
             return_exceptions=True,
         )
         errors = [type(r).__name__ for r in results if isinstance(r, Exception)]
+        forget_channel = getattr(self.ari, "forget_channel", None)
+        if forget_channel:
+            for channel_id in self.channel_ids:
+                forget_channel(channel_id)
         if errors:
             raise RuntimeError("ARI cleanup failed: " + ", ".join(errors))

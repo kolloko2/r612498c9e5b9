@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Техническое управление · Тренажёр 112</title>
+  <link rel="stylesheet" href="/assets/portal.css">
+  <link rel="stylesheet" href="/assets/operations.css">
+  <script src="/assets/operations.js" defer></script>
+  <script src="/assets/operations-config.js" defer></script>
+</head>
+<body>
+  <header>
+    <div><strong>СИСТЕМА-112</strong><span>Техническое управление учебным контуром</span></div>
+    <div class="identity"><span id="identity"></span><a class="header-link" href="/portal">В кабинет</a><button id="logout" type="button">Выйти</button></div>
+  </header>
+
+  <main>
+    <div class="heading">
+      <div>
+        <p class="eyebrow">Администрирование</p>
+        <h1>Состояние учебного контура</h1>
+        <p><a href="/audit">Журнал безопасности и архив действий</a></p>
+        <button id="exportConfigurationXml" type="button">Выгрузить безопасную конфигурацию XML</button>
+        <p>Мониторинг Backend, Voice и Asterisk, резервные копии и безопасные операции обслуживания.</p>
+      </div>
+      <button id="refresh" type="button">Обновить</button>
+    </div>
+
+    <p id="pageStatus" class="page-status" role="status" aria-live="polite">Проверяем доступ…</p>
+
+    <section id="disabledNotice" class="notice warning" hidden>
+      <strong>Техническое управление отключено</strong>
+      <p>Просмотр доступен, но операции обслуживания заблокированы конфигурацией сервера.</p>
+    </section>
+
+    <section id="alertsSection" class="notice danger" aria-labelledby="alertsHeading" hidden>
+      <div class="section-head"><div><h2 id="alertsHeading">Требуют внимания</h2><p>Автоматические сообщения из журнала технических событий.</p></div><button id="dismissAlerts" type="button">Скрыть</button></div>
+      <div id="alerts" class="alert-list" aria-live="assertive"></div>
+    </section>
+
+    <section class="summary" aria-label="Сводка">
+      <article class="summary-card"><span>Состояние</span><strong id="overallState">Нет данных</strong><small id="overallHint">Ожидание первого снимка</small></article>
+      <article class="summary-card"><span>Снимок</span><strong id="sampledAt">—</strong><small id="sampleAge">Время не указано</small></article>
+      <article class="summary-card"><span>Службы</span><strong id="serviceCount">—</strong><small id="serviceHint">Нет данных</small></article>
+      <article class="summary-card"><span>Задания</span><strong id="jobCount">—</strong><small>Последние операции</small></article>
+    </section>
+
+    <div class="dashboard-grid">
+      <section class="panel wide">
+        <h2>Настройки SIP, PostgreSQL и ресурсов</h2>
+        <p>Пароли здесь не редактируются. Применение перезапускает службы — завершите занятия перед обслуживанием. Номера должны уже существовать в SIP_ACCOUNTS_JSON.</p>
+        <form id="runtimeForm"><div id="runtimeFields" class="metric-list"></div><button type="submit">Применить с перезапуском служб</button></form>
+        <button id="downloadRuntimeXml" type="button">Экспорт XML настроек</button>
+        <label>Импорт XML<input id="runtimeXml" type="file" accept=".xml,application/xml"></label>
+        <pre id="runtimePreview"></pre><button id="applyRuntimeXml" hidden type="button">Подтвердить импорт и перезапуск</button>
+        <p id="runtimeStatus" role="status"></p>
+        <button id="installUpdate" type="button">Установить подготовленное обновление</button>
+        <p>Только архив образов, заранее одобренный администратором на сервере.</p>
+      </section>
+      <section class="panel wide" aria-labelledby="servicesHeading">
+        <div class="section-head"><div><h2 id="servicesHeading">Службы</h2><p>Недоступное или устаревшее состояние никогда не считается исправным.</p></div></div>
+        <div id="services" class="service-grid"><p class="empty">Нет данных о службах</p></div>
+      </section>
+
+      <section class="panel" aria-labelledby="settingsHeading">
+        <div class="section-head"><div><h2 id="settingsHeading">Резервное копирование</h2><p>Расписание задаётся по UTC.</p></div></div>
+        <form id="settingsForm" class="stack">
+          <label class="toggle"><input id="backupEnabled" type="checkbox"> <span>Автоматические копии включены</span></label>
+          <label>Час запуска, UTC<input id="backupHour" type="number" min="0" max="23" step="1" required></label>
+          <div class="form-actions"><button id="saveSettings" class="primary" type="submit">Сохранить настройки</button><button id="resetSettings" type="button">Отменить правки</button></div>
+          <p id="settingsStatus" class="form-status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="backupHeading">
+        <div class="section-head"><div><h2 id="backupHeading">Резервные копии</h2><p>Только сведения о созданных копиях — без секретов и содержимого.</p></div><button id="runBackup" type="button">Создать копию</button></div>
+        <div id="backups" class="list"><p class="empty">Копий пока нет</p></div>
+      </section>
+
+      <section class="panel" aria-labelledby="metricsHeading">
+        <div class="section-head"><div><h2 id="metricsHeading">Метрики</h2><p>Последний серверный снимок.</p></div></div>
+        <dl id="metrics" class="metric-list"><div><dt>Данные</dt><dd>Пока не получены</dd></div></dl>
+      </section>
+
+      <section id="configSection" class="panel" aria-labelledby="configHeading" hidden>
+        <div class="section-head"><div><h2 id="configHeading">Конфигурация процесса</h2><p>Безопасные параметры окружения только для чтения.</p></div></div>
+        <dl id="configuration" class="metric-list"></dl>
+      </section>
+
+      <section class="panel" aria-labelledby="jobsHeading">
+        <div class="section-head"><div><h2 id="jobsHeading">Операции</h2><p>Постановка в очередь не означает успешного завершения.</p></div></div>
+        <div id="jobs" class="list"><p class="empty">Операций пока нет</p></div>
+      </section>
+
+      <section class="panel wide" aria-labelledby="eventsHeading">
+        <div class="section-head"><div><h2 id="eventsHeading">Журнал событий</h2><p>Последние технические события учебного контура.</p></div><button id="exportReport" type="button">Экспорт отчёта JSON</button></div>
+        <div id="events" class="timeline"><p class="empty">Событий пока нет</p></div>
+      </section>
+      <section class="panel wide"><h2>Системные журналы служб</h2><button type="button" id="loadServiceLogs">Обновить журналы</button><pre id="serviceLogs">Нажмите «Обновить журналы»</pre></section>
+    </div>
+  </main>
+</body>
+</html>

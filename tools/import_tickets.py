@@ -1,0 +1,327 @@
+"""Import the supplied training tickets into a bounded scenario-draft catalog.
+
+Source: `Датасет.zip` → `Билеты- задачи по C 112 . АГС_ГСИ.pdf`, 32 scanned pages
+with three calls each. The pages carry no text layer, so `tools/data/tickets_source.json`
+holds a manual transcription with its own provenance block; this importer never
+reads the PDF and never invents incident facts.
+
+Every generated draft keeps the source text verbatim in `incident` and derives
+facts only by splitting that same text. Category and DDS profile come from an
+explicit keyword table; a call matching no rule stays `other`/`general` and is
+reported as unclassified rather than guessed. Drafts are always disabled: a
+teacher validates each one before it can be issued, as the task statement requires.
+
+Caller telephone numbers are replaced with deterministic synthetic numbers by
+default, because the project forbids storing real-looking personal data. Pass
+`--keep-source-phones` to reproduce the booklet exactly for a source comparison.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "tools" / "data" / "tickets_source.json"
+OUTPUT = ROOT / "backend" / "data" / "tickets.json"
+SCHEMA_VERSION = 1
+
+# Scenario.id must match ^[a-z0-9][a-z0-9_-]{2,63}$ in backend/server.py.
+DRAFT_ID = "ticket-{ticket:02d}-{call}"
+MAX_KNOWN_FACTS = 30
+MAX_FACT_CHARS = 1000
+MAX_INCIDENT_CHARS = 1000
+MAX_LOCATION_CHARS = 500
+MAX_TITLE_CHARS = 120
+
+PHONE = re.compile(r"\b(?:\d[\s-]?){10}\b")
+# Три слова с заглавной буквы подряд — «Фамилия Имя Отчество» в исходных билетах.
+FULL_NAME = re.compile(r"\b([А-ЯЁ][а-яё]+)\s+([А-ЯЁ][а-яё]+)\s+([А-ЯЁ][а-яё]+(?:ич|на|вна|чна))\b")
+
+# Порядок важен: первое совпавшее правило определяет категорию.
+# Ключевые слова взяты из текста самих билетов, а не из официальных регламентов.
+CATEGORY_RULES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
+    ("gas", "utilities", "gas", ("запах газа", "газовой трубы", "свист от газовой")),
+    ("fire", "fire", "fire", (
+        "горит", "горят", "возгорание", "задымление", "пожар", "столб черного дыма",
+        "пожарная сигнализация", "открытое пламя", "открытый огонь",
+    )),
+    ("traffic", "traffic", "police", (
+        "дтп", "наезд на пешехода", "сбила электричка", "упало бревно с грузовика",
+        "падение автомашины в воду", "троллейбус",
+    )),
+    ("public", "public", "police", (
+        "дерутся", "драка", "избита", "изнасиловали", "угон", "завладение автотранспортом",
+        "подозрительн", "коробка", "тикает", "взорвать", "затащили", "попрошайничает",
+        "нетрезвый", "ругается", "сломать тумбу", "скандал", "ссора", "труп",
+        "хочет повеситься", "просит вызвать полицию", "не пояснил", "громко играет музыка",
+    )),
+    ("medical", "medical", "medical", (
+        "потеря сознания", "без сознания", "теряет сознание", "потеряла сознание",
+        "боли в сердце", "головная", "головные боли", "судороги", "задыхается", "астма",
+        "беременность", "рожает", "отошли воды", "кровотечение", "укусила змея",
+        "рвота", "боль в животе", "травма", "ожог", "отек", "хрипы", "скончалась",
+        "выпила", "речь невнятная", "инсульт", "плохо", "в крови", "лежит мужчина",
+    )),
+    ("other", "other", "general", (
+        "тонет", "упал с моста", "плывут на льдине", "заблудилась", "упал в котлован",
+        "нырнул в воду", "потерялся ребенок", "не вернулся", "не открывает дверь",
+        "открыть дверь", "двери заблокировались", "просит о помощи", "крики о помощи",
+        "трещина", "отлетела плитка", "крепления", "уличное освещение",
+        "поругался с продавцом",
+    )),
+)
+
+# Формулировки источника, прямо помечающие сведения как неизвестные оператору.
+UNKNOWN_MARKERS: tuple[tuple[str, str], ...] = (
+    ("гос. знак назвать не может", "Государственный знак транспортного средства заявителю неизвестен"),
+    ("гос. номер не запомнил", "Государственный номер автомобиля заявитель не запомнил"),
+    ("№ дома неизвестен", "Номер дома заявителю неизвестен"),
+    ("источник не установлен", "Источник задымления не установлен"),
+    ("точной информации нет", "Точных сведений о пострадавших у заявителя нет"),
+    ("что горит не знает", "Что именно горит, заявитель не знает"),
+    ("название не знаю", "Название ориентира заявителю неизвестно"),
+    ("неизвестный", "Личность пострадавшего не установлена"),
+    ("неизвестная", "Личность пострадавшей не установлена"),
+    ("информации о пострадавших нет", "Сведений о пострадавших у заявителя нет"),
+)
+
+EMOTIONS = {
+    "fire": "Встревожена, говорит быстро, торопит оператора.",
+    "medical": "Испугана за пострадавшего, отвечает сбивчиво, просит поторопиться.",
+    "traffic": "Возбуждена, говорит громко, отвлекается на обстановку.",
+    "public": "Раздражена и насторожена, говорит отрывисто.",
+    "utilities": "Обеспокоена, говорит тихо, опасается находиться рядом.",
+    "other": "Обеспокоена, отвечает по существу.",
+}
+BEHAVIOR = (
+    "Сначала называет суть происшествия. Адрес, имя, телефон и остальные подробности "
+    "сообщает только в ответ на вопросы оператора. Не придумывает фактов, которых нет "
+    "в известных сведениях; на вопрос о неизвестном отвечает, что не знает."
+)
+
+
+def _synthetic_phone(original: str) -> str:
+    """Stable per-source-number training placeholder; never a dialable number."""
+    digits = re.sub(r"\D", "", original)
+    index = int(hashlib.sha256(digits.encode("utf-8")).hexdigest(), 16) % 100
+    return f"+7 900 000-00-{index:02d}"
+
+
+def _normalize_phones(text: str, keep_source: bool) -> tuple[str, list[str]]:
+    found: list[str] = []
+
+    def replace(match: re.Match[str]) -> str:
+        original = match.group(0)
+        stored = original if keep_source else _synthetic_phone(original)
+        # Списком возвращаются номера в том виде, в котором они попали в текст,
+        # иначе известные факты раскрыли бы исходный номер после нормализации.
+        found.append(stored)
+        return stored
+
+    return PHONE.sub(replace, text), found
+
+
+def _caller_name(text: str) -> str:
+    match = FULL_NAME.search(text)
+    if match:
+        return " ".join(match.groups())
+    # Часть билетов называет только роль заявителя.
+    for role in ("вызывает мама", "вызывает папа", "вызывает муж", "вызывает супруг",
+                 "вызывает отец", "вызывает брат", "вызывает подруга", "вызывает себе"):
+        if role in text.lower():
+            return role.replace("вызывает ", "").capitalize()
+    return "Заявитель"
+
+
+def _title(situation: str) -> str:
+    head = re.split(r"[,.;]", situation, maxsplit=1)[0].strip()
+    head = head or situation.strip()
+    if len(head) > MAX_TITLE_CHARS:
+        head = head[: MAX_TITLE_CHARS - 1].rstrip() + "…"
+    if len(head) < 3:
+        head = situation.strip()[:MAX_TITLE_CHARS]
+    return head[0].upper() + head[1:]
+
+
+def _classify(situation: str) -> tuple[str, str, str | None]:
+    lowered = situation.lower()
+    for _rule, category, profile, keywords in CATEGORY_RULES:
+        for keyword in keywords:
+            if keyword in lowered:
+                return category, profile, keyword
+    return "other", "general", None
+
+
+def _difficulty(situation: str, unknown_count: int) -> str:
+    lowered = situation.lower()
+    if unknown_count >= 2 or "не блокированы" in lowered or "не знает" in lowered:
+        return "advanced"
+    if unknown_count == 1 or len(situation) > 220:
+        return "standard"
+    return "basic"
+
+
+def _facts(situation: str, address: str, clarification: str, phones: list[str],
+           caller: str) -> tuple[list[str], list[str]]:
+    known: list[str] = [f"Заявитель: {caller}"]
+    if phones:
+        known.append("Телефон заявителя: " + ", ".join(dict.fromkeys(phones)))
+    known.append(f"Адрес происшествия по словам заявителя: {address}")
+    if clarification:
+        known.append(f"Уточнение адреса, которое заявитель сообщает по дополнительному вопросу: {clarification}")
+    # Фабула разбивается на отдельные сведения по знакам препинания источника,
+    # чтобы модель выдавала их порциями в ответ на вопросы, а не одним блоком.
+    # Фрагменты с уже перечисленными ФИО и телефоном пропускаются.
+    for part in re.split(r"[.;,]", situation):
+        part = part.strip(" ;,")
+        if len(part) < 4 or PHONE.search(part):
+            continue
+        if caller != "Заявитель" and part in caller:
+            continue
+        known.append(part[:MAX_FACT_CHARS])
+
+    unknown: list[str] = []
+    lowered = situation.lower()
+    for marker, text in UNKNOWN_MARKERS:
+        if marker in lowered and text not in unknown:
+            unknown.append(text)
+
+    deduplicated: list[str] = []
+    for fact in known:
+        fact = fact.strip()
+        if fact and fact not in deduplicated:
+            deduplicated.append(fact[:MAX_FACT_CHARS])
+    return deduplicated[:MAX_KNOWN_FACTS], unknown[:20]
+
+
+def _opening(situation: str, category: str) -> str:
+    summary = re.split(r"[,.;]", situation, maxsplit=1)[0].strip()
+    lead = {
+        "fire": "Здравствуйте, у нас тут",
+        "medical": "Здравствуйте, нужна скорая",
+        "traffic": "Здравствуйте, здесь",
+        "public": "Здравствуйте, вызовите полицию",
+        "utilities": "Здравствуйте, у нас",
+        "other": "Здравствуйте, тут",
+    }[category]
+    text = f"Это учебный звонок. {lead}: {summary.lower()}."
+    return text[:1000]
+
+
+def _rubric(ticket: int, call: int, caller: str, known: list[str], situation: str) -> dict[str, Any]:
+    """Deterministic draft reference built only from literal source fragments.
+
+    The task statement sets the default check window at 30 seconds. Criteria stay
+    minimal on purpose: a teacher extends them during validation, and an invented
+    criterion would be a fabricated grading rule rather than a source fact.
+    """
+    criteria: list[dict[str, Any]] = []
+    # Критерий по ФИО ставится только когда источник действительно называет имя.
+    # Там, где билет указывает лишь роль («вызывает мама»), фамилии заявителя в
+    # источнике нет, и требовать её в карточке значило бы проверять выдумку.
+    if " " in caller:
+        criteria.append({"id": "caller", "label": "ФИО заявителя", "field": "caller_name",
+                         "mode": "equals", "expected": [caller], "weight": 1})
+    # Первый фрагмент фабулы — суть происшествия; он обязан попасть в описание.
+    summary = re.split(r"[,.;]", situation, maxsplit=1)[0].strip()
+    if len(summary) >= 4:
+        criteria.append({"id": "summary", "label": "Суть происшествия в описании", "field": "description",
+                         "mode": "contains_all", "expected": [summary], "weight": 1})
+    if not criteria:
+        criteria.append({"id": "summary", "label": "Описание заполнено", "field": "description",
+                         "mode": "contains_all", "expected": [situation[:200].strip()], "weight": 1})
+    return {"title": f"Эталон билета {ticket}, вызов {call}",
+            "time_limit_seconds": 30, "criteria": criteria}
+
+
+def build(source: dict[str, Any], keep_source_phones: bool) -> dict[str, Any]:
+    drafts: list[dict[str, Any]] = []
+    unclassified: list[str] = []
+    for ticket in source["tickets"]:
+        for call in ticket["calls"]:
+            situation, phones = _normalize_phones(call["situation"], keep_source_phones)
+            address = call["address"].strip()
+            clarification = (call.get("clarification") or "").strip()
+            caller = _caller_name(situation)
+            category, profile, keyword = _classify(situation)
+            known, unknown = _facts(situation, address, clarification, phones, caller)
+            location = address if not clarification else f"{address} ({clarification})"
+            draft_id = DRAFT_ID.format(ticket=ticket["number"], call=call["n"])
+            if keyword is None:
+                unclassified.append(draft_id)
+            drafts.append({
+                "id": draft_id,
+                "ticket": ticket["number"],
+                "call": call["n"],
+                "source_page": ticket["page"],
+                "classified_by": keyword,
+                "scenario": {
+                    "id": draft_id,
+                    "title": _title(situation),
+                    "category_id": category,
+                    "difficulty": _difficulty(situation, len(unknown)),
+                    "dds_profile": profile,
+                    "learning_objectives": (
+                        f"Отработать приём вызова по билету {ticket['number']}, задание {call['n']}: "
+                        "полный сбор адреса, данных заявителя и признаков происшествия."
+                    ),
+                    "description": f"Билет {ticket['number']}, вызов {call['n']} из учебных билетов ГБУ «Система 112».",
+                    "victim_name": caller[:80],
+                    "incident": situation[:MAX_INCIDENT_CHARS],
+                    "location": location[:MAX_LOCATION_CHARS],
+                    "known_facts": known,
+                    "unknown_facts": unknown,
+                    "emotion": EMOTIONS[category],
+                    "behavior": BEHAVIOR,
+                    "opening": _opening(situation, category),
+                    "enabled": False,
+                },
+                "rubric": _rubric(ticket["number"], call["n"], caller, known, situation),
+            })
+
+    payload = json.dumps(drafts, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "source": source["source"],
+        "phones": "source" if keep_source_phones else "synthetic",
+        "catalog_sha256": hashlib.sha256(payload).hexdigest(),
+        "metadata": {
+            "tickets": len(source["tickets"]),
+            "drafts": len(drafts),
+            "unclassified": unclassified,
+            "by_category": {
+                category: sum(1 for d in drafts if d["scenario"]["category_id"] == category)
+                for category in sorted({d["scenario"]["category_id"] for d in drafts})
+            },
+        },
+        "drafts": drafts,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", type=Path, default=SOURCE)
+    parser.add_argument("--output", type=Path, default=OUTPUT)
+    parser.add_argument("--keep-source-phones", action="store_true",
+                        help="Reproduce booklet telephone numbers instead of synthetic ones")
+    args = parser.parse_args()
+
+    source = json.loads(args.source.read_text(encoding="utf-8"))
+    catalog = build(source, args.keep_source_phones)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(catalog, ensure_ascii=False, indent=1), encoding="utf-8")
+    meta = catalog["metadata"]
+    print(f"tickets={meta['tickets']} drafts={meta['drafts']} categories={meta['by_category']}")
+    if meta["unclassified"]:
+        print("unclassified:", ", ".join(meta["unclassified"]))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

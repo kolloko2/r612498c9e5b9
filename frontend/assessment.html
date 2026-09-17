@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Оценка и статистика · Тренажёр 112</title>
+<link rel="stylesheet" href="/assets/portal.css"><link rel="stylesheet" href="/assets/assessment.css"><script src="/assets/assessment.js" defer></script></head>
+<body><header><div><strong>СИСТЕМА-112</strong><span>Оценка учебных попыток</span></div><a class="button" href="/portal">Вернуться в кабинет</a></header>
+<main><div class="heading"><div><h1 id="pageTitle">Оценка и статистика</h1><p id="intro">Загрузка данных…</p></div><button id="refresh" type="button">Обновить</button></div><p id="status" role="status" aria-live="polite"></p>
+
+<section id="teacherPolicy" class="panel" hidden><h2>Правила автоматической оценки новых попыток</h2>
+ <label>Сценарий<select id="policyScenario"></select></label>
+ <label class="check"><input id="policyEnabled" type="checkbox"> Включить правила для новых попыток</label>
+ <fieldset id="policyFields" disabled><div class="thresholds">
+  <label>Проходной балл, % (необязательно)<input id="passScore" type="number" min="0" max="100"></label>
+  <label>Максимум ошибок в полях (необязательно)<input id="fieldErrors" type="number" min="0" max="30"></label>
+  <label>Максимум ошибок последовательности<input id="sequenceErrors" type="number" min="0" max="20" value="0" required></label>
+  <label class="check"><input id="failTimeout" type="checkbox"> Не засчитывать при превышении времени</label>
+ </div><h3>Порядок действий</h3><div id="steps" class="steps"></div><button id="addStep" type="button">Добавить шаг</button></fieldset>
+ <div class="card-actions"><button id="savePolicy" class="primary" type="button">Сохранить правила</button><button id="reloadPolicy" type="button">Перечитать</button><span id="policyRevision"></span></div>
+</section>
+
+<section id="teacherSessions" class="panel" hidden><h2>Завершённые попытки</h2><div id="sessions" class="cards compact"></div></section>
+
+<section class="panel"><div class="section-head"><div><h2>Статистика</h2><p class="hint">Итоги рассчитаны по всем попыткам; в динамике показаны последние 200.</p></div><div class="card-actions"><label id="groupWrap" hidden>Группа<select id="groupFilter"><option value="">Все группы</option></select></label><label>Раздел CSV<select id="csvSection"><option value="summary">Сводка</option><option value="progress">Динамика</option><option value="students">Студенты</option><option value="typical-errors">Типичные ошибки</option></select></label><button id="exportCsv" type="button">Скачать CSV</button><button id="exportXlsx" type="button">Скачать XLSX</button><button id="exportStats" type="button">Скачать JSON</button></div></div>
+ <div id="summary" class="summary"></div><h3>Динамика</h3><div class="table-wrap"><table><thead><tr><th>Занятие</th><th>Завершено</th><th>Балл</th><th>Результат</th><th>Источник</th><th>Уровень / ДДС</th></tr></thead><tbody id="progress"></tbody></table></div>
+ <section id="studentsSection" hidden><h3>Студенты</h3><div id="studentsStats" class="cards compact"></div></section>
+ <div class="split"><section><h3>Типичные ошибки</h3><div id="errors"></div></section><section><h3>По сценариям</h3><div id="scenariosStats"></div></section></div>
+ <h3>Тепловая карта ошибок</h3><p class="hint">Доля непройденных проверок по каждому сценарию. Считается по тем же завершённым попыткам, что и таблица типичных ошибок.</p><div class="table-wrap"><table id="heatmap"><thead><tr id="heatmapHead"></tr></thead><tbody id="heatmapBody"></tbody></table></div>
+</section>
+
+<section id="groupInsights" class="panel" hidden><div class="section-head"><div><h2>Рекомендации для группы</h2></div><button id="generateInsights" class="primary" type="button">Сформировать рекомендации</button></div>
+ <p id="insightsState" class="hint" role="status" aria-live="polite">Выберите конкретную группу в фильтре статистики.</p><div id="insightsResult"></div>
+</section>
+
+<dialog id="assessmentDialog"><div class="dialog-head"><h2>Разбор попытки</h2><button id="closeAssessment" type="button" aria-label="Закрыть">×</button></div><p id="dialogStatus" role="alert" aria-live="assertive"></p><div id="assessmentDetail"></div>
+ <form id="expertForm" hidden><h3>Экспертная оценка</h3><div class="thresholds"><label>Балл, %<input id="expertScore" type="number" min="0" max="100" required></label><label>Решение<select id="expertPassed" required><option value="">Выберите</option><option value="true">Зачтено</option><option value="false">Не зачтено</option></select></label></div><label>Обоснование<textarea id="expertReason" minlength="1" maxlength="2000" required></textarea></label><div class="card-actions"><button id="grade" class="primary" type="submit">Сохранить экспертную оценку</button><button id="revoke" type="button">Отозвать экспертную оценку</button></div></form>
+ <section id="expertHistory" hidden><h3>История экспертных решений</h3><div id="historyList" class="cards compact"></div></section>
+</dialog></main></body></html>

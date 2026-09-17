@@ -1,0 +1,90 @@
+# Test-only, single-host PostgreSQL streaming-replication rehearsal.
+# Always use project name trainer112-ha-rehearsal and apply this overlay last.
+services:
+  postgres:
+    image: haproxy:3.0-alpine
+    build: !reset null
+    profiles: [tls]
+    restart: unless-stopped
+    init: true
+    user: "0:0"
+    environment: !reset {}
+    command: !reset null
+    volumes: !override
+      - ./deploy/cluster/postgres-proxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ha-rehearsal-proxy-state:/var/lib/haproxy
+    healthcheck:
+      test: ["CMD", "sh", "-ec", "printf 'show stat\\n' | socat - UNIX-CONNECT:/var/lib/haproxy/admin.sock | grep -Eq 'postgres_nodes,(primary|standby),.*,UP,'"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      pg-primary:
+        condition: service_healthy
+
+  pg-primary:
+    image: trainer112-postgres-ha-rehearsal:dev
+    build:
+      context: ./deploy/cluster/postgres
+    profiles: [tls]
+    restart: "no"
+    environment:
+      PG_HA_ROLE: primary
+      PG_TLS_SERVICE: pg-primary
+      POSTGRES_DB: trainer
+      POSTGRES_USER: trainer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run prepare.py}
+      POSTGRES_REPLICATION_PASSWORD: ${POSTGRES_REPLICATION_PASSWORD:?Set a separate rehearsal replication password}
+    volumes:
+      - ha-rehearsal-primary-data:/var/lib/postgresql/data
+      - ha-rehearsal-backups:/rehearsal-backups
+      - ./deploy/cluster/postgres/init-primary.sh:/docker-entrypoint-initdb.d/10-replication.sh:ro
+      - ./deploy/tls/certs/pg-primary.cert.pem:/run/tls-source/pg-primary.cert.pem:ro
+      - ./deploy/tls/private/pg-primary.key.pem:/run/tls-source/pg-primary.key.pem:ro
+      - ./deploy/tls/ca/ca.cert.pem:/run/tls-source/ca.cert.pem:ro
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=\"$$POSTGRES_PASSWORD\" psql 'host=pg-primary port=5432 dbname=trainer user=trainer sslmode=verify-full sslrootcert=/run/postgresql-tls/ca.crt' -Atqc 'select not pg_is_in_recovery()' | grep -qx t"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  pg-standby:
+    image: trainer112-postgres-ha-rehearsal:dev
+    build:
+      context: ./deploy/cluster/postgres
+    profiles: [tls]
+    restart: "no"
+    environment:
+      PG_HA_ROLE: standby
+      PG_TLS_SERVICE: pg-standby
+      POSTGRES_DB: trainer
+      POSTGRES_USER: trainer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run prepare.py}
+      POSTGRES_REPLICATION_PASSWORD: ${POSTGRES_REPLICATION_PASSWORD:?Set a separate rehearsal replication password}
+    volumes:
+      - ha-rehearsal-standby-data:/var/lib/postgresql/data
+      - ha-rehearsal-backups:/rehearsal-backups
+      - ./deploy/tls/certs/pg-standby.cert.pem:/run/tls-source/pg-standby.cert.pem:ro
+      - ./deploy/tls/private/pg-standby.key.pem:/run/tls-source/pg-standby.key.pem:ro
+      - ./deploy/tls/ca/ca.cert.pem:/run/tls-source/ca.cert.pem:ro
+    depends_on:
+      pg-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=\"$$POSTGRES_PASSWORD\" psql 'host=pg-standby port=5432 dbname=trainer user=trainer sslmode=verify-full sslrootcert=/run/postgresql-tls/ca.crt' -Atqc 'select pg_is_in_recovery()' | grep -qx t"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  backend:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pg-standby:
+        condition: service_healthy
+
+volumes:
+  ha-rehearsal-primary-data:
+  ha-rehearsal-standby-data:
+  ha-rehearsal-backups:
+  ha-rehearsal-proxy-state:

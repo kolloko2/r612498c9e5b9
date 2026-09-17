@@ -1,0 +1,7 @@
+[global]
+type=global
+user_agent=112 AI Trainer
+
+${PJSIP_TRANSPORT}
+
+${PJSIP_ACCOUNTS}

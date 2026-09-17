@@ -12,6 +12,23 @@ ROOT = Path(__file__).resolve().parent
 PHONE = ROOT / 'MicroSIP' / 'MicroSIP.exe'
 
 
+def preflight():
+    """Do not launch a retrying supervisor for a stand that is not installed."""
+    if not shutil.which('wsl'):
+        return ['WSL is not available. Install or connect a dedicated training stand.']
+    result = subprocess.run(['wsl', '--list', '--quiet'], capture_output=True, timeout=20)
+    encoding = 'utf-16-le' if b'\x00' in result.stdout else 'utf-8'
+    installed = result.stdout.decode(encoding, errors='replace').replace('\x00', '').splitlines()
+    errors = []
+    if result.returncode or 'Ubuntu-24.04' not in [name.strip() for name in installed]:
+        errors.append('Configured WSL distribution Ubuntu-24.04 is not installed. Existing distributions were not reconfigured.')
+    if not PHONE.is_file():
+        errors.append('Portable MicroSIP is missing: tools/windows-training/MicroSIP/MicroSIP.exe')
+    if not PHONE.with_suffix('.ini').is_file():
+        errors.append('The training MicroSIP account configuration is missing.')
+    return errors
+
+
 def linux(*args):
     result = subprocess.run(['wsl', '-d', 'Ubuntu-24.04', '-u', 'root', '--', *args], capture_output=True)
     if result.returncode:
@@ -58,6 +75,16 @@ def request(path, values, payload=None):
 
 def main():
     action = sys.argv[1] if len(sys.argv)>1 else 'start'
+    if action in ('start', 'check'):
+        errors = preflight()
+        if errors:
+            for error in errors:
+                print(error)
+            print('SIP was not started. No calls or credential changes were made.')
+            return 2
+        if action == 'check':
+            print('Local launcher prerequisites found; telephony/media readiness must be checked separately.')
+            return 0
     if action == 'start':
         subprocess.Popen([str(Path(sys.executable).with_name('pythonw.exe')), str(ROOT/'site-supervisor.py')],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -129,4 +156,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

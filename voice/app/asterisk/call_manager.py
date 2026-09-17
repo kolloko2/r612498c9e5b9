@@ -362,6 +362,11 @@ class CallManager:
             await self.ari.start()
 
     async def create(self, request):
+        if (self.settings.telephony_mode == "asterisk"
+                and self.settings.pipeline_mode == "conversation"
+                and not self.settings.topology_verified
+                and request.extension != self.settings.topology_probe_extension):
+            raise ValueError("Unverified conversation is restricted to the topology probe extension")
         if request.extension not in self.settings.allowed_extensions.split(","):
             raise ValueError("Extension is not allowlisted for training calls")
         existing = self.sessions.get(str(request.session_id))
@@ -373,6 +378,8 @@ class CallManager:
             return runtime.context.snapshot()
         if len(self.calls) >= self.settings.max_calls:
             raise OverflowError("Active call limit reached")
+        if any(runtime.context.extension == request.extension for runtime in self.calls.values()):
+            raise OverflowError("Training extension already has an active call")
         if self.ari and not self.ari.ready.is_set():
             raise ConnectionError("ARI event connection is unavailable")
         context = CallContext(request.session_id, request.extension, status=CallStatus.calling)

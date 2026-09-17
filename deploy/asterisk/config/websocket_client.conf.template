@@ -1,0 +1,11 @@
+[voice-media]
+type=websocket_client
+connection_type=per_call_config
+uri=${VOICE_MEDIA_URL}
+protocols=media
+username=${MEDIA_USERNAME}
+password=${MEDIA_PASSWORD}
+connection_timeout=5000
+reconnect_interval=500
+reconnect_attempts=2
+${WEBSOCKET_TLS}

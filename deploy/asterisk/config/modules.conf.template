@@ -1,0 +1,10 @@
+[modules]
+autoload=yes
+; This image has no trunk configuration. Explicitly block unrelated channel drivers.
+noload=chan_alsa.so
+noload=chan_console.so
+noload=chan_dahdi.so
+noload=chan_mobile.so
+noload=chan_motif.so
+noload=chan_unistim.so
+

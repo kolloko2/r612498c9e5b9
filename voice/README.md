@@ -1,8 +1,28 @@
 # Voice Gateway для учебных SIP звонков
 
+Новый корневой Docker Compose собирает Voice вместе с Backend/PostgreSQL и
+локальным Asterisk: см. `docs/DOCKER_DEPLOYMENT.md`. Секреты берутся из приватного
+`.env.docker`; ARI и Media доступны только внутри Docker-сети. Это заменяет старое
+ограничение «Compose содержит только Voice» для корневого Compose; voice/compose.yaml
+остаётся отдельным developer-стендом. По умолчанию сохраняется честный spike-режим:
+готовность SIP не означает проверенный голосовой диалог. Локальная LLM не добавлена.
+
+Групповые занятия: Backend передаёт назначенный преподавателем номер каждого
+студента. Эти номера нужно заранее зарегистрировать в Asterisk и включить в
+`ALLOWED_EXTENSIONS`. Один номер не принимает два одновременных учебных звонка:
+новая сессия получает429, повтор активной сессии возвращает прежний вызов.
+Завершение карточки/группы использует существующий hangup. Mock сохраняется.
+
 Python 3.12 / FastAPI сервис инициирует звонок на extension 201, принимает звук оператора, передаёт финальные реплики Backend, воспроизводит ответы и сохраняет три WAV дорожки. Бизнес-логика, LLM, сценарные факты и оценивание здесь отсутствуют.
 
-**Состояние реализации:** локально проверены mock-диалог, REST API, медиапротокол, обработка ошибок и освобождение ресурсов. Реальный Asterisk, регистрация телефона, слышимость и отсутствие эха на стенде ещё не проверены. Адаптеры Vosk/Piper реализованы, но модели на этой машине не запускались. По умолчанию включён `PIPELINE_MODE=spike`: STT и TTS в этом режиме не создаются. Переключение реального звонка в разговорный режим требует `TOPOLOGY_VERIFIED=true` после проверки ниже.
+**Состояние реализации:** локально проверены mock-диалог, REST API, медиапротокол,
+обработка ошибок и освобождение ресурсов. Развёрнутый локальный стенд использует
+Vosk/Silero в `PIPELINE_MODE=conversation`, но при `TOPOLOGY_VERIFIED=false`
+разрешает звонки только на явно заданный `TOPOLOGY_PROBE_EXTENSION=220`.
+Переключение пользовательских звонков в разговорный режим требует
+`TOPOLOGY_VERIFIED=true` после проверки ниже.
+Историческая проверка Windows/WSL описана в `docs/Установленный-стенд.md`, но это не
+заменяет повторную проверку текущего Docker-стенда.
 
 ## Быстрый запуск без Asterisk
 
@@ -50,6 +70,10 @@ Mock STT возвращает фиксированный текст после �
 - Voice → Backend: JSON control WebSocket на сессию.
 
 ExternalMedia: `transport=websocket`, `encapsulation=none`, `format=slin16`, `external_host=voice-media`. `transport_data=f(json)d(in)` используется для capture/monitor и `f(json)d(out)` для playback. Здесь `d()` задаёт направление относительно приложения Voice. ARI query `direction=both` оставлен совместимым; ограничение задаётся параметром драйвера. Binary сообщения содержат только mono PCM16 LE 16 kHz, text — JSON команды. `MEDIA_START.channel_id` сопоставляется с заранее зарегистрированным UUID, а не с порядком подключения.
+
+Ответ ARI на создание snoop/ExternalMedia может прийти раньше `StasisStart`.
+Voice ожидает `StasisStart` каждого служебного канала перед `addChannel`, иначе
+под нагрузкой возможен промежуточный HTTP 422 и разрушение ещё исправного звонка.
 
 Гарнитура предпочтительна для проверки: акустический возврат из динамика в микрофон может существовать даже при правильной цифровой маршрутизации. VAD продолжает слушать вход во время TTS.
 
@@ -137,6 +161,31 @@ TOPOLOGY_VERIFIED=true
 
 Перезапустите Voice. Это явный переключатель оператора стенда; сервис не выдаёт mock-тесты за проверку реального Asterisk.
 
+### Автоматический probe на extension 220
+
+Изолированный тест не звонит на пользовательский 201. Соберите клиент и запустите
+его из корня проекта:
+
+```powershell
+docker build -t trainer112-sip220-probe:dev voice/tools/sip_probe
+.\voice\tools\run_sip220_probe.ps1
+```
+
+Скрипт читает пароль 220 из ignored `.env.docker`, передаёт его через временный
+read-only файл и удаляет файл в `finally`; пароль не попадает в argv или лог.
+Поскольку локальный Asterisk рекламирует `external_media_address=127.0.0.1` для
+MicroSIP на Windows-хосте, контейнер тестового телефона разделяет network namespace
+с Asterisk. Иначе RTP ошибочно уходит в loopback самого probe-контейнера.
+
+Probe принимает звонок по TLS с обязательным SDES-SRTP, передаёт подготовленный
+русский WAV после паузы, получает автоматический Backend/OpenRouter-ответ, произносит
+его через Silero и завершается не позднее TTL. Успех требует ненулевых `operator`
+и `caller` RMS, финального Vosk текста «раз два три», минимум двух статусов TTS
+`played` (opening и ответ) и явных SIP/SRTP свидетельств в логе. Для изолированной
+проверки без Backend модели доступен `-Mode manual`.
+Это цифровая проверка цепи; она не заменяет прослушивание и акустическую проверку
+гарнитуры 201, поэтому сама не включает `TOPOLOGY_VERIFIED`.
+
 ## Провайдеры распознавания и синтеза
 
 Есть интерфейсы `STTProvider` и `TTSProvider`, mock реализации, локальные адаптеры Vosk/Piper и загрузка собственной фабрики через ENV. Провайдеры создаются отдельно для каждого звонка; никакого глобального потока STT для нескольких операторов нет.
@@ -151,6 +200,38 @@ TTS_PROVIDER=piper
 TTS_VOICE=/models/ru_voice.onnx
 PROVIDER_TIMEOUT_S=20
 ```
+
+Текущая инвентаризация Docker-стенда от 15 сентября 2026: каталог
+`deploy/models` изначально был пуст, а зарегистрированный WSL-дистрибутив Ubuntu,
+упомянутый в старой инструкции, отсутствует. В `deploy/models/vosk-model-small-ru-0.22`
+повторно загружена небольшая русская Vosk-модель из
+`https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip` (около 91 МБ
+после распаковки). Файл модели не хранится в Git. Загрузка Piper Irina с
+`https://huggingface.co/rhasspy/piper-voices/tree/main/ru/ru_RU/irina/medium`
+не завершилась из-за недоступности CDN; один `.onnx.json` без соответствующего
+`.onnx` не считается установленным голосом. Вместо неё загружена официальная
+Silero v5.5 `https://models.silero.ai/models/tts/ru/v5_5_ru.pt` (145 420 684
+байта). Текущий контейнер использует Vosk/Silero в разговорном режиме.
+`TOPOLOGY_VERIFIED=true` включён после полного цифрового automatic-прогона 220;
+субъективная слышимость и акустическое эхо гарнитуры 201 проверяются отдельно.
+
+Для корневого Docker Compose после появления обоих файлов нужны как минимум:
+
+```dotenv
+INSTALL_LOCAL_PROVIDERS=true
+INSTALL_SILERO=true
+STT_PROVIDER=vosk
+STT_MODEL=/models/vosk-model-small-ru-0.22
+TTS_PROVIDER=silero
+TTS_VOICE=/models/v5_5_ru.pt
+TTS_SPEAKER=baya
+PIPELINE_MODE=spike
+TOPOLOGY_VERIFIED=false
+```
+
+Сначала пересоберите Voice и проверьте загрузку провайдеров синтетически. В
+`conversation` и `TOPOLOGY_VERIFIED=true` переходите только после нового media
+spike и проверки пользователем через гарнитуру.
 
 На установленном стенде используется `STT_PROVIDER=hybrid`: Vosk выдаёт промежуточный текст, а русская GigaAM v2 уточняет окончательную фразу через sherpa-onnx. Для GigaAM задайте `STT_FINAL_MODEL` на каталог с `model.int8.onnx` и `tokens.txt`. Адаптер также поддерживает прежний Zipformer с файлами `am/encoder.onnx`, `am/decoder.onnx`, `am/joiner.onnx` и `lang/tokens.txt`. Зависимость sherpa-onnx входит в набор `[local]`.
 
@@ -188,17 +269,62 @@ BACKEND_TOKEN=
 }
 ```
 
-Voice отправляет `call.connected`, `operator.utterance`, `operator.barge_in`, `call.ended`, `recording.ready`, `voice.error`. Принимает `caller.reply`, `environment.update`, `call.hangup`. Каждый исходящий конверт имеет собственные UUID и локальный монотонный `seq`; Backend канонизирует последовательность сессии. Сессия входящего события проверяется. Повторный `reply_id` в пределах звонка не воспроизводится.
+Voice отправляет `call.connected`, `operator.utterance`, `operator.barge_in`,
+`call.ended`, `recording.ready`, `voice.error`. Принимает `caller.reply`,
+`environment.update`, `call.hangup` и служебный `backend.ack`. Каждый исходящий
+конверт имеет собственные UUID и локальный монотонный `seq`; Backend канонизирует
+последовательность сессии. Сессия входящего события проверяется. Повторный
+`reply_id` в пределах звонка не воспроизводится.
 
 `operator.utterance.payload` содержит `call_id`, `utterance_id`, `text`, `is_final=true`. Backend может вернуть тот же `utterance_id` в `caller.reply.payload`: это необязательное дополнение для точной корреляции latency при ответах не по порядку. Без него отсутствующие межсервисные метрики не выдумываются.
 
 Backend подключается до originate. `call.connected` отправляется только после ответа телефона, построения мостов и готовности всех media sockets. Opening reply, пришедший раньше готовности, ожидает запуска pipeline.
 
-Переподключение Backend ограничено числом попыток с backoff; originate при этом не повторяется. Исходящие события сначала сохраняются с fsync в `outbox/SESSION_ID/CALL_ID.jsonl`. Успешный WebSocket send не является подтверждением обработки Backend; exactly-once доставка не обещается. При исчерпании попыток звонок завершается, журнал остаётся для сверки и явного восстановления. Для replay после согласования с Backend:
+Исходящие события сначала сохраняются с fsync в
+`outbox/SESSION_ID/CALL_ID.jsonl`. Backend после сохранения события и отправки
+связанного `caller.reply` (если он есть) возвращает `backend.ack` с
+`payload.event_id` исходного события. Voice держит только одно событие в полёте,
+так что `call.ended` не обгоняет предыдущие события. До ACK тот же UUID повторно
+отправляется после переподключения; originate при этом не повторяется. ACK также
+fsync-сохраняется в соседний `CALL_ID.acked.jsonl`. Это at-least-once доставка:
+Backend обязан дедуплицировать `event_id`, exactly-once не обещается.
+
+Reconnect продолжается не меньше `BACKEND_RECONNECT_BUDGET_S=30` секунд (и не
+меньше заданного числа попыток); в это время физический звонок не переинициируется.
+После исчерпания бюджета звонок завершается, а неподтверждённые события остаются
+для сверки и явного восстановления. Для ACK-aware replay после согласования с
+Backend:
 
 ```text
 python tools/replay_outbox.py outbox/SESSION_ID/CALL_ID.jsonl
 ```
+
+Replay пропускает UUID из `.acked.jsonl`, ждёт отдельный ACK для каждого события
+и дописывает подтверждение с fsync. Он не инициирует и не повторяет звонок.
+
+После завершения `GET /api/v1/calls/{call_id}` и ответ hangup содержат
+`reason`. Нормальные терминальные причины: `api_hangup`, `backend_hangup`,
+`remote_hangup`, `not_answered`, `max_duration`, `service_shutdown`. Причины
+неожиданного транспорта: `ari_disconnected`, `media_disconnected`,
+`asterisk_media_ended`, `backend_unavailable`. Backend может использовать только
+вторую группу для ограниченного recovery; Voice сам телефон повторно не набирает.
+
+`GET /api/v1/health` возвращает безопасные эксплуатационные метаданные без путей
+и секретов: выбранные провайдеры, факты настройки и наличия моделей, состояние topology,
+режим Backend control, семантику доставки и reconnect-бюджет.
+
+## Транспортный аудит Voice
+
+При заданном `SECURITY_AUDIT_DIR` каждый HTTP запрос получает fsync-записи start и
+finish с UTC-временем, методом, route template, статусом и длительностью. Заголовки,
+Authorization, query string и body не записываются. WebSocket фиксирует только
+connect/disconnect, итоговый статус, число сообщений и суммарное число байтов;
+JSON-команды, текст и PCM frame contents не сохраняются. Если start-запись не
+удалась, HTTP получает 503 до обработчика, а WebSocket закрывается 1011 до accept.
+
+Файлы `YYYY-MM-DD.jsonl` не удаляются автоматически; для завершённых UTC-дней
+ежечасно создаётся gzip-копия. Заявленный минимум хранения — 183 дня, но политика
+резервного копирования каталога остаётся обязанностью оператора стенда.
 
 Backend должен дедуплицировать `event_id`. Утилита повторяет журнал целиком, сохраняет исходные IDs и никогда не создаёт звонок. Автоматического восстановления активного звонка после рестарта Voice нет.
 

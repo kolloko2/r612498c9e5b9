@@ -10,16 +10,19 @@ class Settings(BaseSettings):
     telephony_mode: Literal["mock", "asterisk"] = "mock"
     pipeline_mode: Literal["spike", "conversation"] = "spike"
     topology_verified: bool = False
+    topology_probe_extension: str = ""
     backend_mode: Literal["mock", "websocket"] = "mock"
     backend_url: str = "ws://backend:8000/ws/v1/voice/sessions/{session_id}"
     backend_token: SecretStr = SecretStr("")
     backend_retries: int = Field(4, ge=0, le=10)
     backend_backoff_s: float = Field(0.5, gt=0, le=10)
+    backend_reconnect_budget_s: float = Field(30, ge=0, le=300)
     api_token: SecretStr = SecretStr("")
     ari_url: str = "http://asterisk:8088/ari"
     ari_username: str = "voice"
     ari_password: SecretStr = SecretStr("")
     ari_app: str = "voice-gateway"
+    internal_ca_file: Path | None = None
     media_connection: str = "voice-media"
     media_username: str = "asterisk"
     media_password: SecretStr = SecretStr("")
@@ -31,6 +34,7 @@ class Settings(BaseSettings):
     history_limit: int = Field(100, ge=1, le=10000)
     recording_dir: Path = Path("recordings")
     outbox_dir: Path = Path("outbox")
+    security_audit_dir: Path | None = None
     stt_provider: str = "mock"
     stt_fallback_provider: str = ""
     stt_api_key: SecretStr = SecretStr("")
@@ -58,6 +62,9 @@ class Settings(BaseSettings):
             for name in ("ari_password", "media_password", "api_token"):
                 if not getattr(self, name).get_secret_value():
                     raise ValueError(f"{name.upper()} must be set for Asterisk mode")
-            if self.pipeline_mode == "conversation" and not self.topology_verified:
+            if (self.pipeline_mode == "conversation" and not self.topology_verified
+                    and not self.topology_probe_extension):
                 raise ValueError("Run the live media spike first, then set TOPOLOGY_VERIFIED=true")
+            if self.topology_probe_extension and not self.topology_probe_extension.isdigit():
+                raise ValueError("TOPOLOGY_PROBE_EXTENSION must be numeric")
         return self

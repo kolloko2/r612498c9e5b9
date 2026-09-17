@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 
 import httpx
 from websockets.asyncio.client import connect
+from app.tls import httpx_verify, websocket_ssl_kwargs
 
 
 class ARIClient:
@@ -16,9 +17,18 @@ class ARIClient:
             base_url=settings.ari_url.rstrip("/") + "/",
             auth=(settings.ari_username, settings.ari_password.get_secret_value()),
             timeout=10,
+            verify=httpx_verify(settings.ari_url, settings.internal_ca_file),
         )
         self.ready = asyncio.Event()
+        self.channel_ready = {}
         self.task = None
+
+    async def wait_channel(self, channel_id, timeout):
+        event = self.channel_ready.setdefault(channel_id, asyncio.Event())
+        await asyncio.wait_for(event.wait(), timeout)
+
+    def forget_channel(self, channel_id):
+        self.channel_ready.pop(channel_id, None)
 
     async def request(self, method, path, *, params=None, json_body=None):
         response = await self.http.request(method, path.lstrip("/"), params=params, json=json_body)
@@ -49,10 +59,16 @@ class ARIClient:
             f"{cfg.ari_username}:{cfg.ari_password.get_secret_value()}".encode()).decode()
         try:
             async with connect(url, additional_headers={"Authorization": f"Basic {credentials}"},
-                               max_size=1024 * 1024, open_timeout=10) as ws:
+                               max_size=1024 * 1024, open_timeout=10,
+                               **websocket_ssl_kwargs(url, cfg.internal_ca_file)) as ws:
                 self.ready.set()
                 async for message in ws:
-                    await self.on_event(json.loads(message))
+                    event = json.loads(message)
+                    if event.get("type") == "StasisStart":
+                        channel_id = event.get("channel", {}).get("id")
+                        if channel_id:
+                            self.channel_ready.setdefault(channel_id, asyncio.Event()).set()
+                    await self.on_event(event)
         except asyncio.CancelledError:
             raise
         finally:

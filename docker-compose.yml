@@ -1,23 +1,199 @@
+name: trainer112
+
+x-runtime: &runtime
+  restart: unless-stopped
+  init: true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
 services:
+  postgres:
+    <<: *runtime
+    image: postgres:16-bookworm
+    command: ["postgres", "-c", "max_connections=${POSTGRES_MAX_CONNECTIONS:-100}", "-c", "shared_buffers=${POSTGRES_SHARED_BUFFERS_MB:-128}MB"]
+    environment:
+      POSTGRES_DB: trainer
+      POSTGRES_USER: trainer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run python deploy/prepare.py}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trainer -d trainer"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   backend:
-    image: python:3.12-slim
-    working_dir: /app
-    volumes: ['./backend:/app']
-    ports: ['8000:8000']
-    command: ['sh', '-c', 'if [ -f requirements.txt ]; then pip install -r requirements.txt; fi; if [ -f app.py ]; then python app.py; else python -m http.server 8000; fi']
-  voice:
-    image: python:3.12-slim
-    working_dir: /app
-    volumes: ['./voice:/app']
-    ports: ['8001:8001']
-    command: ['sh', '-c', 'if [ -f requirements.txt ]; then pip install -r requirements.txt; fi; if [ -f app.py ]; then python app.py; else python -m http.server 8001; fi']
+    <<: *runtime
+    image: trainer112-backend:dev
+    mem_limit: ${BACKEND_MEMORY_MB:-1024}m
+    cpus: ${BACKEND_CPUS:-2}
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backend
+    environment:
+      DATABASE_URL: postgresql://trainer:${POSTGRES_PASSWORD:?Run prepare.py}@postgres:5432/trainer
+      DIALOGUE_TOKEN: ${DIALOGUE_TOKEN:?Run prepare.py}
+      VOICE_URL: http://voice:8001
+      VOICE_API_TOKEN: ${VOICE_API_TOKEN:?Run prepare.py}
+      OPERATIONS_DIR: /data/operations
+      SECURITY_AUDIT_DIR: /data/operations/security-audit
+      MAP_DATA_DIR: /data/maps
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      # Профиль выбирает администратор в техническом кабинете; модель обслуживает
+      # локальный Ollama на хосте, внешние сервисы контуру запрещены.
+      LLM_PROFILE: ${LLM_PROFILE:-mock}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+    volumes:
+      - ./deploy/operations:/data/operations
+      - ./deploy/maps:/data/maps:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health',timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   frontend:
-    image: node:22-alpine
-    working_dir: /app
-    volumes: ['./frontend:/app']
-    ports: ['3000:3000']
-    command: ['sh', '-c', 'if [ -f package.json ]; then npm install && npm run dev; else python3 -m http.server 3000; fi']
+    <<: *runtime
+    image: trainer112-frontend:dev
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.frontend
+    environment:
+      DIALOGUE_URL: http://backend:8000
+      BACKEND_TOKEN: ${DIALOGUE_TOKEN:?Run prepare.py}
+      VOICE_URL: http://voice:8001
+      API_TOKEN: ${VOICE_API_TOKEN:?Run prepare.py}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://127.0.0.1:3000,http://localhost:3000}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/login',timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
   asterisk:
-    image: andrius/asterisk:22
-    profiles: ['asterisk']
-    ports: ['8088:8088', '5060:5060/udp', '10000-10020:10000-10020/udp']
+    <<: *runtime
+    image: trainer112-asterisk:dev
+    build:
+      context: deploy/asterisk
+    environment:
+      ARI_USERNAME: voice
+      ARI_PASSWORD: ${ARI_PASSWORD:?Run prepare.py}
+      MEDIA_USERNAME: asterisk
+      MEDIA_PASSWORD: ${MEDIA_PASSWORD:?Run prepare.py}
+      SIP_ACCOUNTS_JSON: ${SIP_ACCOUNTS_JSON:?Run prepare.py}
+      VOICE_MEDIA_URL: ws://voice:8001/media
+      SIP_EXTERNAL_ADDRESS: ${SIP_EXTERNAL_ADDRESS:-127.0.0.1}
+      SIP_LOCAL_NET: ${SIP_LOCAL_NET:-172.16.0.0/12}
+    ports:
+      - "${SIP_BIND_ADDRESS:-127.0.0.1}:5060:5060/udp"
+      - "${SIP_BIND_ADDRESS:-127.0.0.1}:20000-20199:20000-20199/udp"
+
+  voice:
+    <<: *runtime
+    image: trainer112-voice:dev
+    mem_limit: ${VOICE_MEMORY_MB:-2048}m
+    cpus: ${VOICE_CPUS:-2}
+    build:
+      context: ./voice
+      args:
+        INSTALL_LOCAL_PROVIDERS: ${INSTALL_LOCAL_PROVIDERS:-false}
+        INSTALL_SILERO: ${INSTALL_SILERO:-false}
+    environment:
+      TELEPHONY_MODE: asterisk
+      PIPELINE_MODE: ${PIPELINE_MODE:-spike}
+      TOPOLOGY_VERIFIED: ${TOPOLOGY_VERIFIED:-false}
+      TOPOLOGY_PROBE_EXTENSION: ${TOPOLOGY_PROBE_EXTENSION:-}
+      BACKEND_MODE: websocket
+      BACKEND_URL: ws://backend:8000/ws/v1/voice/sessions/{session_id}
+      BACKEND_TOKEN: ${DIALOGUE_TOKEN:?Run prepare.py}
+      API_TOKEN: ${VOICE_API_TOKEN:?Run prepare.py}
+      ARI_URL: http://asterisk:8088/ari
+      ARI_USERNAME: voice
+      ARI_PASSWORD: ${ARI_PASSWORD:?Run prepare.py}
+      MEDIA_USERNAME: asterisk
+      MEDIA_PASSWORD: ${MEDIA_PASSWORD:?Run prepare.py}
+      ALLOWED_EXTENSIONS: ${ALLOWED_EXTENSIONS:-201}
+      MAX_CALLS: ${MAX_CALLS:-20}
+      BACKEND_RECONNECT_BUDGET_S: ${BACKEND_RECONNECT_BUDGET_S:-30}
+      SECURITY_AUDIT_DIR: /data/operations/voice-audit
+      STT_PROVIDER: ${STT_PROVIDER:-mock}
+      TTS_PROVIDER: ${TTS_PROVIDER:-mock}
+      TTS_SPEAKER: ${TTS_SPEAKER:-baya}
+      STT_FALLBACK_PROVIDER: ${STT_FALLBACK_PROVIDER:-}
+      TTS_FALLBACK_PROVIDER: ${TTS_FALLBACK_PROVIDER:-}
+      TTS_FALLBACK_VOICE: ${TTS_FALLBACK_VOICE:-}
+      VAD_THRESHOLD: ${VAD_THRESHOLD:-0.025}
+      VAD_START_MS: ${VAD_START_MS:-60}
+      VAD_END_MS: ${VAD_END_MS:-400}
+      STT_MODEL: ${STT_MODEL:-}
+      STT_FINAL_MODEL: ${STT_FINAL_MODEL:-}
+      TTS_VOICE: ${TTS_VOICE:-}
+      RECORDING_DIR: /data/recordings
+      OUTBOX_DIR: /data/outbox
+    volumes:
+      - voice-recordings:/data/recordings
+      - voice-outbox:/data/outbox
+      - ./deploy/models:/models:ro
+      - ./deploy/operations:/data/operations
+    depends_on:
+      asterisk:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+
+  backup-worker:
+    <<: *runtime
+    image: trainer112-backup:dev
+    build:
+      context: .
+      dockerfile: deploy/backup/Dockerfile
+    profiles: [tls]
+    env_file:
+      - ./deploy/private/backup.env
+    environment:
+      OPERATIONS_DIR: /data/operations
+      BACKUP_DIR: /data/backups
+      BACKUP_MODE: live
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run prepare.py}
+      PGSSLMODE: verify-full
+      PGSSLROOTCERT: /run/trainer-tls/ca.cert.pem
+      PGSSLMINPROTOCOLVERSION: TLSv1.2
+    volumes:
+      - ./deploy/operations:/data/operations
+      - ./deploy/backups:/data/backups
+      - voice-recordings:/source/recordings:ro
+      - voice-outbox:/source/outbox:ro
+      - ./docker-compose.yml:/source/compose.yml:ro
+      - ./deploy/tls/certs:/source/tls-certs:ro
+      - ./deploy/tls/ca/ca.cert.pem:/source/tls-ca/ca.cert.pem:ro
+      - ./deploy/tls/ca/ca.cert.pem:/run/trainer-tls/ca.cert.pem:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import json,time; d=json.load(open('/data/operations/backup-worker-state.json')); assert time.time()-d['heartbeat_at']<600"]
+      interval: 15s
+      timeout: 3s
+      retries: 6
+
+volumes:
+  postgres-data:
+  voice-recordings:
+  voice-outbox:

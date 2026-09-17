@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');
+const map=require('./assets/map.js');
+assert.equal(map.validSessionId('11111111-1111-4111-8111-111111111111'),true);
+assert.equal(map.validSessionId('../student'),false);
+assert.deepEqual(map.coordinates('55.7558','37.6173'),{latitude:55.7558,longitude:37.6173});
+assert.equal(map.coordinates(91,0),null);assert.equal(map.coordinates(0,181),null);assert.equal(map.coordinates('',0),null);
+const origin=map.worldPoint(0,0,2);assert.equal(origin.x,512);assert.equal(origin.y,512);
+assert.equal(map.tilePath(2,-1,1),'/assets/map-tiles/2/3/1.png');assert.equal(map.tilePath(2,0,4),null);
+assert.equal(map.cardAddress({city:'Москва',street:'Лесная',house:'12',apartment:'34',address_note:'вход со двора'}),'Москва, Лесная, дом 12, кв. 34 · вход со двора');
+console.log('Map math: PASS');

@@ -1,8 +1,13 @@
 .env
+.env.*
 .venv
-recordings
-outbox
-asterisk/generated
+venv
 **/__pycache__
 .pytest_cache
+recordings
+outbox
+models
+asterisk/generated
+*.log
+*.wav
 spike-results

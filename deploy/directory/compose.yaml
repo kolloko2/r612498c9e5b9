@@ -1,0 +1,39 @@
+services:
+  backend:
+    environment:
+      LDAP_URL: ldaps://directory:636
+      LDAP_BIND_DN: cn=lookup,ou=system,dc=trainer,dc=local
+      LDAP_BIND_PASSWORD: ${DIRECTORY_BIND_PASSWORD:?set DIRECTORY_BIND_PASSWORD}
+      LDAP_BASE_DN: dc=trainer,dc=local
+      LDAP_USER_ATTRIBUTE: uid
+      LDAP_CA_CERT_FILE: /tls/ca.cert.pem
+    volumes:
+      - ./deploy/tls/ca/ca.cert.pem:/tls/ca.cert.pem:ro
+    depends_on:
+      directory:
+        condition: service_healthy
+
+  directory:
+    image: trainer112-directory:dev
+    build:
+      context: ./deploy/directory
+    hostname: directory
+    environment:
+      DIRECTORY_ADMIN_PASSWORD: ${DIRECTORY_ADMIN_PASSWORD:?set DIRECTORY_ADMIN_PASSWORD}
+      DIRECTORY_BIND_PASSWORD: ${DIRECTORY_BIND_PASSWORD:?set DIRECTORY_BIND_PASSWORD}
+      DIRECTORY_TEST_PASSWORD: ${DIRECTORY_TEST_PASSWORD:?set DIRECTORY_TEST_PASSWORD}
+    expose:
+      - "636"
+    volumes:
+      - ./deploy/tls/ca/ca.cert.pem:/tls-input/ca.cert.pem:ro
+      - ./deploy/tls/certs/directory.cert.pem:/tls-input/directory.cert.pem:ro
+      - ./deploy/tls/private/directory.key.pem:/tls-input/directory.key.pem:ro
+    tmpfs:
+      - /var/lib/ldap:size=64m,mode=0750
+    healthcheck:
+      test: ["CMD-SHELL", "LDAPTLS_CACERT=/run/slapd/ca.cert.pem ldapwhoami -x -H ldaps://directory:636 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped

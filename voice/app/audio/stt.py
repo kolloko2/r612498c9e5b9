@@ -46,8 +46,13 @@ class VoskSTT:
         if sample_rate != 16000 or not self.model:
             raise ValueError("Vosk requires 16kHz and STT_MODEL directory")
         self.process = await spawn_worker("stt", self.model)
-        if await self.process.stdout.readline() != b"READY\n":
-            raise RuntimeError("Vosk model failed to load; check optional dependencies/model path")
+        # Windows печатает READY с CRLF: сравниваем содержимое строки,
+        # иначе Voice не стартует вне Linux-контейнера.
+        if (await self.process.stdout.readline()).strip() != b"READY":
+            raise RuntimeError(
+                "Vosk model failed to load. Check the model path and that it contains only "
+                "ASCII characters: the Kaldi runtime cannot open a non-ASCII path on Windows. "
+                "Inside the container /models/... is ASCII, so this affects native Windows runs.")
 
     async def _request(self, pcm):
         self.process.stdin.write(struct.pack("<I", len(pcm)) + pcm)
@@ -80,7 +85,9 @@ class SherpaSTT(VoskSTT):
         if sample_rate != 16000 or not self.model:
             raise ValueError("Sherpa requires 16kHz and STT_FINAL_MODEL directory")
         self.process = await spawn_worker("sherpa-stt", self.model)
-        if await self.process.stdout.readline() != b"READY\n":
+        # Windows печатает READY с CRLF: сравниваем содержимое строки,
+        # иначе Voice не стартует вне Linux-контейнера.
+        if (await self.process.stdout.readline()).strip() != b"READY":
             raise RuntimeError("Sherpa model failed to load")
 
 
@@ -119,6 +126,9 @@ def make_stt(settings, name=None):
         return MockSTT()
     if name == "vosk":
         return VoskSTT(settings.stt_model)
+    if name == "sherpa":
+        # Финальное распознавание без промежуточного текста: Vosk не требуется.
+        return SherpaSTT(settings.stt_final_model or settings.stt_model)
     if name == "hybrid":
         return HybridSTT(settings.stt_model, settings.stt_final_model)
     if name.startswith("python:"):

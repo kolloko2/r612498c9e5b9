@@ -8,9 +8,10 @@ from app.domain.call import CallContext
 
 
 class FakeSocket:
-    def __init__(self, fail_send=False):
+    def __init__(self, fail_send=False, auto_ack=True):
         self.sent = []
         self.fail_send = fail_send
+        self.auto_ack = auto_ack
         self.incoming = asyncio.Queue()
 
     async def __aenter__(self):
@@ -22,7 +23,15 @@ class FakeSocket:
     async def send(self, text):
         if self.fail_send:
             raise ConnectionError("Injected disconnect")
-        self.sent.append(json.loads(text))
+        event = json.loads(text)
+        self.sent.append(event)
+        if self.auto_ack:
+            self.incoming.put_nowait(json.dumps({
+                "event_id": str(uuid4()), "seq": event["seq"],
+                "session_id": event["session_id"], "type": "backend.ack",
+                "elapsed_ms": event["elapsed_ms"],
+                "payload": {"event_id": event["event_id"]},
+            }))
 
     def __aiter__(self):
         return self
@@ -84,8 +93,40 @@ async def test_backend_reconnect_budget_is_bounded(tmp_path, monkeypatch):
         pass
 
     cfg = Settings(_env_file=None, backend_mode="websocket", outbox_dir=tmp_path,
-                   backend_retries=2, backend_backoff_s=0.001)
+                   backend_retries=2, backend_backoff_s=0.001,
+                   backend_reconnect_budget_s=0)
     control = ControlWS(cfg, CallContext(uuid4(), "201"), handler, lambda *args: errors.append(args))
     await control._run()
     assert len(attempts) == 3
     assert errors[0][0] == "backend_unavailable"
+
+
+async def test_event_remains_pending_until_matching_application_ack(tmp_path, monkeypatch):
+    socket = FakeSocket(auto_ack=False)
+    monkeypatch.setattr("app.backend.control_ws.connect", lambda *args, **kwargs: socket)
+
+    cfg = Settings(_env_file=None, backend_mode="websocket", outbox_dir=tmp_path,
+                   backend_reconnect_budget_s=0)
+    context = CallContext(uuid4(), "201")
+
+    async def handler(event):
+        pass
+
+    control = ControlWS(cfg, context, handler, lambda *args: None)
+    await control.start()
+    try:
+        event = await control.emit("call.connected", {"call_id": str(context.call_id)})
+        while not socket.sent:
+            await asyncio.sleep(0)
+        assert control.pending == event
+        socket.incoming.put_nowait(json.dumps({
+            "event_id": str(uuid4()), "seq": event.seq,
+            "session_id": str(event.session_id), "type": "backend.ack",
+            "elapsed_ms": event.elapsed_ms, "payload": {"event_id": str(event.event_id)},
+        }))
+        await asyncio.wait_for(control.queue.join(), 1)
+        assert control.pending is None
+        ack = json.loads(control.ack_journal.read_text(encoding="utf-8").strip())
+        assert ack["event_id"] == str(event.event_id)
+    finally:
+        await control.close()

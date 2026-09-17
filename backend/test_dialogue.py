@@ -37,6 +37,29 @@ def event(sid, kind, text="", mode="auto", scenario_id=None):
                         "scenario_id": scenario_id}}
 
 
+@pytest.mark.asyncio
+async def test_control_receipt_survives_engine_restart(tmp_path):
+    path=tmp_path/'receipt.sqlite3';store=Store(str(path));sid=str(uuid4())
+    control=event(sid,'call.ended');engine=Engine(store)
+    assert await engine.handle(sid,control) is None
+    assert control['event_id'] in store.load(sid)['replies']
+    store.db.close();reopened=Store(str(path));replayed=Engine(reopened)
+    assert await replayed.handle(sid,control) is None
+    assert reopened.load(sid)['ended'] is True
+    reopened.db.close()
+
+
+@pytest.mark.asyncio
+async def test_resume_preserves_transcript_and_ignores_superseded_end():
+    store=Store(':memory:');engine=Engine(store);sid=str(uuid4());old=str(uuid4())
+    ended=event(sid,'call.ended');ended['payload'].update(call_id=old,reason='media_disconnected')
+    await engine.handle(sid,ended);resume=event(sid,'session.resume');resume['payload']['previous_call_id']=old
+    await engine.handle(sid,resume);assert not store.load(sid)['ended']
+    late=event(sid,'call.ended');late['payload']['call_id']=old
+    await engine.handle(sid,late);assert not store.load(sid)['ended']
+    await engine.handle(sid,event(sid,'call.ended'));assert store.load(sid)['ended']
+
+
 def custom_scenario(scenario_id="medical_case", opening="Мне очень плохо."):
     return Scenario(id=scenario_id, title="Проблема со здоровьем", description="Проверка",
                     victim_name="Иван", incident="Сильная боль в груди", location="Учебная улица, дом 1",
@@ -117,3 +140,35 @@ def test_scenario_crud_and_protects_last_enabled(tmp_path):
     assert len(store.list_scenarios()) == 2
     store.delete_scenario("medical_case")
     assert store.scenario("medical_case") is None
+
+
+def test_model_profiles_select_provider_and_model(monkeypatch):
+    """Профиль задаёт и провайдера, и модель; без профиля работают прежние ENV."""
+    import llm
+
+    monkeypatch.setenv('LLM_PROFILE', 'standard')
+    config = llm.configuration()
+    assert config['provider'] == 'ollama' and config['model'] == 'qwen3:4b'
+    assert config['configured'] is True and config['context'] == 8192
+
+    monkeypatch.setenv('LLM_PROFILE', 'mock')
+    assert llm.configuration()['provider'] == 'mock'
+
+    # Неизвестное значение не подменяет провайдера молча.
+    monkeypatch.setenv('LLM_PROFILE', 'turbo')
+    monkeypatch.setenv('LLM_PROVIDER', 'mock')
+    fallback = llm.configuration()
+    assert fallback['provider'] == 'mock' and fallback['profile'] == ''
+
+    # Обратная совместимость: без профиля читаются прежние переменные.
+    monkeypatch.delenv('LLM_PROFILE', raising=False)
+    monkeypatch.setenv('LLM_PROVIDER', 'ollama')
+    monkeypatch.setenv('DIALOGUE_MODEL', 'custom-model')
+    assert llm.configuration()['model'] == 'custom-model'
+
+
+def test_every_profile_is_described_for_the_administrator():
+    import llm
+    for name, profile in llm.PROFILES.items():
+        assert profile['title'] and profile['hint'], name
+        assert profile['model'], name

@@ -1,0 +1,8 @@
+[general]
+enabled=yes
+bindaddr=${HTTP_BIND_ADDRESS}
+bindport=8088
+prefix=
+sessionlimit=100
+enablestatic=no
+${HTTP_TLS}

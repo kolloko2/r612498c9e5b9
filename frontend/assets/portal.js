@@ -1,0 +1,312 @@
+'use strict';
+
+const el=id=>document.getElementById(id);
+const roleNames={admin:'Администратор',teacher:'Преподаватель',student:'Студент'};
+const detailNames={number:'Номер',status:'Статус',created_at:'Создано',finished_at:'Завершено',student_id:'Студент',assignment_id:'Задание',difficulty:'Сложность',dds_profile:'Профиль ДДС',learning_objectives:'Учебные цели',caller_name:'Заявитель',caller_status:'Статус заявителя',phone:'Телефон',supplied_phone:'Переданный телефон',scene_phone:'Телефон с места',country:'Страна',region:'Регион',city:'Город',district:'Район',area:'Территория',object:'Объект',street:'Улица',house:'Дом',building:'Корпус',structure:'Строение',apartment:'Квартира',entrance:'Подъезд',floor:'Этаж',code:'Код двери',address_note:'Уточнение адреса',description:'Описание',incident_type:'Тип происшествия',place:'Место',sign:'Признак',detail:'Деталь',injured:'Есть пострадавшие',no_access:'Нет доступа',threat_to_people:'Угроза людям',offense:'Правонарушение',injured_offsite:'Пострадавший вне места',gasification:'Газификация',refused:'Отказ',no_contact:'Нет контакта',interrupted:'Связь прервана',services:'Выбранные службы'};
+let students=[],groups=[],assignments=[];
+let scenarioPool=[],sessionSourcePool=[],lessonReport=null,teacherReady=false,routingServices=[];
+let openSessionId=null,sessionRequestVersion=0,sessionRefreshInFlight=false;
+let liveLessonId=null,liveLessonTitle='',liveRequestVersion=0,liveRefreshInFlight=false,teacherPollInFlight=false;
+const lessonExtensions=new Map();
+const fallbackCurriculum={difficulties:[{id:'basic',title:'Базовый'},{id:'standard',title:'Стандартный'},{id:'advanced',title:'Повышенный'}],profiles:[{id:'general',title:'Общий'},{id:'fire',title:'Пожарная охрана'},{id:'police',title:'Полиция'},{id:'medical',title:'Скорая медицинская помощь'},{id:'gas',title:'Аварийная газовая служба'},{id:'utilities',title:'ЖКХ и инженерные сети'}]};
+let curriculum=fallbackCurriculum;
+function curriculumTitle(kind,id){return curriculum[kind].find(x=>x.id===id)?.title||id||'Не указан';}
+function addLessonCurriculumControls(){
+ const categories=el('lessonCategories'),wrap=node('div',undefined,'columns');
+ const difficulty=document.createElement('select'),profile=document.createElement('select');difficulty.id='lessonDifficulty';profile.id='lessonProfile';
+ difficulty.add(new Option('Любая сложность',''));profile.add(new Option('Любой профиль ДДС',''));
+ for(const item of curriculum.difficulties)difficulty.add(new Option(item.title,item.id));for(const item of curriculum.profiles)profile.add(new Option(item.title,item.id));
+ const dl=node('label');dl.append('Сложность',difficulty);const pl=node('label');pl.append('Профиль ДДС',profile);wrap.append(dl,pl);categories.closest('label').before(wrap);
+ difficulty.onchange=refreshLessonChoices;profile.onchange=refreshLessonChoices;
+}
+function addLessonTransportControls(){
+ if(el('lessonTransport'))return;
+ const modeLabel=el('lessonMode').closest('label'),wrap=node('div',undefined,'stack');wrap.id='lessonTransportControls';
+ const label=node('label');label.append('Канал карточек');const select=document.createElement('select');select.id='lessonTransport';select.add(new Option('Текстовый диалог','text'));select.add(new Option('SIP-звонок','sip'));label.append(select);
+ const note=node('p','Для SIP укажите внутренний номер каждого студента группы. Номера должны быть уникальны и заранее добавлены в Voice ALLOWED_EXTENSIONS и Asterisk.');note.id='lessonTransportNote';
+ const extensions=node('div',undefined,'stack');extensions.id='lessonExtensions';wrap.append(label,note,extensions);modeLabel.after(wrap);
+ select.onchange=refreshLessonTransportControls;el('lessonGroup').addEventListener('change',refreshLessonTransportControls);
+ refreshLessonTransportControls();
+}
+function currentLessonGroup(){return groups.find(group=>group.id===el('lessonGroup').value);}
+function refreshLessonTransportControls(){
+ const select=el('lessonTransport'),container=el('lessonExtensions');if(!select||!container)return;
+ // Телефония нужна и в режиме ДДС: по ней идёт доклад дежурному службы.
+ const mode=el('lessonMode').value;select.disabled=false;
+ el('lessonTransportNote').textContent=mode==='mixed'?'SIP применяется только к карточкам заполнения; карточки действий остаются текстовыми. Номера должны быть уникальны и заранее добавлены в Voice ALLOWED_EXTENSIONS и Asterisk.':'Для SIP укажите внутренний номер каждого студента группы. Номера должны быть уникальны и заранее добавлены в Voice ALLOWED_EXTENSIONS и Asterisk.';
+ container.hidden=select.value!=='sip';container.replaceChildren();if(container.hidden)return;
+ const group=currentLessonGroup(),saved=lessonExtensions.get(group?.id)||{};lessonExtensions.set(group?.id,saved);
+ for(const member of group?.students||[]){const label=node('label');label.append(member.display_name||member.username||member.id);const input=document.createElement('input');input.inputMode='numeric';input.pattern='[0-9]{1,8}';input.maxLength=8;input.required=true;input.placeholder='Например, 201';input.value=saved[member.id]||'';input.dataset.studentId=member.id;input.setAttribute('aria-label',`SIP-номер: ${member.display_name||member.id}`);input.addEventListener('input',()=>{saved[member.id]=input.value;});label.append(input);container.append(label);}
+ if(!(group?.students||[]).length)container.append(node('p','В выбранной группе пока нет студентов.','empty'));
+}
+function lessonSipExtensions(){
+ if(el('lessonTransport')?.value!=='sip')return {};
+ const inputs=[...el('lessonExtensions').querySelectorAll('input[data-student-id]')],result={},used=new Set();
+ if(!inputs.length)throw Error('Для SIP-занятия в группе должны быть студенты');
+ for(const input of inputs){const value=input.value.trim();if(!/^[0-9]{1,8}$/.test(value))throw Error('Укажите для каждого студента SIP-номер из 1–8 цифр');if(used.has(value))throw Error('SIP-номера студентов должны быть уникальны');used.add(value);result[input.dataset.studentId]=value;}
+ return result;
+}
+// Рабочие места и адресные задания задаются поштучно: заказчик называет
+// обучающегося номером места и выдаёт конкретное задание на место.
+const lessonPlaces=new Map(),lessonTargets=new Map();
+function lessonScenarioOptions(){
+ const mode=el('lessonMode').value,result=[];
+ if(mode!=='actions')for(const option of el('lessonScenarios').selectedOptions)result.push({id:option.value,title:option.textContent});
+ if(mode!=='fill')for(const option of el('lessonGenerated').selectedOptions)result.push({id:option.value,title:option.textContent});
+ return result;
+}
+function refreshLessonPlaces(){
+ const container=el('lessonPlaces');if(!container)return;
+ const group=currentLessonGroup(),places=lessonPlaces.get(group?.id)||{},targets=lessonTargets.get(group?.id)||{};
+ lessonPlaces.set(group?.id,places);lessonTargets.set(group?.id,targets);
+ const scenarios=lessonScenarioOptions();
+ container.replaceChildren(node('h3','Рабочие места и адресные задания'));
+ if(!(group?.students||[]).length){container.append(node('p','В выбранной группе пока нет студентов.','empty'));return;}
+ for(const member of group.students){
+  const name=member.display_name||member.username||member.id,row=node('div',undefined,'columns');
+  const place=node('label');place.append(`Место: ${name}`);
+  const input=document.createElement('input');input.maxLength=80;input.placeholder='Например, АРМ-1';input.value=places[member.id]||'';
+  input.dataset.placeStudentId=member.id;input.setAttribute('aria-label',`Рабочее место: ${name}`);
+  input.addEventListener('input',()=>{places[member.id]=input.value;});place.append(input);
+  const task=node('label');task.append(`Задание: ${name}`);
+  const select=document.createElement('select');select.dataset.targetStudentId=member.id;
+  select.setAttribute('aria-label',`Адресное задание: ${name}`);
+  select.add(new Option('Любой сценарий занятия',''));
+  for(const scenario of scenarios)select.add(new Option(scenario.title,scenario.id));
+  select.value=scenarios.some(s=>s.id===targets[member.id])?targets[member.id]:'';
+  targets[member.id]=select.value;
+  select.onchange=()=>{targets[member.id]=select.value;};
+  task.append(select);row.append(place,task);container.append(row);}
+}
+function lessonWorkstations(){
+ const result={};
+ for(const input of el('lessonPlaces').querySelectorAll('input[data-place-student-id]')){
+  const value=input.value.trim();if(value)result[input.dataset.placeStudentId]=value;}
+ return result;
+}
+function lessonStudentScenarios(){
+ const result={};
+ for(const select of el('lessonPlaces').querySelectorAll('select[data-target-student-id]')){
+  if(select.value)result[select.dataset.targetStudentId]=select.value;}
+ return result;
+}
+function refreshLessonChoices(){
+ const categories=[...el('lessonCategories').selectedOptions].map(o=>o.value), mode=el('lessonMode').value,difficulty=el('lessonDifficulty')?.value||'',profile=el('lessonProfile')?.value||'';
+ for(const id of ['lessonScenarios','lessonGenerated']){const select=el(id),selected=[...select.selectedOptions].map(o=>o.value);select.replaceChildren();for(const s of scenarioPool.filter(s=>s.enabled&&(!categories.length||categories.includes(s.category_id||'other'))&&(!difficulty||(s.difficulty||'basic')===difficulty)&&(!profile||(s.dds_profile||'general')===profile))){const option=new Option(`${s.title} · ${curriculumTitle('difficulties',s.difficulty||'basic')} · ${curriculumTitle('profiles',s.dds_profile||'general')}`,s.id);option.selected=selected.includes(s.id);select.add(option);}}
+ const sources=el('lessonSources'),sourceSelection=[...sources.selectedOptions].map(o=>o.value);sources.replaceChildren();for(const s of sessionSourcePool.filter(s=>(!difficulty||(s.difficulty||'basic')===difficulty)&&(!profile||(s.dds_profile||'general')===profile))){const option=new Option(`№ ${s.number} · ${s.scenario_title||'Карточка'} · ${curriculumTitle('difficulties',s.difficulty||'basic')} · ${curriculumTitle('profiles',s.dds_profile||'general')}`,s.id);option.selected=sourceSelection.includes(s.id);sources.add(option);}
+ el('lessonScenarios').disabled=mode==='actions';el('lessonScenarios').required=mode!=='actions'&&!categories.length&&!difficulty&&!profile;
+ el('lessonSources').disabled=mode==='fill';el('lessonSources').required=false;el('lessonGenerated').disabled=mode==='fill';
+ el('lessonCount').disabled=el('lessonUnlimited').checked;
+ refreshLessonTransportControls();
+ refreshLessonPlaces();
+}
+el('lessonCategories').onchange=refreshLessonChoices;el('lessonUnlimited').onchange=refreshLessonChoices;
+for(const id of ['lessonScenarios','lessonGenerated'])el(id).addEventListener('change',refreshLessonPlaces);
+el('lessonGroup').addEventListener('change',refreshLessonPlaces);
+async function showLessonReport(id){
+ lessonReport=await api(`/api/v1/instructor/lessons/${id}/report`);const r=lessonReport, container=el('lessonReportContent');container.replaceChildren(node('h3',r.title),node('p',`Участников: ${r.summary.participants}. Выдано: ${r.summary.issued}. Завершено: ${r.summary.completed}.`));
+ if(r.reason)container.append(node('p','Причина завершения: '+r.reason));
+ for(const person of r.participants){const section=node('section',undefined,'card');
+  const place=person.workstation?` · ${person.workstation}`:'';
+  section.append(node('h3',person.display_name+place),
+   node('p',`Выполнено: ${person.completed} · ошибок ввода: ${person.grammar_errors??0} (критических: ${person.critical_grammar_errors??0})`));
+  for(const c of person.cards){
+   const t=c.timing||{},norm=value=>value===true?'в норме':value===false?'превышен':'не измерено';
+   section.append(node('p',`№ ${c.number} · ${c.title} · ${c.status} · ${c.score_percent==null?'без автоматической оценки':c.score_percent+'%'}`),
+    node('p',`Реакция: ${c.response_seconds??'—'} с из ${t.response_limit_seconds??'—'} (${norm(t.response_within_limit)}) · обработка: ${c.elapsed_seconds??'—'} с из ${t.limit_seconds??'—'} (${norm(t.within_limit)})`),
+    button('Открыть карточку и историю',()=>act(async()=>{el('lessonReportDialog').close();await showSession(c.id);})));}
+  container.append(section);}
+ if(!el('lessonReportDialog').open)el('lessonReportDialog').showModal();
+}
+el('closeLessonReport').onclick=()=>el('lessonReportDialog').close();
+el('exportLessonReport').onclick=()=>{if(!lessonReport)return;const url=URL.createObjectURL(new Blob([JSON.stringify(lessonReport,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=`lesson-${lessonReport.id}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+async function pollTeacher(){
+ if(!teacherReady||document.hidden||teacherPollInFlight)return;teacherPollInFlight=true;
+ try{await Promise.allSettled([loadLessons(),refreshOpenSession(),refreshLiveLesson()]);}finally{teacherPollInFlight=false;}
+}
+setInterval(pollTeacher,5000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)pollTeacher();});
+
+function setStatus(text,error=false){el('status').textContent=text;el('status').className=error?'error':'';}
+async function api(path,method='GET',body){
+ const options={method,headers:{'X-Voice-UI':'1'}};
+ if(body!==undefined){options.headers['Content-Type']='application/json';options.body=JSON.stringify(body);}
+ const response=await fetch(path,options);
+ if(response.status===401){location.replace('/login');throw Error('Требуется вход');}
+ if(response.status===204)return null;
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Не удалось выполнить запрос');
+ return data;
+}
+async function act(operation,success){try{setStatus('');await operation();if(success)setStatus(success);}catch(error){setStatus(error.message,true);}}
+function node(tag,text,className){const item=document.createElement(tag);if(text!==undefined)item.textContent=String(text);if(className)item.className=className;return item;}
+function empty(container,text){container.replaceChildren(node('p',text,'empty'));}
+function button(text,action){const item=node('button',text);item.type='button';item.addEventListener('click',action);return item;}
+function field(label,value){const wrap=node('div');wrap.append(node('dt',label),node('dd',value===undefined||value===null||value===''?'—':value));return wrap;}
+
+async function loadAdmin(){
+ const users=await api('/api/v1/admin/users');const container=el('users');container.replaceChildren();
+ if(!users.length){empty(container,'Пользователей пока нет');return;}
+ for(const user of users){
+  const card=node('article',undefined,'card'),head=node('div',undefined,'card-head'),title=node('div');
+  title.append(node('h3',user.display_name),node('p',`${user.username} · ${roleNames[user.role]||user.role}`));
+  head.append(title,node('span',user.active?'Активен':'Доступ закрыт',`badge${user.active?'':' off'}`));card.append(head);
+  if(user.role!=='admin'){const actions=node('div',undefined,'card-actions');actions.append(button(user.active?'Закрыть доступ':'Восстановить доступ',()=>act(async()=>{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),'PATCH',{active:!user.active});await loadAdmin();},'Состояние пользователя изменено')));card.append(actions);}
+  if(user.role!=='admin'){const directoryForm=node('form',undefined,'stack'),directoryName=document.createElement('input');directoryName.placeholder='Логин в LDAP / AD';directoryName.setAttribute('aria-label','Логин в LDAP / AD');directoryName.required=true;directoryName.pattern='[a-zA-Z0-9][a-zA-Z0-9_.-]{2,39}';directoryName.maxLength=40;const submit=node('button','Связать с каталогом');directoryForm.append(directoryName,submit);directoryForm.onsubmit=event=>{event.preventDefault();if(!confirm('Разрешить владельцу этой учётной записи LDAP входить в выбранный профиль?'))return;act(async()=>{await api('/api/v1/admin/users/'+encodeURIComponent(user.id)+'/directory','POST',{username:directoryName.value});directoryName.value='';},'Связь с каталогом сохранена');};card.append(directoryForm);}
+  container.append(card);
+ }
+}
+
+async function loadGroups(){
+ [students,groups]=await Promise.all([api('/api/v1/instructor/students'),api('/api/v1/instructor/groups')]);
+const select=el('assignmentGroup');select.replaceChildren();for(const group of groups)select.add(new Option(group.title,group.id));el('lessonGroup').replaceChildren();for(const group of groups)el('lessonGroup').add(new Option(group.title,group.id));
+ refreshLessonTransportControls();
+ const container=el('groups');container.replaceChildren();if(!groups.length){empty(container,'Создайте первую группу');return;}
+ for(const group of groups){
+  const card=node('article',undefined,'card');card.append(node('h3',group.title));
+  card.append(node('p',group.students.length?group.students.map(item=>item.display_name).join(', '):'В группе пока нет студентов'));
+  const available=students.filter(item=>!group.member_ids.includes(item.id));
+  if(available.length){const form=node('form',undefined,'inline'),selectStudent=document.createElement('select');selectStudent.setAttribute('aria-label','Студент');for(const item of available)selectStudent.add(new Option(`${item.display_name} (${item.username})`,item.id));const add=node('button','Добавить');add.className='primary';form.append(selectStudent,add);form.addEventListener('submit',event=>{event.preventDefault();act(async()=>{await api(`/api/v1/instructor/groups/${encodeURIComponent(group.id)}/members`,'POST',{student_id:selectStudent.value});await loadGroups();},'Студент добавлен в группу');});card.append(form);}
+  container.append(card);
+ }
+}
+
+async function loadAssignments(){
+ assignments=await api('/api/v1/instructor/assignments');const container=el('assignments');container.replaceChildren();
+ if(!assignments.length){empty(container,'Заданий пока нет');return;}
+ for(const item of assignments){const card=node('article',undefined,'card'),group=groups.find(value=>value.id===item.group_id),scenario=scenarioPool.find(value=>value.id===item.scenario_id),source=scenario||item;card.append(node('h3',item.title),node('p',`${group?.title||'Группа'} · сценарий ${item.scenario_id}`),node('p',`${curriculumTitle('difficulties',source.difficulty||'basic')} · ${curriculumTitle('profiles',source.dds_profile||'general')}`));if(source.learning_objectives)card.append(node('p','Учебные цели: '+source.learning_objectives));const actions=node('div',undefined,'card-actions');actions.append(node('span',item.active?'Активно':'Приостановлено',`badge${item.active?'':' off'}`),button(item.active?'Приостановить':'Включить',()=>act(async()=>{await api('/api/v1/instructor/assignments/'+encodeURIComponent(item.id),'PATCH',{active:!item.active});await loadAssignments();},'Задание изменено')));card.append(actions);container.append(card);}
+}
+
+async function loadSessions(){
+ const sessions=await api('/api/v1/instructor/sessions');sessionSourcePool=sessions.filter(s=>s.status==='Завершена');refreshLessonChoices();const container=el('sessions');container.replaceChildren();
+ if(!sessions.length){empty(container,'У назначенных вам занятий пока нет попыток');return;}
+ for(const item of sessions){const card=node('article',undefined,'card'),student=students.find(value=>value.id===item.student_id),head=node('div',undefined,'card-head'),title=node('div');title.append(node('h3',`№ ${item.number||'—'} · ${item.scenario_title||'Сценарий'}`),node('p',`${student?.display_name||'Студент'} · ${item.status||'—'} · ${new Date(item.created_at).toLocaleString('ru-RU')}`));head.append(title,node('span',item.score_percent===null||item.score_percent===undefined?'Без оценки':`${item.score_percent}%`,'badge'));card.append(head);card.append(button('Открыть',()=>act(()=>showSession(item.id))));container.append(card);}
+}
+
+async function loadLessons(){
+ const values=await api('/api/v1/instructor/lessons');el('lessons').replaceChildren();
+ const labels={planned:'Подготовлено',running:'Идёт',stopping:'Завершается — повторите завершение',finished:'Завершено'};
+ for(const value of values){const card=node('article',undefined,'card'),meta=[value.difficulty&&curriculumTitle('difficulties',value.difficulty),value.dds_profile&&curriculumTitle('profiles',value.dds_profile)].filter(Boolean).join(' · ');card.append(node('h3',value.title),node('p',`${labels[value.state]} · ${value.cards_per_student===null?'До остановки преподавателем':value.cards_per_student+' карточек каждому'}${meta?' · '+meta:''} · завершено ${value.cards.filter(c=>c.status==='Завершена').length} из ${value.cards.length} выданных`));
+ if(value.state==='planned')card.append(button('Начать',()=>act(async()=>{await api(`/api/v1/instructor/lessons/${value.id}/start`,'POST');await loadLessons();})));
+ if(value.state==='running'){
+  // «Делай как я»: преподаватель ведёт группу по шагам вводного курса.
+  const guided=node('div',undefined,'guided-control');
+  const step=document.createElement('input');step.type='number';step.min='1';step.max='11';
+  step.value=value.guided_step||1;step.setAttribute('aria-label','Шаг обучения');
+  guided.append(node('span','Показ шага группе:'),step,
+   button('Показать',()=>act(async()=>{
+    await api(`/api/v1/instructor/lessons/${value.id}/guided-step`,'PUT',{step:Number(step.value)});
+    await loadLessons();})),
+   button('Убрать показ',()=>act(async()=>{
+    await api(`/api/v1/instructor/lessons/${value.id}/guided-step`,'PUT',{step:null});
+    await loadLessons();})));
+  if(value.guided_step)guided.append(node('span',`сейчас показывается шаг ${value.guided_step}`,'muted'));
+  card.append(guided);
+ }
+ if(['planned','running','stopping'].includes(value.state))card.append(button('Завершить всем',()=>{const reason=prompt('Причина завершения для всей группы:');if(!reason?.trim())return;act(async()=>{await api(`/api/v1/instructor/lessons/${value.id}/finish`,'POST',{reason:reason.trim()});await loadLessons();await loadSessions();});}));
+ card.append(button('Участники в реальном времени',()=>openLiveLesson(value.id,value.title)),button('Отчёт и участники',()=>act(()=>showLessonReport(value.id))));el('lessons').append(card);}
+}
+el('lessonMode').onchange=()=>{refreshLessonChoices();const mixed=el('lessonMode').value==='mixed';el('lessonModeSwitch').disabled=!mixed;if(!mixed)el('lessonModeSwitch').checked=false;};el('lessonModeSwitch').disabled=el('lessonMode').value!=='mixed';
+el('lessonForm').onsubmit=event=>{event.preventDefault();const submit=event.submitter;submit.disabled=true;act(async()=>{const transport=el('lessonMode').value==='actions'?'text':el('lessonTransport').value,sip_extensions=transport==='sip'?lessonSipExtensions():{};await api('/api/v1/instructor/lessons','POST',{title:el('lessonTitle').value,group_id:el('lessonGroup').value,mode:el('lessonMode').value,allow_mode_switch:el('lessonModeSwitch').checked,transport,sip_extensions,difficulty:el('lessonDifficulty').value||null,dds_profile:el('lessonProfile').value||null,category_ids:[...el('lessonCategories').selectedOptions].map(o=>o.value),prefilled_scenario_ids:el('lessonMode').value==='fill'?[]:[...el('lessonGenerated').selectedOptions].map(o=>o.value),scenario_ids:el('lessonMode').value==='actions'?[]:[...el('lessonScenarios').selectedOptions].map(o=>o.value),source_session_ids:el('lessonMode').value==='fill'?[]:[...el('lessonSources').selectedOptions].map(o=>o.value),cards_per_student:el('lessonUnlimited').checked?null:Number(el('lessonCount').value),parallel_cards:Number(el('lessonParallel').value)||1,adaptive_difficulty:el('lessonAdaptive').checked,workstations:lessonWorkstations(),student_scenarios:lessonStudentScenarios()});await loadLessons();},'Занятие подготовлено. Нажмите «Начать».').finally(()=>submit.disabled=false);};
+
+function ensureLiveDialog(){
+ let dialog=el('liveLessonDialog');if(dialog)return dialog;dialog=document.createElement('dialog');dialog.id='liveLessonDialog';const head=node('div',undefined,'dialog-head'),title=node('h2');title.id='liveLessonHeading';const close=button('Закрыть',()=>dialog.close());head.append(title,close);const observed=node('p');observed.id='liveLessonObserved';const content=node('div');content.id='liveLessonContent';dialog.append(head,observed,content);document.body.append(dialog);dialog.addEventListener('close',()=>{liveLessonId=null;liveRequestVersion++;});return dialog;
+}
+function formatElapsed(seconds){const total=Math.max(0,Number(seconds)||0),minutes=Math.floor(total/60),rest=Math.floor(total%60);return minutes?`${minutes} мин ${String(rest).padStart(2,'0')} сек`:`${rest} сек`;}
+function persistedEventText(event){
+ if(!event)return 'Сохранённых действий пока нет';if(typeof event==='string')return event;
+ const type=event.type||event.event_type||'действие',at=event.at||event.created_at||event.timestamp,detail=event.detail||event.status||event.service;
+ return [type,detail&&(typeof detail==='string'?detail:JSON.stringify(detail)),at&&new Date(at).toLocaleString('ru-RU')].filter(Boolean).join(' · ');
+}
+function renderLiveLesson(value){
+ el('liveLessonHeading').textContent=`Участники · ${value.title||liveLessonTitle}`;el('liveLessonObserved').textContent=`Состояние: ${{planned:'подготовлено',running:'идёт',stopping:'завершается',finished:'завершено'}[value.state]||value.state} · данные на ${new Date(value.observed_at).toLocaleString('ru-RU')}`;
+ const container=el('liveLessonContent');container.replaceChildren();if(!value.participants?.length){empty(container,'Участников пока нет');return;}
+ for(const person of value.participants){const card=node('article',undefined,'card');card.append(node('h3',person.display_name||person.student_id),node('p',`Завершено карточек: ${person.completed??0}`));
+  if(person.active_card){const active=person.active_card;card.append(node('p',`Активная карточка № ${active.number??'—'} · ${active.title||'Без названия'}`),node('p',`Прошло: ${formatElapsed(active.elapsed_seconds)} · канал: ${active.transport||'не указан'}`),node('p','Последнее сохранённое действие: '+persistedEventText(active.last_event)));if(active.call_id)card.append(node('p','Идентификатор звонка: '+active.call_id));if(active.provider_error)card.append(node('p','Ошибка провайдера: '+(typeof active.provider_error==='string'?active.provider_error:JSON.stringify(active.provider_error)),'error'));card.append(button('Открыть карточку',()=>{ensureLiveDialog().close();act(()=>showSession(active.id));}));
+  }else card.append(node('p','Активной карточки нет'));
+  if(person.latest_result){const score=person.latest_result.score_percent==null?'без автоматической оценки':`${person.latest_result.score_percent}%`,policy=person.latest_result.policy_result?.passed;card.append(node('p',`Последний зафиксированный результат: ${score}${policy===true?' · политика выполнена':policy===false?' · политика не выполнена':''}`));}
+  container.append(card);
+ }
+}
+async function openLiveLesson(id,title){
+ const dialog=ensureLiveDialog();liveLessonId=id;liveLessonTitle=title;liveRequestVersion++;el('liveLessonHeading').textContent=`Участники · ${title}`;empty(el('liveLessonContent'),'Загрузка…');el('liveLessonObserved').textContent='';if(!dialog.open)dialog.showModal();await refreshLiveLesson();
+}
+async function refreshLiveLesson(){
+ const dialog=el('liveLessonDialog');if(!liveLessonId||!dialog?.open||document.hidden||liveRefreshInFlight)return;liveRefreshInFlight=true;const id=liveLessonId,version=++liveRequestVersion;
+ try{const value=await api(`/api/v1/instructor/lessons/${encodeURIComponent(id)}/live`);if(dialog.open&&liveLessonId===id&&version===liveRequestVersion)renderLiveLesson(value);}catch(error){if(dialog.open&&liveLessonId===id&&version===liveRequestVersion)el('liveLessonObserved').textContent='Не удалось обновить: '+error.message;}finally{liveRefreshInFlight=false;}
+}
+
+function renderObject(title,value){const section=node('section',undefined,'detail-section');section.append(node('h3',title));const list=node('dl',undefined,'detail-grid');for(const [key,item] of Object.entries(value||{})){if(item&&typeof item==='object'&&!Array.isArray(item))continue;const shown=Array.isArray(item)?item.join(', '):(typeof item==='boolean'?(item?'Да':'Нет'):item);list.append(field(detailNames[key]||key,shown));}section.append(list);return section;}
+function sessionHost(name){const item=node('div');item.dataset.sessionHost=name;return item;}
+function buildSessionShell(id){const detail=el('sessionDetail');detail.replaceChildren();detail.dataset.sessionId=id;for(const name of ['refresh-state','main','stop','vis','dialogue','evaluation','feedback-notes','feedback-form'])detail.append(sessionHost(name));}
+function createStopForm(id){
+ const form=node('form',undefined,'stack'),reason=document.createElement('textarea'),stop=node('button','Завершить занятие'),error=node('p');form.dataset.sessionStopForm=id;
+ reason.required=true;reason.maxLength=1000;reason.placeholder='Причина завершения';reason.setAttribute('aria-label','Причина завершения');form.append(node('p','Будет оценена последняя сохранённая карточка. Несохранённые правки студента не входят в результат.'),reason,stop,error);
+ form.onsubmit=async event=>{event.preventDefault();if(!reason.value.trim()||!confirm('Завершить занятие и зафиксировать результат?'))return;stop.disabled=true;try{await api(`/api/v1/instructor/sessions/${encodeURIComponent(id)}/finish`,'POST',{reason:reason.value.trim()});await showSession(id,{open:false});await loadSessions();}catch(e){error.textContent=e.message;stop.disabled=false;}};return form;
+}
+function createFeedbackForm(id){
+ const form=node('form',undefined,'stack'),text=document.createElement('textarea'),send=node('button','Отправить студенту'),message=node('p');form.dataset.sessionFeedbackForm=id;text.required=true;text.maxLength=2000;text.setAttribute('aria-label','Замечание студенту');text.placeholder='Подсказка или замечание студенту';form.append(text,send,message);let pendingId=null;text.addEventListener('input',()=>{pendingId=null;});
+ form.onsubmit=async event=>{event.preventDefault();if(!text.value.trim())return;send.disabled=true;text.disabled=true;pendingId=pendingId||crypto.randomUUID();try{await api(`/api/v1/instructor/sessions/${encodeURIComponent(id)}/feedback`,'POST',{message_id:pendingId,text:text.value.trim()});text.value='';pendingId=null;text.disabled=false;send.disabled=false;await showSession(id,{open:false});}catch(error){message.textContent=error.message;send.disabled=false;text.disabled=false;}};return form;
+}
+// Внешняя информационная система в тренажёре — это преподаватель: реальной
+// интеграции нет. Добавленная так служба приходит в карточку с пометкой ВИС,
+// как описано в инструкции оператора Системы 112.
+function createVisForm(id, services){
+ const form=node('form',undefined,'stack'),select=document.createElement('select'),
+       reason=document.createElement('textarea'),send=node('button','Добавить от внешней системы'),message=node('p');
+ form.dataset.sessionVisForm=id;
+ select.setAttribute('aria-label','Служба от внешней системы');
+ for(const name of services)select.add(new Option(name,name));
+ reason.required=true;reason.maxLength=1000;reason.placeholder='Основание: почему служба добавлена внешней системой';
+ reason.setAttribute('aria-label','Основание добавления');
+ form.append(node('p','Служба появится в карточке обучающегося с пометкой ВИС. Данные не покидают стенд.'),select,reason,send,message);
+ let pendingId=null;reason.addEventListener('input',()=>{pendingId=null;});
+ form.onsubmit=async event=>{
+  event.preventDefault();if(!select.value||!reason.value.trim())return;
+  send.disabled=true;pendingId=pendingId||crypto.randomUUID();
+  try{
+   await api(`/api/v1/instructor/sessions/${encodeURIComponent(id)}/vis-service`,'POST',
+             {message_id:pendingId,service:select.value,reason:reason.value.trim()});
+   reason.value='';pendingId=null;message.textContent='Служба добавлена с пометкой ВИС';
+   await showSession(id,{open:false});
+  }catch(error){message.textContent=error.message;}
+  finally{send.disabled=false;}
+ };
+ return form;
+}
+function renderSession(value){
+ const detail=el('sessionDetail'),id=value.id;if(detail.dataset.sessionId!==id)buildSessionShell(id);const host=name=>detail.querySelector(`[data-session-host="${name}"]`),refreshState=host('refresh-state'),main=host('main');refreshState.textContent='Обновлено: '+new Date().toLocaleTimeString('ru-RU');refreshState.className='';main.replaceChildren();
+ main.append(renderObject('Сведения',{number:value.number,status:value.status,created_at:value.created_at,finished_at:value.finished_at,student_id:value.student_id,assignment_id:value.assignment_id,difficulty:curriculumTitle('difficulties',value.difficulty||'basic'),dds_profile:curriculumTitle('profiles',value.dds_profile||'general'),learning_objectives:value.learning_objectives}),renderObject('Карточка',value.card),node('p','Статус карточки АРМ: '+(value.incident_status||'не указан')));
+ for(const item of value.notifications||[])main.append(renderObject('Телефонограмма',item));for(const item of value.linked_cards||[])main.append(button('Связанная карточка № '+item.number,()=>act(()=>showSession(item.id))));if(value.action_report)main.append(renderObject('Действия с готовой карточкой',value.action_report));for(const event of value.events||[])if(event.type==='service.updated')main.append(renderObject('Реагирование службы',event.detail));if(value.completed_by)main.append(renderObject('Завершение занятия',value.completed_by));
+ const stopHost=host('stop');if(value.status==='Завершена')stopHost.replaceChildren();else if(!stopHost.querySelector(`[data-session-stop-form="${id}"]`))stopHost.replaceChildren(createStopForm(id));
+ const visHost=host('vis');
+ const visAvailable=(routingServices||[]).filter(name=>!(value.card?.services||[]).includes(name));
+ if(value.status==='Завершена'||!value.revision||!visAvailable.length)visHost.replaceChildren();
+ else if(!visHost.querySelector(`[data-session-vis-form="${id}"]`)){
+  visHost.className='detail-section';
+  visHost.replaceChildren(node('h3','Служба от внешней системы (ВИС)'),createVisForm(id,visAvailable));
+ }
+ const dialogue=host('dialogue');dialogue.replaceChildren(node('h3','Диалог'));dialogue.className='detail-section';if(value.messages?.length){for(const message of value.messages){const line=node('div',undefined,`message ${message.role==='assistant'?'assistant':''}`);line.append(node('strong',message.role==='assistant'?'Заявитель':'Студент'),node('p',message.content));dialogue.append(line);}}else dialogue.append(node('p','Реплик нет'));
+ const evaluation=host('evaluation');evaluation.replaceChildren();if(value.evaluation){evaluation.className='detail-section';evaluation.append(node('h3','Оценка'),node('p',value.evaluation.score_percent===null?'Оценка не настроена':`${value.evaluation.score_percent}%`,'score'));for(const criterion of value.evaluation.criteria||[])evaluation.append(node('p',`${criterion.passed?'✓':'×'} ${criterion.label}: ${criterion.recommendation||''}`));}
+ const notes=host('feedback-notes');notes.replaceChildren(node('h3','Обратная связь преподавателя'));notes.className='detail-section';for(const note of value.teacher_feedback||[])notes.append(node('p',`${new Date(note.at).toLocaleString('ru-RU')} · ${note.teacher_name}: ${note.text}`));
+ const formHost=host('feedback-form');if(!formHost.querySelector(`[data-session-feedback-form="${id}"]`))formHost.replaceChildren(createFeedbackForm(id),button('Обновить карточку и диалог',()=>act(()=>showSession(id,{open:false}))));
+}
+async function showSession(id,options={}){
+ openSessionId=id;const version=++sessionRequestVersion,value=await api('/api/v1/instructor/sessions/'+encodeURIComponent(id));if(openSessionId!==id||version!==sessionRequestVersion)return;renderSession(value);if(options.open!==false&&!el('sessionDialog').open)el('sessionDialog').showModal();
+}
+async function refreshOpenSession(){
+ if(!openSessionId||!el('sessionDialog').open||sessionRefreshInFlight)return;sessionRefreshInFlight=true;const id=openSessionId;try{await showSession(id,{open:false});}catch(error){if(openSessionId===id&&el('sessionDialog').open){const state=el('sessionDetail').querySelector('[data-session-host="refresh-state"]');if(state){state.textContent='Данные могли устареть: '+error.message;state.className='error';}}}finally{sessionRefreshInFlight=false;}
+}
+
+async function loadTeacher(){await loadGroups();const scenarios=await api('/api/scenarios');el('scenarioId').replaceChildren();for(const scenario of scenarios.filter(s=>s.enabled))el('scenarioId').add(new Option(`${scenario.title} · ${curriculumTitle('difficulties',scenario.difficulty||'basic')} · ${curriculumTitle('profiles',scenario.dds_profile||'general')}`,scenario.id));el('lessonScenarios').replaceChildren();scenarioPool=scenarios;try{curriculum=await api('/api/v1/instructor/curriculum');}catch{curriculum=fallbackCurriculum;}addLessonCurriculumControls();addLessonTransportControls();try{routingServices=(await api('/api/v1/instructor/routing/catalog')).services||[];}catch{routingServices=[];}const categories=await api('/api/v1/instructor/categories');for(const c of categories)el('lessonCategories').add(new Option(c.title,c.id));refreshLessonChoices();await Promise.all([loadAssignments(),loadSessions(),loadLessons()]);teacherReady=true;}
+async function loadStudent(){const values=await api('/api/v1/student/assignments'),container=el('studentAssignments');const lessons=await api('/api/v1/student/lessons');try{curriculum=await api('/api/v1/student/curriculum');}catch{curriculum=fallbackCurriculum;}values.push(...lessons.map(l=>({...l,scenario_title:`Серия · ${({planned:'ожидание старта',running:'идёт',stopping:'завершается',finished:'завершено'})[l.state]} · выполнено ${l.completed}/${l.cards_per_student??'∞'}`})));container.replaceChildren();if(!values.length){empty(container,'Активных заданий пока нет');return;}for(const item of values){const card=node('article',undefined,'card'),meta=[curriculumTitle('difficulties',item.difficulty||'basic'),curriculumTitle('profiles',item.dds_profile||'general')].join(' · ');card.append(node('h3',item.title),node('p',item.scenario_title||item.scenario_id),node('p',meta),item.learning_objectives?node('p','Учебные цели: '+item.learning_objectives):node('span'),node('span',item.state?({planned:'Ожидание старта',running:'Идёт',stopping:'Завершается',finished:'Завершено'})[item.state]:'Доступно','badge'));container.append(card);}}
+
+el('logout').addEventListener('click',()=>act(async()=>{await api('/api/v1/auth/logout','POST');sessionStorage.removeItem('studentSession');localStorage.removeItem('studentSession');location.replace('/login');}));
+el('userForm').addEventListener('submit',event=>{event.preventDefault();act(async()=>{await api('/api/v1/admin/users','POST',{username:el('newUsername').value,display_name:el('newDisplayName').value,role:el('newRole').value,password:el('newPassword').value});event.target.reset();await loadAdmin();},'Пользователь создан');});
+el('groupForm').addEventListener('submit',event=>{event.preventDefault();act(async()=>{await api('/api/v1/instructor/groups','POST',{title:el('groupTitle').value});event.target.reset();await loadGroups();},'Группа создана');});
+el('assignmentForm').addEventListener('submit',event=>{event.preventDefault();act(async()=>{await api('/api/v1/instructor/assignments','POST',{group_id:el('assignmentGroup').value,scenario_id:el('scenarioId').value,title:el('assignmentTitle').value});event.target.reset();await loadAssignments();},'Задание создано');});
+el('closeSession').addEventListener('click',()=>el('sessionDialog').close());
+el('sessionDialog').addEventListener('close',()=>{openSessionId=null;sessionRequestVersion++;});
+el('refreshSessions').addEventListener('click',()=>act(async()=>{await loadSessions();await loadLessons();}));
+
+act(async()=>{const me=await api('/api/v1/auth/me');el('identity').textContent=`${me.display_name} · ${roleNames[me.role]||me.role}`;const panel=el(`${me.role}Panel`);if(!panel){throw Error('Для этой роли кабинет не настроен');}panel.hidden=false;if(me.role==='admin')await loadAdmin();else if(me.role==='teacher')await loadTeacher();else await loadStudent();});

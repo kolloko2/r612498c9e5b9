@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Кабинет · Тренажёр 112</title>
+  <link rel="stylesheet" href="/assets/portal.css">
+  <script src="/assets/portal.js" defer></script>
+</head>
+<body>
+  <header>
+    <div><strong>СИСТЕМА-112</strong><span>Личный кабинет</span></div>
+    <div class="identity"><span id="identity"></span><button id="logout" type="button">Выйти</button></div>
+  </header>
+  <main>
+    <p id="status" role="status" aria-live="polite"></p>
+
+    <section id="adminPanel" hidden>
+      <p><a href="/operations">Технический кабинет — сервисы, мониторинг и резервные копии</a></p>
+      <div class="heading"><div><h1>Пользователи</h1><p>Создавайте учётные записи и закрывайте доступ без удаления истории.</p></div></div>
+      <form id="userForm" class="form-grid">
+        <label>Логин<input id="newUsername" required minlength="3" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,39}"></label>
+        <label>Отображаемое имя<input id="newDisplayName" required maxlength="100"></label>
+        <label>Роль<select id="newRole"><option value="teacher">Преподаватель</option><option value="student">Студент</option></select></label>
+        <label>Пароль<input id="newPassword" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>
+        <button class="primary" type="submit">Создать пользователя</button>
+      </form>
+      <div id="users" class="cards"></div>
+    </section>
+
+    <section id="teacherPanel" hidden>
+      <div class="heading"><div><h1>Кабинет преподавателя</h1><p>Группы, задания и результаты учебных занятий.</p></div><nav class="heading-actions"><a class="button" href="/assessment">Оценка и статистика</a><a class="button" href="/dds">Журнал ДДС</a><a class="button" href="/materials">Методические материалы</a><a class="button" href="/tickets">Учебные билеты</a><a class="button" href="/scenarios">Сценарии</a><a class="button" href="/instructor">Настроить эталоны</a></nav></div>
+      <div class="columns">
+        <section class="panel"><h2>Группы</h2>
+          <form id="groupForm" class="inline"><input id="groupTitle" required maxlength="160" placeholder="Название группы"><button class="primary">Создать</button></form>
+          <div id="groups" class="cards compact"></div>
+        </section>
+        <section class="panel"><h2>Новое задание</h2>
+          <form id="assignmentForm" class="stack">
+            <label>Группа<select id="assignmentGroup" required></select></label>
+            <label>Сценарий<select id="scenarioId" required></select></label>
+            <label>Название задания<input id="assignmentTitle" required maxlength="160"></label>
+            <button class="primary">Назначить</button>
+          </form>
+          <div id="assignments" class="cards compact"></div>
+        </section>
+      </div>
+<section class="panel"><h2>Общее занятие · серия карточек</h2><form id="lessonForm" class="stack"><label>Название<input id="lessonTitle" required maxlength="160"></label><label>Группа<select id="lessonGroup" required></select></label><label>Категории событий (не выбрано — все)<select id="lessonCategories" multiple size="4"></select></label><label>Режим<select id="lessonMode"><option value="actions">Работа диспетчера ДДС · готовые карточки</option><option value="fill">Полный цикл 112 · приём вызова и заполнение</option><option value="mixed">Смешанное занятие</option></select></label><label class="check"><input type="checkbox" id="lessonModeSwitch"> Разрешить обучающемуся переключать режим (нужно смешанное занятие)</label><label>Готовые карточки, сформированные из сценариев<select id="lessonGenerated" multiple size="4" disabled></select></label><label>Карточки из завершённых работ<select id="lessonSources" multiple size="5" disabled></select></label><label>Сценарии (можно несколько)<select id="lessonScenarios" multiple required size="5"></select></label><label>Карточек каждому студенту<input id="lessonCount" type="number" min="1" max="200" value="3" required></label><label>Одновременно открытых карточек<input id="lessonParallel" type="number" min="1" max="10" value="1" required></label><label class="check"><input type="checkbox" id="lessonAdaptive"> Подбирать сложность по результатам обучающегося</label><div id="lessonPlaces" class="stack"></div><label><span><input id="lessonUnlimited" type="checkbox"> Выдавать карточки до остановки преподавателем</span></label><p>Готовые карточки копируются без оценок, переписки и данных автора; звонок для них не запускается. Выбор случайный, возможны повторения. После создания нажмите «Начать».</p><button>Подготовить занятие</button></form><div id="lessons" class="cards"></div></section>
+      <section class="panel sessions"><h2>Занятия</h2><button id="refreshSessions" type="button">Обновить</button><div id="sessions" class="cards compact"></div></section>
+      <dialog id="sessionDialog"><div class="dialog-head"><h2>Занятие</h2><button id="closeSession" type="button" aria-label="Закрыть">×</button></div><div id="sessionDetail"></div></dialog>
+    </section>
+
+    <section id="studentPanel" hidden>
+      <h1>Мои задания</h1>
+      <p>Откройте рабочее место, чтобы начать назначенное преподавателем занятие.</p>
+      <p><a class="button" href="/assessment">Мои результаты</a> <a class="button" href="/materials">Справочные материалы</a></p>
+      <div id="studentAssignments" class="cards"></div>
+      <a class="button primary" href="/">Перейти в рабочее место</a>
+    </section>
+  </main>
+  <dialog id="lessonReportDialog"><div class="dialog-head"><h2>Отчёт занятия группы</h2><button id="closeLessonReport" type="button">Закрыть</button></div><div id="lessonReportContent"></div><button id="exportLessonReport" type="button">Скачать JSON</button></dialog>
+</body>
+</html>

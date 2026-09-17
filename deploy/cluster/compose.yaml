@@ -1,0 +1,36 @@
+# Use only as an overlay with the root Compose file:
+# docker compose -f docker-compose.yml -f deploy/cluster/compose.yaml up -d --scale backend=2
+services:
+  backend:
+    environment:
+      CLUSTER_ENABLED: "true"
+      CLUSTER_LOCK_TIMEOUT_SECONDS: ${CLUSTER_LOCK_TIMEOUT_SECONDS:-8}
+      CLUSTER_LOCK_POLL_SECONDS: ${CLUSTER_LOCK_POLL_SECONDS:-0.05}
+  backend-lb:
+    image: haproxy:3.0-alpine
+    restart: unless-stopped
+    init: true
+    volumes:
+      - ./deploy/cluster/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "haproxy", "-c", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  frontend:
+    environment:
+      DIALOGUE_URL: http://backend-lb:8000
+    depends_on:
+      backend-lb:
+        condition: service_healthy
+
+  voice:
+    environment:
+      BACKEND_URL: ws://backend-lb:8000/ws/v1/voice/sessions/{session_id}
+    depends_on:
+      backend-lb:
+        condition: service_healthy

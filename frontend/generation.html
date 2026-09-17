@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ИИ-авторинг · Тренажёр 112</title>
+  <link rel="stylesheet" href="/assets/instructor.css">
+  <style>
+    .layout{display:grid;grid-template-columns:minmax(230px,1fr) minmax(0,3fr);gap:24px;align-items:start}.panel,.preview-section{background:#fff;border:1px solid #cad3d9;padding:18px;margin-bottom:16px}.drafts{display:grid;gap:8px;margin-top:12px}.draft{width:100%;text-align:left}.draft[aria-current="true"]{border-color:#1878a7;background:#eaf6fb}.meta{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:#5a6a75}.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fact{margin:0;white-space:pre-wrap}.fact strong{display:block;margin-bottom:5px}.wide{grid-column:1/-1}.rubric{width:100%;border-collapse:collapse}.rubric th,.rubric td{border:1px solid #cad3d9;padding:9px;text-align:left;vertical-align:top}.rubric th{background:#eef4f7}.approval{border-left:4px solid #1878a7}.empty{color:#5a6a75;font-style:italic}.conflict{display:none}.conflict.visible{display:inline-block}.history summary{cursor:pointer}.history article{border-top:1px solid #dce3e7;padding:12px 0}.history article:first-of-type{margin-top:12px}.approved{color:#236529;font-weight:bold}@media(max-width:800px){.layout,.facts{grid-template-columns:1fr}.wide{grid-column:auto}}
+  </style>
+  <script src="/assets/generation.js" defer></script>
+</head>
+<body>
+<header><strong>СИСТЕМА-112 · ИИ-авторинг</strong><a href="/scenarios">Библиотека сценариев</a></header>
+<main>
+  <h1>Черновик сценария и эталона</h1>
+  <p class="notice">При облачном провайдере содержимое задания передаётся внешнему сервису.</p>
+  <div class="layout">
+    <aside class="panel">
+      <h2>Сохранённые черновики</h2>
+      <button id="refreshList" type="button">Обновить список</button>
+      <div id="drafts" class="drafts"><span class="empty">Загрузка…</span></div>
+    </aside>
+    <section>
+      <form id="generateForm" class="panel">
+        <h2>Новая задача</h2>
+        <label>Учебная категория<select id="category" required><option value="fire">Пожары</option><option value="traffic">ДТП и транспорт</option><option value="medical">Медицина</option><option value="utilities">ЖКХ и инженерные сети</option><option value="public">Общественная безопасность</option><option value="other">Прочее</option></select></label>
+        <div class="facts"><label>Уровень сложности<select id="difficulty"><option value="basic">Базовый</option><option value="standard">Стандартный</option><option value="advanced">Повышенный</option></select></label><label>Профиль ДДС<select id="ddsProfile"><option value="general">Общий</option><option value="fire">Пожарная охрана</option><option value="police">Полиция</option><option value="medical">Скорая медицинская помощь</option><option value="gas">Аварийная газовая служба</option><option value="utilities">ЖКХ и инженерные сети</option></select></label></div>
+        <label>Учебные цели<textarea id="learningObjectives" maxlength="1500" rows="4" placeholder="Что должен отработать студент"></textarea></label>
+        <label>Методическое задание<textarea id="brief" required maxlength="3000" rows="7" placeholder="Опишите учебную ситуацию, цели, важные факты и что должен зафиксировать оператор."></textarea></label>
+        <footer><button id="generate" type="submit">Создать черновик</button><span id="briefCount">0 / 3000</span></footer>
+      </form>
+      <p id="status" role="status" aria-live="polite"></p>
+      <button id="reloadConflict" class="conflict" type="button">Перечитать актуальную версию</button>
+      <div id="preview" hidden>
+        <section class="preview-section">
+          <h2 id="previewTitle">Предпросмотр</h2>
+          <div id="meta" class="meta"></div>
+          <p id="provider" class="hint"></p>
+        </section>
+        <section class="preview-section"><h2>Сценарий</h2><div id="scenario" class="facts"></div></section>
+        <section class="preview-section"><h2>Эталон оценки</h2><div id="rubric"></div></section>
+        <section id="revisionPanel" class="preview-section">
+          <h2>Доработка</h2>
+          <form id="reviseForm"><label>Комментарий преподавателя<textarea id="comment" required maxlength="2000" rows="5" placeholder="Что именно изменить в сценарии или эталоне?"></textarea></label><footer><button id="revise" type="submit">Отправить на доработку</button><span id="commentCount">0 / 2000</span></footer></form>
+        </section>
+        <section id="approvalPanel" class="preview-section approval">
+          <h2>Публикация</h2>
+          <p>До подтверждения ни сценарий, ни эталон не добавляются в учебную библиотеку. Одобрение создаст их вместе.</p>
+          <label><span><input id="approvalCheck" type="checkbox"> Я проверил(а) все факты и критерии</span></label>
+          <footer><button id="approve" type="button" disabled>Одобрить сценарий и эталон</button></footer>
+        </section>
+        <details class="preview-section history"><summary>История версий</summary><div id="history"></div></details>
+      </div>
+    </section>
+  </div>
+</main>
+</body>
+</html>

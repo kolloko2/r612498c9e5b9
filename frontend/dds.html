@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ДДС · входящий журнал</title>
+  <link rel="stylesheet" href="/assets/dds.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">АРМ-112</p>
+      <h1>Входящий журнал ДДС</h1>
+    </div>
+    <a href="/portal">В кабинет</a>
+  </header>
+
+  <main>
+    <section class="toolbar" aria-label="Фильтр журнала">
+      <label>Профиль ДДС
+        <select id="profile"></select>
+      </label>
+      <button id="refresh" type="button">Обновить</button>
+      <span id="summary" aria-live="polite"></span>
+    </section>
+
+    <details><summary>Информационные получатели профиля</summary><p>По одному получателю на строку. Список не отображается в полосе служб студента.</p><form id="recipientsForm"><textarea id="recipients" rows="4" maxlength="3200"></textarea><button>Сохранить список</button></form></details>
+    <section class="journal" aria-labelledby="journal-title">
+      <h2 id="journal-title">Поступившие карточки</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Состояние</th><th>Номер</th><th>Поступила</th><th>Тип</th><th>Адрес</th><th>Описание</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p id="empty" hidden>В этот профиль карточки не поступали.</p>
+    </section>
+
+    <dialog id="cardDialog">
+      <form method="dialog" class="dialog-head"><h2>Карточка</h2><button aria-label="Закрыть">×</button></form>
+      <div id="cardDetail"></div>
+    </dialog>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/assets/dds.js"></script>
+</body>
+</html>

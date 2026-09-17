@@ -1,19 +1,23 @@
 import asyncio
 import json
 import os
+import time
+from uuid import UUID
 from uuid import uuid4
 
 from websockets.asyncio.client import connect
 
 from app.audio.latency import log_event
 from app.domain.messages import EventEnvelope
+from app.tls import websocket_ssl_kwargs
 
 
 class ControlWS:
-    """Bounded reconnect with an append-only durable event journal.
+    """Application-ACK delivery with bounded reconnect and a durable journal.
 
-    Backend must deduplicate event_id. WebSocket send is NOT an application ACK.
-    Journals retain all events for explicit replay/reconciliation after failure.
+    Only one event is in flight, so call.ended cannot pass an earlier event. Backend
+    deduplicates event_id and answers with backend.ack after durable processing.
+    A socket send alone never removes an event from the unacknowledged set.
     """
 
     def __init__(self, settings, context, on_message, on_fatal):
@@ -25,6 +29,9 @@ class ControlWS:
         self.task = self.socket = None
         self.pending = None
         self.journal = settings.outbox_dir / str(context.session_id) / f"{context.call_id}.jsonl"
+        self.ack_journal = self.journal.with_suffix(".acked.jsonl")
+        self.ack_received = asyncio.Event()
+        self.last_ack_at = 0.0
         self.mock_seq = 0
         self.manual = False
 
@@ -39,6 +46,12 @@ class ControlWS:
     def _append(self, event):
         with open(self.journal, "a", encoding="utf-8") as file:
             file.write(event.model_dump_json() + "\n")
+            file.flush()
+            os.fsync(file.fileno())
+
+    def _append_ack(self, event_id):
+        with open(self.ack_journal, "a", encoding="utf-8") as file:
+            file.write(json.dumps({"event_id": str(event_id)}, separators=(",", ":")) + "\n")
             file.flush()
             os.fsync(file.fileno())
 
@@ -70,9 +83,24 @@ class ControlWS:
         while True:
             if self.pending is None:
                 self.pending = await self.queue.get()
+            self.ack_received.clear()
             await ws.send(self.pending.model_dump_json())
-            self.queue.task_done()
-            self.pending = None
+            await self.ack_received.wait()
+
+    async def _acknowledge(self, event):
+        try:
+            event_id = UUID(str(event.payload["event_id"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("Invalid backend.ack payload") from exc
+        if self.pending is None or event_id != self.pending.event_id:
+            log_event("backend.unexpected_ack", call_id=str(self.context.call_id),
+                      event_id=str(event_id))
+            return
+        await asyncio.to_thread(self._append_ack, event_id)
+        self.last_ack_at = time.monotonic()
+        self.pending = None
+        self.queue.task_done()
+        self.ack_received.set()
 
     async def _read(self, ws):
         async for data in ws:
@@ -81,20 +109,30 @@ class ControlWS:
             event = EventEnvelope.model_validate_json(data)
             if event.session_id != self.context.session_id:
                 raise ValueError("Backend session mismatch")
-            await self.on_message(event)
+            if event.type == "backend.ack":
+                await self._acknowledge(event)
+            else:
+                await self.on_message(event)
 
     async def _run(self):
         cfg = self.settings
-        for attempt in range(cfg.backend_retries + 1):
+        attempt = 0
+        outage_started = None
+        while True:
             sender = reader = None
+            connected_at = None
+            ack_before = self.last_ack_at
             try:
                 headers = {}
                 if cfg.backend_token.get_secret_value():
                     headers["Authorization"] = "Bearer " + cfg.backend_token.get_secret_value()
-                async with connect(cfg.backend_url.format(session_id=self.context.session_id),
+                url = cfg.backend_url.format(session_id=self.context.session_id)
+                async with connect(url,
                                    additional_headers=headers, max_size=256000,
-                                   open_timeout=10, close_timeout=2) as ws:
+                                   open_timeout=10, close_timeout=2,
+                                   **websocket_ssl_kwargs(url, cfg.internal_ca_file)) as ws:
                     self.socket = ws
+                    connected_at = time.monotonic()
                     self.connected.set()
                     sender = asyncio.create_task(self._send(ws))
                     reader = asyncio.create_task(self._read(ws))
@@ -105,6 +143,12 @@ class ControlWS:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                now = time.monotonic()
+                connection_was_healthy = (self.last_ack_at > ack_before or
+                                           (connected_at is not None and now - connected_at >= 1))
+                if outage_started is None or connection_was_healthy:
+                    outage_started = now
+                    attempt = 0
                 log_event("backend.disconnected", call_id=str(self.context.call_id),
                           attempt=attempt, error=type(exc).__name__)
             finally:
@@ -114,16 +158,24 @@ class ControlWS:
                     if task:
                         task.cancel()
                 await asyncio.gather(*(t for t in (sender, reader) if t), return_exceptions=True)
-            if attempt < cfg.backend_retries:
-                await asyncio.sleep(min(8, cfg.backend_backoff_s * 2 ** attempt))
+            elapsed = 0 if outage_started is None else time.monotonic() - outage_started
+            if attempt >= cfg.backend_retries and elapsed >= cfg.backend_reconnect_budget_s:
+                break
+            delay = min(8, cfg.backend_backoff_s * 2 ** attempt)
+            if elapsed < cfg.backend_reconnect_budget_s:
+                delay = min(delay, cfg.backend_reconnect_budget_s - elapsed)
+            await asyncio.sleep(max(0, delay))
+            attempt += 1
         self.on_fatal("backend_unavailable", "Reconnect budget exhausted; events retained in journal")
 
     async def close(self):
         if self.task:
-            try:
-                await asyncio.wait_for(self.queue.join(), 3)
-            except TimeoutError:
-                log_event("backend.pending_events", call_id=str(self.context.call_id),
-                          journal=str(self.journal), count=self.queue.qsize() + bool(self.pending))
+            if not self.task.done():
+                try:
+                    await asyncio.wait_for(
+                        self.queue.join(), max(3, self.settings.backend_reconnect_budget_s + 5))
+                except TimeoutError:
+                    log_event("backend.pending_events", call_id=str(self.context.call_id),
+                              journal=str(self.journal), count=self.queue.qsize() + bool(self.pending))
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)

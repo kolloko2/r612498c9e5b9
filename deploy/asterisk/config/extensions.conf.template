@@ -1,0 +1,14 @@
+[general]
+static=yes
+writeprotect=yes
+clearglobalvars=yes
+
+[default]
+exten => _X!,1,Hangup()
+exten => s,1,Hangup()
+
+[training-only]
+; Registered training phones cannot dial another endpoint, a trunk, or PSTN.
+exten => _X!,1,Hangup()
+exten => s,1,Hangup()
+

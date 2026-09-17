@@ -1,0 +1,21 @@
+# Apply last, after the root, cluster and TLS Compose files. Requires the
+# separately issued backend-lb leaf certificate; the CA private key is not mounted.
+services:
+  backend-lb:
+    profiles: [tls]
+    volumes: !override
+      - ./deploy/cluster/haproxy-tls.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./deploy/tls/certs/backend-lb.cert.pem:/run/trainer-tls/backend-lb.pem:ro
+      - ./deploy/tls/private/backend-lb.key.pem:/run/trainer-tls/backend-lb.pem.key:ro
+      - ./deploy/tls/ca/ca.cert.pem:/run/trainer-tls/ca.cert.pem:ro
+    healthcheck:
+      test: ["CMD", "haproxy", "-c", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+
+  frontend:
+    environment:
+      DIALOGUE_URL: https://backend-lb:8000
+
+  voice:
+    environment:
+      BACKEND_URL: wss://backend-lb:8000/ws/v1/voice/sessions/{session_id}
+

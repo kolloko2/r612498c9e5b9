@@ -87,7 +87,9 @@ class SileroTTS:
         if type(self)._process and type(self)._process.returncode is None:
             return
         type(self)._process = await spawn_worker("silero-tts", self.model)
-        if await type(self)._process.stdout.readline() != b"READY\n":
+        # Windows печатает READY с CRLF: сравниваем содержимое строки,
+        # иначе Voice не стартует вне Linux-контейнера.
+        if (await type(self)._process.stdout.readline()).strip() != b"READY":
             raise RuntimeError("Silero model failed to load")
 
     async def synthesize_stream(self, text, voice_style):

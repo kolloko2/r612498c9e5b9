@@ -1,0 +1,7 @@
+FROM postgres:16-bookworm
+
+COPY --chmod=0555 tls-entrypoint.sh /usr/local/bin/trainer112-postgres-tls-entrypoint
+COPY --chmod=0444 pg_hba.tls.conf /etc/postgresql/pg_hba.tls.conf
+
+ENTRYPOINT ["trainer112-postgres-tls-entrypoint"]
+CMD ["postgres"]
