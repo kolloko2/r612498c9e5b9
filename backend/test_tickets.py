@@ -104,3 +104,35 @@ def test_publish_rejects_unknown_and_duplicate_drafts(booklet):
 def test_missing_catalog_degrades_to_empty(tmp_path):
     catalog = load_catalog(tmp_path / 'absent.json')
     assert catalog['drafts'] == [] and catalog['metadata']['drafts'] == 0
+
+
+def test_summary_criterion_survives_the_operator_wording():
+    """Эталон билета проверяет смысл, а не дословную фразу источника.
+
+    Диспетчер записывает происшествие своими словами. Критерий из одной
+    дословной фразы делал верный по сути ответ непроходимым.
+    """
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from import_tickets import _anchors
+    from evaluation import normalize
+
+    anchors = _anchors("Дерутся 10-15 человек")
+    assert anchors and all(len(a) <= 6 for a in anchors)
+    # Числа в опоры не входят: заявитель называет их приблизительно.
+    assert not any(any(ch.isdigit() for ch in a) for a in anchors)
+    written = normalize("Дерутся 15 человек с прутами и палками")
+    assert all(anchor in written for anchor in anchors)
+    # Совсем другое происшествие критерий по-прежнему не проходит.
+    assert not all(anchor in normalize("Затопило подвал") for anchor in anchors)
+
+
+def test_anchors_ignore_short_and_service_words():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from import_tickets import _anchors
+    assert _anchors("Пожар в квартире") == ["пожар", "кварти"]
+    # Не больше двух опор: каждая лишняя повышает шанс отклонить верный ответ.
+    assert len(_anchors("Задымление мусоропровода в жилом доме")) == 2

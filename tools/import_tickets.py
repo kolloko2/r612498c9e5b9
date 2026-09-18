@@ -214,6 +214,44 @@ def _opening(situation: str, category: str) -> str:
     return text[:1000]
 
 
+# Служебные слова не несут смысла происшествия и в опоры не годятся.
+STOP_WORDS = {
+    "или", "его", "её", "ее", "как", "что", "это", "для", "над", "под", "при",
+    "без", "все", "они", "она", "оно", "там", "тут", "уже", "еще", "ещё", "был",
+    "была", "было", "были", "есть", "нет", "около", "рядом", "очень", "самый",
+}
+# Длина опоры-основы. Шесть букв отсекают русские окончания у большинства слов
+# («мусорного» и «мусорный» дают «мусорн»), но не склеивают разные слова.
+STEM_LENGTH = 6
+
+
+def _anchors(summary: str) -> list[str]:
+    """Смысловые опоры фабулы для проверки описания.
+
+    Дословная фраза в роли единственной опоры делала критерий непроходимым:
+    диспетчер пишет своими словами, и «Дерутся 15 человек с прутами» не
+    содержит подстроки «Дерутся 10-15 человек», хотя суть передана верно.
+    Опорами становятся основы значимых слов — проверка остаётся буквальным
+    поиском подстроки, без нечёткого сравнения и порогов.
+
+    Числа в опоры не идут: заявитель называет их приблизительно («10-15»), а
+    оператор записывает по-своему. Количество пострадавших проверяется
+    отдельным признаком карточки, а не текстом описания.
+    """
+    words: list[str] = []
+    for raw in re.findall(r"[А-Яа-яЁёA-Za-z]+", summary):
+        word = raw.casefold().replace("ё", "е")
+        if len(word) < 4 or word in STOP_WORDS:
+            continue
+        if word[:STEM_LENGTH] not in [w[:STEM_LENGTH] for w in words]:
+            words.append(word)
+    # Берутся две самые длинные опоры: длинное слово конкретнее и реже
+    # случайно совпадает. Чем меньше опор, тем реже верный по сути ответ
+    # отклоняется из-за иной формулировки.
+    chosen = sorted(sorted(words, key=len, reverse=True)[:2], key=words.index)
+    return [word[:STEM_LENGTH] for word in chosen]
+
+
 def _rubric(ticket: int, call: int, caller: str, known: list[str], situation: str) -> dict[str, Any]:
     """Deterministic draft reference built only from literal source fragments.
 
@@ -230,12 +268,14 @@ def _rubric(ticket: int, call: int, caller: str, known: list[str], situation: st
                          "mode": "equals", "expected": [caller], "weight": 1})
     # Первый фрагмент фабулы — суть происшествия; он обязан попасть в описание.
     summary = re.split(r"[,.;]", situation, maxsplit=1)[0].strip()
-    if len(summary) >= 4:
+    anchors = _anchors(summary) if len(summary) >= 4 else []
+    if anchors:
         criteria.append({"id": "summary", "label": "Суть происшествия в описании", "field": "description",
-                         "mode": "contains_all", "expected": [summary], "weight": 1})
+                         "mode": "contains_all", "expected": anchors, "weight": 1})
     if not criteria:
+        fallback = _anchors(situation[:200])
         criteria.append({"id": "summary", "label": "Описание заполнено", "field": "description",
-                         "mode": "contains_all", "expected": [situation[:200].strip()], "weight": 1})
+                         "mode": "contains_all", "expected": fallback or [situation[:60].strip()], "weight": 1})
     return {"title": f"Эталон билета {ticket}, вызов {call}",
             "time_limit_seconds": 30, "criteria": criteria}
 

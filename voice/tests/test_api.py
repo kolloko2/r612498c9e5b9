@@ -52,3 +52,23 @@ async def test_unverified_conversation_only_allows_explicit_probe_extension(tmp_
     manager = CallManager(cfg)
     with pytest.raises(ValueError, match="probe extension"):
         await manager.create(CreateCall(session_id=uuid4(), extension="201"))
+
+
+def test_health_reports_missing_speech_library(monkeypatch):
+    """Смонтированной модели мало: без библиотеки разговор оборвётся.
+
+    Образ Voice собирается без vosk/sherpa/torch, когда
+    INSTALL_LOCAL_PROVIDERS=false. Раньше health в этом случае сообщал
+    готовность, и отказ обнаруживался только на первой реплике звонка.
+    """
+    from app.api import health as health_module
+
+    assert health_module._library_ready("mock") is None
+    monkeypatch.setattr(health_module.importlib.util, "find_spec", lambda name: None)
+    assert health_module._library_ready("vosk") is False
+    assert health_module._library_ready("hybrid") is False
+    assert health_module._library_ready("silero") is False
+    assert health_module._missing("hybrid") is True
+    monkeypatch.setattr(health_module.importlib.util, "find_spec", lambda name: object())
+    assert health_module._library_ready("hybrid") is True
+    assert health_module._missing("hybrid") is False

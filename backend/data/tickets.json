@@ -11,7 +11,7 @@
   "transcribed_at": "2026-09-15"
  },
  "phones": "synthetic",
- "catalog_sha256": "9fa07459c38ef7ffd357360e698517892b6aec7045feb3f751c02100ea29f595",
+ "catalog_sha256": "3b2f48c3b53ca4b130cd47ea15d5143b49e2a25f09ae8b42ce80d6cffd094a4f",
  "metadata": {
   "tickets": 32,
   "drafts": 96,
@@ -77,7 +77,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Возгорание мусорного контейнера"
+       "возгор",
+       "контей"
       ],
       "weight": 1
      }
@@ -136,7 +137,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Дерутся 10-15 человек"
+       "дерутс",
+       "челове"
       ],
       "weight": 1
      }
@@ -186,7 +188,7 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Ребенок 11 лет"
+       "ребено"
       ],
       "weight": 1
      }
@@ -246,7 +248,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Задымление мусоропровода в жилом доме"
+       "задымл",
+       "мусоро"
       ],
       "weight": 1
      }
@@ -293,7 +296,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Поругался с продавцом «Мегафон»"
+       "поруга",
+       "продав"
       ],
       "weight": 1
      }
@@ -349,7 +353,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Падение автомашины в воду"
+       "падени",
+       "автома"
       ],
       "weight": 1
      }
@@ -408,7 +413,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Горит крыша частного дома"
+       "горит",
+       "частно"
       ],
       "weight": 1
      }
@@ -464,7 +470,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Громко играет музыка во дворе"
+       "громко",
+       "играет"
       ],
       "weight": 1
      }
@@ -521,7 +528,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "На машину упало бревно с грузовика"
+       "машину",
+       "грузов"
       ],
       "weight": 1
      }
@@ -582,7 +590,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Горит балкон и два окна рядом на 13-м этаже"
+       "горит",
+       "балкон"
       ],
       "weight": 1
      }
@@ -640,7 +649,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Плохо женщине на автомобильной парковке"
+       "автомо",
+       "парков"
       ],
       "weight": 1
      }
@@ -699,7 +709,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Открыть дверь в квартиру"
+       "открыт",
+       "кварти"
       ],
       "weight": 1
      }
@@ -760,7 +771,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Горит одно окно на 9 этаже"
+       "горит",
+       "этаже"
       ],
       "weight": 1
      }
@@ -820,7 +832,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Женщина выпила случайно не те лекарственные препараты"
+       "лекарс",
+       "препар"
       ],
       "weight": 1
      }
@@ -877,7 +890,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "На стройке жилого дома"
+       "стройк",
+       "жилого"
       ],
       "weight": 1
      }
@@ -936,7 +950,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Горит а/м фольксваген цвет красный Х 863 МН 199"
+       "фолькс",
+       "красны"
       ],
       "weight": 1
      }
@@ -995,7 +1010,7 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Мужчина 40 лет"
+       "мужчин"
       ],
       "weight": 1
      }
@@ -1051,7 +1066,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Трое мужчин плывут на льдине"
+       "мужчин",
+       "плывут"
       ],
       "weight": 1
      }
@@ -1112,7 +1128,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Горит а/м Тойота цвет бежевый Р 254 ТС 99"
+       "тойота",
+       "бежевы"
       ],
       "weight": 1
      }
@@ -1172,7 +1189,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Сильная головная"
+       "сильна",
+       "головн"
       ],
       "weight": 1
      }
@@ -1223,16 +1241,6 @@
       "mode": "equals",
       "expected": [
        "Марков Илья Кузьмич"
-      ],
-      "weight": 1
-     },
-     {
-      "id": "summary",
-      "label": "Суть происшествия в описании",
-      "field": "description",
-      "mode": "contains_all",
-      "expected": [
-       "85 лет"
       ],
       "weight": 1
      }
@@ -1295,7 +1303,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Задымление на минус первом этаже в торговом центре"
+       "задымл",
+       "торгов"
       ],
       "weight": 1
      }
@@ -1357,7 +1366,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Лежит мужчина неизвестный"
+       "мужчин",
+       "неизве"
       ],
       "weight": 1
      }
@@ -1415,7 +1425,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Тонет человек в настоящее время"
+       "челове",
+       "настоя"
       ],
       "weight": 1
      }
@@ -1473,7 +1484,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Задымление на платформе"
+       "задымл",
+       "платфо"
       ],
       "weight": 1
      }
@@ -1532,7 +1544,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Минина Ольга Петровна"
+       "минина",
+       "петров"
       ],
       "weight": 1
      }
@@ -1590,7 +1603,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Мужчина упал с моста в воду"
+       "мужчин",
+       "моста"
       ],
       "weight": 1
      }
@@ -1650,7 +1664,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Горит помещение кассы"
+       "горит",
+       "помеще"
       ],
       "weight": 1
      }
@@ -1715,7 +1730,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Пожилая женщина"
+       "пожила",
+       "женщин"
       ],
       "weight": 1
      }
@@ -1774,7 +1790,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Женщина просит о помощи из-за двери квартиры"
+       "женщин",
+       "кварти"
       ],
       "weight": 1
      }
@@ -1838,7 +1855,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Горит кабина автобуса"
+       "кабина",
+       "автобу"
       ],
       "weight": 1
      }
@@ -1899,7 +1917,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Легкодушев Дмитрий Константинович"
+       "легкод",
+       "конста"
       ],
       "weight": 1
      }
@@ -1961,7 +1980,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Женщина собирала грибы"
+       "женщин",
+       "собира"
       ],
       "weight": 1
      }
@@ -2022,7 +2042,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Сильное задымление в зале ресторана"
+       "задымл",
+       "рестор"
       ],
       "weight": 1
      }
@@ -2080,7 +2101,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Сильные боли в сердце"
+       "сильны",
+       "сердце"
       ],
       "weight": 1
      }
@@ -2137,7 +2159,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Мужчины на ограждении моста в крови"
+       "мужчин",
+       "огражд"
       ],
       "weight": 1
      }
@@ -2196,7 +2219,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Горят деревья в парке"
+       "горят",
+       "деревь"
       ],
       "weight": 1
      }
@@ -2258,7 +2282,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Рожает жена"
+       "рожает",
+       "жена"
       ],
       "weight": 1
      }
@@ -2316,7 +2341,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "На обочине лежит мужчина в крови"
+       "обочин",
+       "мужчин"
       ],
       "weight": 1
      }
@@ -2375,7 +2401,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Горит сухая трава рядом с АЗС Роснефть"
+       "горит",
+       "роснеф"
       ],
       "weight": 1
      }
@@ -2433,7 +2460,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Подросток 12 лет задыхается"
+       "подрос",
+       "задыха"
       ],
       "weight": 1
      }
@@ -2496,7 +2524,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Неизвестные затащили жену в машину у метро Комсомольская"
+       "неизве",
+       "комсом"
       ],
       "weight": 1
      }
@@ -2554,7 +2583,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Горит лес за деревней Варварино"
+       "деревн",
+       "варвар"
       ],
       "weight": 1
      }
@@ -2615,7 +2645,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Мужчина 30 лет нырнул в воду"
+       "мужчин",
+       "нырнул"
       ],
       "weight": 1
      }
@@ -2672,7 +2703,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Сожитель ударил ножом в ногу"
+       "сожите",
+       "ударил"
       ],
       "weight": 1
      }
@@ -2731,7 +2763,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Видит столб черного дыма со стороны жилых домов поселка"
+       "черног",
+       "сторон"
       ],
       "weight": 1
      }
@@ -2781,7 +2814,7 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Ребенок 11 лет"
+       "ребено"
       ],
       "weight": 1
      }
@@ -2840,7 +2873,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Петрова Светлана Павловна 35 лет"
+       "светла",
+       "павлов"
       ],
       "weight": 1
      }
@@ -2897,7 +2931,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "В жилом доме сработала пожарная сигнализация"
+       "сработ",
+       "сигнал"
       ],
       "weight": 1
      }
@@ -2957,7 +2992,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "У покупателя в магазине судороги"
+       "покупа",
+       "магази"
       ],
       "weight": 1
      }
@@ -3020,7 +3056,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Избита женщина"
+       "избита",
+       "женщин"
       ],
       "weight": 1
      }
@@ -3079,7 +3116,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Видит пожар"
+       "видит",
+       "пожар"
       ],
       "weight": 1
      }
@@ -3137,7 +3175,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Не может разбудить мужа"
+       "может",
+       "разбуд"
       ],
       "weight": 1
      }
@@ -3195,7 +3234,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "С улицы слышны крики о помощи"
+       "слышны",
+       "помощи"
       ],
       "weight": 1
      }
@@ -3252,7 +3292,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Горит поле"
+       "горит",
+       "поле"
       ],
       "weight": 1
      }
@@ -3311,7 +3352,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Прихожанина укусила змея"
+       "прихож",
+       "укусил"
       ],
       "weight": 1
      }
@@ -3369,7 +3411,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Мужчину сбила электричка"
+       "мужчин",
+       "электр"
       ],
       "weight": 1
      }
@@ -3429,7 +3472,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Дерутся 3 человека"
+       "дерутс",
+       "челове"
       ],
       "weight": 1
      }
@@ -3490,7 +3534,7 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Женщина"
+       "женщин"
       ],
       "weight": 1
      }
@@ -3549,7 +3593,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Изнасиловали женщину"
+       "изнаси",
+       "женщин"
       ],
       "weight": 1
      }
@@ -3608,7 +3653,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Дерутся 10-15 человек"
+       "дерутс",
+       "челове"
       ],
       "weight": 1
      }
@@ -3668,7 +3714,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Перова Ирина Ивановна"
+       "перова",
+       "иванов"
       ],
       "weight": 1
      }
@@ -3725,7 +3772,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Ребенок 4 года один в а/м"
+       "ребено",
+       "года"
       ],
       "weight": 1
      }
@@ -3785,7 +3833,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Дерутся в квартире"
+       "дерутс",
+       "кварти"
       ],
       "weight": 1
      }
@@ -3837,7 +3886,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Ребенок 4 года Соловьев Максим"
+       "ребено",
+       "соловь"
       ],
       "weight": 1
      }
@@ -3895,7 +3945,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Знакомый отправил СМС – хочет повеситься"
+       "знаком",
+       "повеси"
       ],
       "weight": 1
      }
@@ -3957,7 +4008,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Скандал с пьяным мужем"
+       "сканда",
+       "пьяным"
       ],
       "weight": 1
      }
@@ -4018,7 +4070,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Липатина Ольга Сергеевна"
+       "липати",
+       "сергее"
       ],
       "weight": 1
      }
@@ -4081,7 +4134,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Потерялся ребенок 30 минут назад - 5 лет"
+       "потеря",
+       "ребено"
       ],
       "weight": 1
      }
@@ -4138,7 +4192,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Ссора во дворе из-за парковки"
+       "ссора",
+       "парков"
       ],
       "weight": 1
      }
@@ -4200,7 +4255,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Касанов Константин Константинович"
+       "касано",
+       "конста"
       ],
       "weight": 1
      }
@@ -4259,7 +4315,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Женщина с младенцем на руках"
+       "женщин",
+       "младен"
       ],
       "weight": 1
      }
@@ -4319,7 +4376,7 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "На улице"
+       "улице"
       ],
       "weight": 1
      }
@@ -4427,7 +4484,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Заявитель пришел в квартиру бывшей супруги"
+       "заявит",
+       "кварти"
       ],
       "weight": 1
      }
@@ -4489,7 +4547,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "У входа на стадион – группа молодых людей"
+       "стадио",
+       "молоды"
       ],
       "weight": 1
      }
@@ -4593,7 +4652,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "В доме престарелых скончалась женщина"
+       "преста",
+       "сконча"
       ],
       "weight": 1
      }
@@ -4655,7 +4715,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Подозрительный автомобиль ваз2110 черная"
+       "подозр",
+       "автомо"
       ],
       "weight": 1
      }
@@ -4760,7 +4821,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Соседи делают ремонт"
+       "соседи",
+       "делают"
       ],
       "weight": 1
      }
@@ -4823,7 +4885,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "У подъезда молодой человек"
+       "подъез",
+       "молодо"
       ],
       "weight": 1
      }
@@ -4928,7 +4991,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "На Ярославском вокзале нет одного крепления на табло с указанием расписания пригородных поездов"
+       "яросла",
+       "пригор"
       ],
       "weight": 1
      }
@@ -4987,7 +5051,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "На дорожке в парке лежит большая коробка"
+       "дорожк",
+       "больша"
       ],
       "weight": 1
      }
@@ -5091,7 +5156,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Муж угрожает взорвать квартиру бывшей супруги"
+       "угрожа",
+       "взорва"
       ],
       "weight": 1
      }
@@ -5149,7 +5215,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Угон машины"
+       "угон",
+       "машины"
       ],
       "weight": 1
      }
@@ -5208,7 +5275,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Наезд на пешехода"
+       "наезд",
+       "пешехо"
       ],
       "weight": 1
      }
@@ -5267,7 +5335,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "В частном доме запах газа от трубы на вводе в дом"
+       "частно",
+       "запах"
       ],
       "weight": 1
      }
@@ -5316,7 +5385,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Угон машины мерседес черный А128АА 177"
+       "машины",
+       "мерсед"
       ],
       "weight": 1
      }
@@ -5376,7 +5446,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Наезд на пешехода"
+       "наезд",
+       "пешехо"
       ],
       "weight": 1
      }
@@ -5434,7 +5505,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Свист от газовой трубы в квартире"
+       "газово",
+       "кварти"
       ],
       "weight": 1
      }
@@ -5495,7 +5567,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "Завладение автотранспортом"
+       "завлад",
+       "автотр"
       ],
       "weight": 1
      }
@@ -5602,7 +5675,8 @@
       "field": "description",
       "mode": "contains_all",
       "expected": [
-       "На МКАД (внутренняя и внешняя сторона) на протяжении от Ленинградского шоссе до Волоколамского горит уличное освещение"
+       "ленинг",
+       "волоко"
       ],
       "weight": 1
      }

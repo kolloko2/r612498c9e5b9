@@ -42,9 +42,17 @@ def settings(source):
         'SIP_LOCAL_NET': '172.16.0.0/12',
         'PIPELINE_MODE': 'spike',
         'TOPOLOGY_VERIFIED': 'false',
-        'INSTALL_LOCAL_PROVIDERS': 'false',
-        'STT_PROVIDER': 'mock',
-        'TTS_PROVIDER': 'mock',
+        # Речевые библиотеки ставятся в образ Voice на сборке. Без них
+        # смонтированные модели бесполезны: разговор обрывается на первой
+        # реплике, поэтому провайдеры и сборка включаются вместе.
+        'INSTALL_LOCAL_PROVIDERS': previous.get('INSTALL_LOCAL_PROVIDERS', 'true'),
+        'INSTALL_SILERO': previous.get('INSTALL_SILERO', 'true'),
+        'STT_PROVIDER': previous.get('STT_PROVIDER', 'hybrid'),
+        'STT_MODEL': previous.get('STT_MODEL', '/models/vosk-model-small-ru-0.22'),
+        'STT_FINAL_MODEL': previous.get(
+            'STT_FINAL_MODEL', '/models/sherpa-onnx-nemo-ctc-giga-am-v2-russian-2025-04-19'),
+        'TTS_PROVIDER': previous.get('TTS_PROVIDER', 'silero'),
+        'TTS_VOICE': previous.get('TTS_VOICE', '/models/v5_5_ru.pt'),
     }
 
 
