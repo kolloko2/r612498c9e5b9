@@ -134,6 +134,10 @@ async function serve(page) {
     await expect(page.locator('#cardNumber')).toContainText('910201');
     // При открытой карточке линия занята — как в инструкции оператора.
     await expect(page.locator('#phonePresence')).toHaveAttribute('data-state', 'busy');
+    // Режим виден в шапке и меняет рабочее пространство: в ДДС нет элементов
+    // приёма вызова, потому что карточку передала Служба 112.
+    await expect(page.locator('#modeNote')).toHaveText('Расширенный режим: приём вызова 112');
+
     // Номер рабочего места в карточке — назначенный преподавателем.
     await expect(page.locator('#cardSeat')).toHaveText('Курсант Петров · АРМ-1');
 
@@ -221,6 +225,15 @@ async function serve(page) {
     await page.locator('.contact-flags label', { hasText: 'срыв звонка' }).click();
     await expect(page.locator('#unproductiveDialog')).toBeHidden();
     await expect(page.locator('#notice')).toContainText('не считается нерезультативным');
+
+    // Журнал сужается до текущего занятия: после смены занятия чужие карточки
+    // мешают, а по умолчанию журнал накапливает всю смену, как в АРМ.
+    await expect(page.locator('tr[aria-label^="Происшествие"]')).toHaveCount(2);
+    // Панель карточки перекрывает тулбар журнала, поэтому клик программный.
+    await page.locator('#lessonScope').evaluate(box => { box.checked = true; box.dispatchEvent(new Event('change')); });
+    // Занятие не выбрано — флажок ничего не прячет.
+    await expect(page.locator('tr[aria-label^="Происшествие"]')).toHaveCount(2);
+    await page.locator('#lessonScope').evaluate(box => { box.checked = false; box.dispatchEvent(new Event('change')); });
 
     // Напоминание по отложенной карточке всплывает при закрытой карточке:
     // именно так оно описано в инструкции оператора.

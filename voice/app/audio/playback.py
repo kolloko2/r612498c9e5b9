@@ -2,6 +2,7 @@ import asyncio
 from uuid import uuid4
 
 from .formats import Framer, SILENCE, FramePacer
+from .speech_text import for_speech
 from .tts import make_tts
 
 
@@ -100,7 +101,10 @@ class Playback:
                     provider = self.providers[name] = make_tts(self.settings, name)
                 metrics.mark("tts_request_ms")
                 await self.peer.command("START_MEDIA_BUFFERING")
-                stream = provider.synthesize_stream(reply.text, reply.voice_style)
+                # Синтез читает строку буквально, поэтому сокращения и числа
+                # раскрываются перед произнесением: «д. 12, стр. 2» иначе
+                # звучит как «д двенадцать стр два» (см. speech_text.py).
+                stream = provider.synthesize_stream(for_speech(reply.text), reply.voice_style)
                 framer, first = Framer(), True
                 first_frame = True
                 while True:

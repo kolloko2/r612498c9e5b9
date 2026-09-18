@@ -47,9 +47,14 @@ class Settings(BaseSettings):
     tts_voice: str = ""
     tts_speaker: str = "baya"
     tts_fallback_voice: str = ""
-    vad_threshold: float = Field(0.025, gt=0, lt=1)
+    # Порог и пауза подобраны под живую речь диспетчера. Порог 0.025 обрезал
+    # тихое и невнятное начало фразы, а пауза 400 мс считала концом реплики
+    # обычную паузу между словами при быстрой речи — фраза уходила в
+    # распознавание кусками, и текст получался рваным. Все три параметра
+    # задаются в ENV: на шумном месте порог поднимают обратно.
+    vad_threshold: float = Field(0.018, gt=0, lt=1)
     vad_start_ms: int = Field(60, ge=20, le=200)
-    vad_end_ms: int = Field(400, ge=100, le=2000)
+    vad_end_ms: int = Field(700, ge=100, le=2000)
     preroll_ms: int = Field(200, ge=100, le=1000)
     utterance_limit_s: int = Field(30, ge=1, le=120)
     echo_guard_ms: int = Field(1400, ge=200, le=5000)

@@ -26,7 +26,11 @@ def test_vad_preroll_preserves_first_unconfirmed_speech():
     assert start.started
     assert start.audio.endswith(b"".join(speech))
     assert len(start.audio) == 10 * 640
-    for _ in range(19):
+    # Число тихих кадров до конца реплики выводится из настройки, а не
+    # зашито: паузу подбирают под темп речи, и тест не должен этому мешать.
+    settings = Settings(_env_file=None)
+    frames = settings.vad_end_ms // 20
+    for _ in range(frames - 1):
         assert not vad.feed(SILENCE).ended
     assert vad.feed(SILENCE).ended
 

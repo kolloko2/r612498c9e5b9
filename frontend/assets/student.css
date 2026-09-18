@@ -90,3 +90,10 @@ body.alt-hints .options button{outline:1px dotted var(--blue)}
 .headset[data-state=error]{color:#ff8a6b}
 /* Служба от внешней информационной системы — пометка ВИС. */
 .vis-badge{display:inline-block;margin:3px 0;padding:1px 5px;background:#1483be;color:#fff;font-size:9px;letter-spacing:.4px;align-self:flex-start}
+.scope-filter{display:flex;align-items:center;gap:5px;white-space:nowrap}
+/* Рабочее пространство диспетчера ДДС: карточка пришла из 112 готовой, поэтому
+   элементы приёма вызова скрыты, а не просто неактивны. */
+.card-panel.dds-mode .connection .mini-buttons{display:none}
+.card-panel.dds-mode .contact-flags{display:none}
+.card-panel.dds-mode .phone-row .phone-field span::after{content:" · из карточки 112";font-size:9px;color:#9aa0a3}
+.card-panel.dds-mode .description-block>label::after{content:" (передано Службой 112)";color:#8b9196}

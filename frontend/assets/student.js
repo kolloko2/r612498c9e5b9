@@ -178,6 +178,9 @@ function renderRows() {
  const districts=$('filterDistrict').value.split(',').map(v=>v.trim()).filter(Boolean),dateFrom=$('filterDateFrom').value,dateTo=$('filterDateTo').value,timeFrom=$('filterTimeFrom').value,timeTo=$('filterTimeTo').value;
  const list = sessions.filter(s => {
   const c=s.card,date=localDate(s.created_at),created=new Date(s.created_at),time=`${String(created.getHours()).padStart(2,'0')}:${String(created.getMinutes()).padStart(2,'0')}`,caller=`${c.caller_name||''} ${c.phone||''} ${c.supplied_phone||''} ${c.scene_phone||''}`,features=(c.classifier_features||[]).join(' ');
+  // Журнал накапливает всю смену, как в настоящем АРМ. Флажок сужает его до
+  // карточек выбранного занятия: после смены занятия прежние мешают.
+  if($('lessonScope').checked&&activeLessonId&&s.lesson_id!==activeLessonId)return false;
   return (!status||s.status===status)&&(!query||`${s.number} ${c.incident_type} ${addressText(c)} ${c.description}`.toLowerCase().includes(query))&&(!dateFrom||date>=dateFrom)&&(!dateTo||date<=dateTo)&&(!timeFrom||time>=timeFrom)&&(!timeTo||time<=timeTo)&&includes(c.incident_type,$('filterIncidentType').value)&&includes(features,$('filterFeatures').value)&&includes(`${addressText(c)} ${c.address_note||''}`,$('filterAddress').value)&&(!districts.length||districts.some(v=>includes(c.district,v)))&&includes(c.area,$('filterArea').value)&&includes(c.region,$('filterRegion').value)&&includes(c.address_note,$('filterAddressNote').value)&&includes(c.description,$('filterDescription').value)&&includes(s.number,$('filterCardNumber').value)&&(!$('filterService').value||(c.services||[]).includes($('filterService').value))&&(!$('filterTransport').value||s.transport===$('filterTransport').value)&&includes(caller,$('filterCaller').value)&&(!$('filterIncidentStatus').value||s.incident_status===$('filterIncidentStatus').value);
  });
  $('rows').replaceChildren(); $('empty').hidden = sessions.length > 0; $('count').textContent = `Записей: ${list.length}`;
@@ -216,7 +219,15 @@ function renderCard() {
  $('callStatus').textContent=finished?'завершён':current.transport==='text'?'текстовое обращение':current.call_id?'SIP: проверка связи…':'не подключен';
  $('sipCall').hidden=current.transport!=='sip'; $('sipCall').disabled=finished||!!current.call_id;
  $('messageForm').hidden=current.transport!=='text'||finished; $('speak').disabled=current.transport!=='text';
- if(current.exercise_mode==='actions'){$('messageForm').hidden=true;$('speak').disabled=true;$('callStatus').textContent='действия с готовой карточкой';}
+ // Два режима — два разных рабочих пространства, и это должно быть видно, а не
+ // угадываться. В основном режиме ДДС карточка приходит из 112 готовой и полей
+ // приёма вызова быть не должно; в расширенном режиме оператор принимает вызов
+ // сам, и тогда открывается диалог с заявителем.
+ const dds=current.exercise_mode==='actions';
+ $('cardPanel').classList.toggle('dds-mode',dds);
+ $('modeNote').textContent=dds?'АРМ диспетчера ДДС':'Расширенный режим: приём вызова 112';
+ $('conversation').hidden=dds;
+ if(dds){$('messageForm').hidden=true;$('speak').disabled=true;$('callStatus').textContent='карточка передана Службой 112';}
  $('openNotification').disabled=finished||!current.revision;$('openForward').disabled=finished||!current.revision;$('openBriefing').disabled=finished||!current.revision;$('openLinks').disabled=finished||!current.revision;$('openReminder').disabled=finished;$('printCard').hidden=!current.revision;$('printCard').disabled=false;renderSurvey(); renderServices(); renderDialogue(); renderServiceHistory();renderNotificationHistory();renderLinkedCards(); tick();
  const pending=storedMessage(current.id);if(pending&&current.transport==='text'&&current.status!=='Завершена'){$('operatorText').value=pending.text;$('send').textContent='Повторить отправку';}
  if(!finished&&current.lesson_id&&current.transport==='sip'&&!current.call_id&&!attemptedLessonCalls.has(current.id)){
@@ -686,7 +697,7 @@ materialsHelp.append(materialsLink);$('helpDialog').append(materialsHelp);
 for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>$(b.dataset.close).close();
 $('stopSpeech').onclick=()=>window.speechSynthesis?.cancel();
 $('speak').onchange=()=>{if(!$('speak').checked)window.speechSynthesis?.cancel();else if(current?.messages.at(-1)?.role==='assistant')say(current.messages.at(-1).content);};
-$('refresh').onclick=()=>guarded(loadSessions);$('search').oninput=renderRows;$('statusFilter').onchange=renderRows;$('filters').onclick=()=>{const hidden=$('advancedFilters').hidden=!$('advancedFilters').hidden;$('filters').textContent=hidden?'расширенный по параметрам⌄':'скрыть фильтры⌃';$('filters').setAttribute('aria-expanded',String(!hidden));};
+$('refresh').onclick=()=>guarded(loadSessions);$('search').oninput=renderRows;$('statusFilter').onchange=renderRows;$('lessonScope').onchange=renderRows;$('filters').onclick=()=>{const hidden=$('advancedFilters').hidden=!$('advancedFilters').hidden;$('filters').textContent=hidden?'расширенный по параметрам⌄':'скрыть фильтры⌃';$('filters').setAttribute('aria-expanded',String(!hidden));};
 const advancedInputs=[...$('advancedFilters').querySelectorAll('input,select')];for(const input of advancedInputs)input.addEventListener('input',renderRows);
 function resetFilters(all=false){for(const input of advancedInputs)input.value='';if(all){$('search').value='';$('statusFilter').value='';}renderRows();}
 $('applyAdvanced').onclick=renderRows;$('resetAdvanced').onclick=()=>resetFilters(false);$('resetSearch').onclick=()=>resetFilters(true);
