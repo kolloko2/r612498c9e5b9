@@ -4231,6 +4231,11 @@ components:
           type: array
           maxItems: 6
           title: Updates
+        owner_service:
+          type: string
+          maxLength: 160
+          title: Owner Service
+          default: ''
         enabled:
           type: boolean
           title: Enabled
@@ -5082,6 +5087,11 @@ components:
           type: array
           maxItems: 6
           title: Updates
+        owner_service:
+          type: string
+          maxLength: 160
+          title: Owner Service
+          default: ''
         enabled:
           type: boolean
           title: Enabled
@@ -5223,6 +5233,11 @@ components:
           type: array
           maxItems: 6
           title: Updates
+        owner_service:
+          type: string
+          maxLength: 160
+          title: Owner Service
+          default: ''
         enabled:
           type: boolean
           title: Enabled
@@ -6425,6 +6440,11 @@ components:
           minLength: 1
           title: Source
           default: Служба 112
+        unlocks_status:
+          type: string
+          maxLength: 60
+          title: Unlocks Status
+          default: ''
       additionalProperties: false
       type: object
       required:

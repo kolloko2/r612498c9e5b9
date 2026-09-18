@@ -256,6 +256,34 @@ def _anchors(summary: str) -> list[str]:
 # выдумывать обстоятельства за источник нельзя, поэтому берутся общие для
 # категории осложнения, одинаковые и проверяемые. Преподаватель правит их при
 # валидации, как и остальной черновик.
+# Профильная служба ДДС по категории: обучающийся работает именно в ней.
+CATEGORY_OWNER: dict[str, str] = {
+    "fire": "Служба 101",
+    "public": "Служба 102",
+    "medical": "Служба 103",
+    "utilities": "Деп. ЖКХ",
+    "traffic": "ЦОДД",
+}
+
+# Оперативные вводные от реагирующей стороны. Каждая открывает ровно один
+# статус: диспетчер не ставит «Прибытие» раньше, чем ему сообщили о прибытии.
+# Тексты общие для категории — билет их не содержит, а выдумывать за источник
+# конкретные обстоятельства нельзя. Преподаватель правит их при валидации.
+def _operational(owner: str) -> list[dict[str, Any]]:
+    return [
+        {"id": "dispatched", "after_seconds": 40, "source": f"Дежурный {owner}",
+         "text": "Наряд сформирован и направлен по адресу",
+         "unlocks_status": "Начало реагирования"},
+        {"id": "arrived", "after_seconds": 100, "source": f"Дежурный {owner}",
+         "text": "Наряд прибыл на адрес", "unlocks_status": "Прибытие"},
+        {"id": "working", "after_seconds": 160, "source": f"Дежурный {owner}",
+         "text": "Приступили к работам на месте", "unlocks_status": "Проведение работ"},
+        {"id": "done", "after_seconds": 230, "source": f"Дежурный {owner}",
+         "text": "Работы на месте закончены, обстановка нормализована",
+         "unlocks_status": "Работы завершены"},
+    ]
+
+
 CATEGORY_UPDATES: dict[str, list[dict[str, Any]]] = {
     "fire": [
         {"id": "spread", "after_seconds": 45, "source": "Заявитель",
@@ -352,8 +380,14 @@ def build(source: dict[str, Any], keep_source_phones: bool) -> dict[str, Any]:
                     "emotion": EMOTIONS[category],
                     "behavior": BEHAVIOR,
                     "opening": _opening(situation, category),
-                    # Вводные меняют обстановку уже после передачи карточки.
-                    "updates": CATEGORY_UPDATES.get(category, []),
+                    # Обстановка меняется уже после передачи карточки: часть
+                    # вводных открывает статусы хода работ, часть осложняет
+                    # обстановку и требует пересмотра решения.
+                    "owner_service": CATEGORY_OWNER.get(category, ""),
+                    "updates": (_operational(CATEGORY_OWNER[category])[:3]
+                                + CATEGORY_UPDATES.get(category, [])[:1]
+                                + _operational(CATEGORY_OWNER[category])[3:]
+                                ) if category in CATEGORY_OWNER else [],
                     "enabled": False,
                 },
                 "rubric": _rubric(ticket["number"], call["n"], caller, known, situation),

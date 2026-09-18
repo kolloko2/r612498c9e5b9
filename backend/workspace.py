@@ -292,6 +292,46 @@ class RoutingPreview(BaseModel):
     unresolved: list[RoutingUnresolved] = Field(default_factory=list)
 
 
+# Статусы хода работ: их открывают оперативные вводные от реагирующей стороны.
+PROGRESS_STATUSES = ('Начало реагирования', 'Прибытие', 'Проведение работ', 'Работы завершены')
+
+
+def visible_statuses(value: dict) -> dict[str, list[str]]:
+    """Что рабочее место вправе предложить по каждой службе.
+
+    Чужая служба не предлагает ничего: её состояние приходит от неё самой.
+    Статусы хода работ по своей службе появляются по мере поступления
+    оперативных вводных, а не все сразу.
+    """
+    owner = value.get('owner_service')
+    gated = unlocked_statuses(value)
+    result: dict[str, list[str]] = {}
+    for service in value['card']['services']:
+        if owner and service != owner:
+            result[service] = []
+            continue
+        allowed = allowed_statuses(service, value['service_states'].get(service, {}).get('status'))
+        if gated is not None:
+            allowed = [status for status in allowed
+                       if status not in PROGRESS_STATUSES or status in gated]
+        result[service] = allowed
+    return result
+
+
+def unlocked_statuses(value: dict) -> set[str] | None:
+    """Статусы, подтверждённые пришедшими вводными.
+
+    ``None`` — сценарий не описывает оперативных вводных, и тогда ограничение
+    не применяется: старые сценарии и занятия продолжают работать как раньше.
+    """
+    planned = value.get('planned_unlocks')
+    if not planned:
+        return None
+    delivered = {event['detail'].get('id') for event in value['events']
+                 if event['type'] == 'situation.update'}
+    return {status for update_id, status in planned.items() if update_id in delivered}
+
+
 def apply_default_norms(value: dict) -> None:
     """Нормативы времени для готовой карточки ДДС, у которой нет эталона.
 
@@ -428,7 +468,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
     def public(value):
         state = store.load(value["id"])
         return {**value, 'incident_status': incident_status(value),
-                'allowed_service_statuses': {s: allowed_statuses(s, value['service_states'].get(s, {}).get('status')) for s in value['card']['services']},
+                'allowed_service_statuses': visible_statuses(value),
+                'owner_service': value.get('owner_service', ''),
                 "messages": state["messages"], "provider_error": state.get("provider_error")}
 
     @instructor.post('/sessions/{sid}/feedback', dependencies=[Depends(serialize_mutation)])
@@ -595,6 +636,19 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                          initial_card=template['card'], routing=preview(template['card']))
             value['source_kind'] = template.get('source_kind', 'student_card')
             value['time_limit_seconds'] = 30
+        # Своя ДДС и план разблокировок фиксируются вместе с карточкой: снимок
+        # сценария заморожен, и правка сценария не меняет уже выданную карточку.
+        owner = (scenario.get('owner_service') or '').strip()
+        if owner:
+            value['owner_service'] = owner
+            if owner not in value['card']['services']:
+                value['card']['services'] = [*value['card']['services'], owner]
+                value['service_states'][owner] = {'status': 'Добавлена', 'comment': '',
+                                                  'at': now(), 'added_at': now()}
+        unlocks = {item['id']: item['unlocks_status'] for item in (scenario.get('updates') or [])
+                   if item.get('unlocks_status')}
+        if unlocks:
+            value['planned_unlocks'] = unlocks
         store.save(sid, state)
         persist(value, "session.created")
         if body.transport == "text" and not template:
@@ -667,6 +721,24 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         editable(value)
         if body.service not in value["card"]["services"]:
             raise HTTPException(422, "Служба отсутствует в сохранённой карточке")
+        # Диспетчер ведёт статусы только своей ДДС. Остальные назначенные службы
+        # он видит, но их состояние приходит от них самих — так в реальном АРМ.
+        owner = value.get('owner_service')
+        if owner and body.service != owner:
+            raise HTTPException(403, f'Вы ведёте только свою службу: {owner}. '
+                                     'Состояние остальных служб приходит от них.')
+        # Статусы хода работ отражают доклад с места, а не желание обучающегося
+        # прокликать цепочку. Каждый такой статус открывает соответствующая
+        # оперативная вводная.
+        gated = unlocked_statuses(value)
+        if gated is not None and body.status in PROGRESS_STATUSES and body.status not in gated:
+            raise HTTPException(409, f'Статус «{body.status}» ещё не подтверждён с места. '
+                                     'Дождитесь сообщения от службы.')
+        # Перед закрытием работ в карточку вносится результат: после этого
+        # статуса она больше не редактируется.
+        if body.status == 'Работы завершены' and len(body.comment.strip()) < 10:
+            raise HTTPException(422, 'Перед завершением работ внесите в комментарий результат: '
+                                     'что сделано и чем закончилось.')
         payload = body.model_dump(mode='json')
         if body.message_id:
             for e in value['events']:
@@ -992,8 +1064,9 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         if not user or not learning or not learning._group(body.group_id, user['id']):
             raise HTTPException(404, 'Группа не найдена')
         group = learning._group(body.group_id, user['id'])
-        if body.transport == 'sip' and body.mode == 'actions':
-            raise HTTPException(422, 'Готовые карточки не используют звонки')
+        # Телефония в режиме ДДС нужна: карточка приходит данными, но связь
+        # дальше — с дежурным своей службы — идёт голосом. Прежний запрет
+        # закрывал именно основной сценарий.
         # Учебный номер назначается и в текстовом занятии. В работе диспетчера
         # ДДС карточка приходит данными, а доклад дежурному службы — это
         # отдельный исходящий звонок с его рабочего телефона. Запрет на номера

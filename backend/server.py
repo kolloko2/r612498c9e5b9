@@ -48,6 +48,10 @@ class SituationUpdate(BaseModel):
     text: str = Field(min_length=3, max_length=600)
     # Источник вводной виден диспетчеру: он должен понимать, кто сообщил.
     source: str = Field("Служба 112", min_length=1, max_length=120)
+    # Статус, который эта вводная открывает. Диспетчер не ставит «Прибытие»
+    # раньше, чем ему сообщили о прибытии: статус отражает доклад с места, а не
+    # желание обучающегося прокликать цепочку до конца.
+    unlocks_status: str = Field("", max_length=60)
 
 
 class Scenario(BaseModel):
@@ -70,6 +74,10 @@ class Scenario(BaseModel):
     # До шести вводных на сценарий: больше превращает занятие в поток
     # уведомлений, за которым не видно работы с карточкой.
     updates: list[SituationUpdate] = Field(default_factory=list, max_length=6)
+    # Служба, в которой работает обучающийся. Он ведёт статусы только своей
+    # ДДС; остальные назначенные службы видит, но не трогает — так устроен
+    # реальный АРМ.
+    owner_service: str = Field("", max_length=160)
     enabled: bool = True
 
     @field_validator("known_facts", "unknown_facts")

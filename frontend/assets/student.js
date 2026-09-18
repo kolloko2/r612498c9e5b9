@@ -305,17 +305,26 @@ function renderServices() {
   // реальном АРМ по этому признаку оператор видит, кто отвечает за вызов.
   if(primaryServices().includes(service)){name.classList.add('primary-service');name.title='Основная служба для этого типа происшествия';}
   summary.append(name);
-  // Служба, добавленная внешней системой, помечается «ВИС», как в реальном АРМ.
+  // Своя ДДС выделена: статусы диспетчер ведёт только по ней, остальные
+  // службы он видит, но их состояние приходит от них самих.
+  if(current.owner_service&&service===current.owner_service){
+   tile.classList.add('own-service');
+   summary.append(element('span','моя служба','own-badge'));
+  }else if(current.owner_service){
+   tile.classList.add('foreign-service');
+  }
   if(state.source==='vis')summary.append(element('span','ВИС','vis-badge'));
   summary.append(element('small',state.status||'Добавлена'));if(state.at)summary.append(element('small',formatted(state.at)));tile.append(summary);
   const history=current.events.filter(e=>e.type==='service.updated'&&e.detail.service===service),list=element('div',undefined,'service-tile-history');
   if(!history.length)list.append(element('small','История статусов пока пуста'));
   for(const event of history){const item=element('p');item.append(element('b',event.detail.status),document.createTextNode(` · ${formatted(event.at)}`));if(event.detail.order_number)item.append(element('span',`Наряд: ${event.detail.order_number}`));if(event.detail.comment)item.append(element('span',event.detail.comment));list.append(item);}
-  tile.append(list);$('services').append(tile);$('responseService').add(new Option(service,service));
+  tile.append(list);$('services').append(tile);
+  if(!current.owner_service||service===current.owner_service)$('responseService').add(new Option(service,service));
  }
  populateResponseStatuses();
 }
-function populateResponseStatuses(){const values=current?.allowed_service_statuses?.[$('responseService').value]||[];$('responseStatus').replaceChildren();for(const value of values)$('responseStatus').add(new Option(value,value));const terminal=!values.length||current.status==='Завершена';$('responseStatus').disabled=terminal;$('responseOrderNumber').disabled=terminal;$('responseComment').disabled=terminal;$('addResponse').disabled=terminal;updateResponseHint();}
+function populateResponseStatuses(){const values=current?.allowed_service_statuses?.[$('responseService').value]||[];
+ $('responseHint').textContent=values.length?'':(current?.owner_service?'Следующий статус откроется, когда служба сообщит о ходе работ.':'');$('responseStatus').replaceChildren();for(const value of values)$('responseStatus').add(new Option(value,value));const terminal=!values.length||current.status==='Завершена';$('responseStatus').disabled=terminal;$('responseOrderNumber').disabled=terminal;$('responseComment').disabled=terminal;$('addResponse').disabled=terminal;updateResponseHint();}
 function updateResponseHint(){$('responseComment').placeholder=$('responseStatus').value==='Работы завершены'?'Укажите: «Завершение работ без бригады», если применимо':'Комментарий (обязателен при отказе)';}
 $('responseService').onchange=populateResponseStatuses;$('responseStatus').onchange=updateResponseHint;
 function renderServiceHistory() {

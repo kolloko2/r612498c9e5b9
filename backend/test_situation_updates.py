@@ -108,3 +108,109 @@ def test_scenario_model_bounds_updates():
     # Мгновенная вводная запрещена: она пришла бы вместе с карточкой.
     with pytest.raises(Exception):
         Scenario.model_validate({**base, "updates": [{**UPDATES[0], "after_seconds": 1}]})
+
+
+OPERATIONAL = [
+    {"id": "dispatched", "after_seconds": 40, "source": "Дежурный Службы 101",
+     "text": "Наряд направлен по адресу", "unlocks_status": "Начало реагирования"},
+    {"id": "arrived", "after_seconds": 100, "source": "Дежурный Службы 101",
+     "text": "Наряд прибыл на адрес", "unlocks_status": "Прибытие"},
+]
+
+
+def prepare_own_service(store, sid, service="Служба 101"):
+    """Карточка с назначенной своей ДДС и планом разблокировок."""
+    row = store.db.execute("SELECT body FROM workspace WHERE id=?", (str(sid),)).fetchone()
+    value = json.loads(row[0])
+    value["owner_service"] = service
+    value["card"]["services"] = [service, "ЦОДД"]
+    value["service_states"] = {
+        service: {"status": "Принята", "comment": "", "at": "2026-09-18T00:00:00+00:00"},
+        "ЦОДД": {"status": "Добавлена", "comment": "", "at": "2026-09-18T00:00:00+00:00"},
+    }
+    value["planned_unlocks"] = {item["id"]: item["unlocks_status"] for item in OPERATIONAL}
+    value["revision"] = max(value.get("revision", 0), 1)
+    with store.db:
+        store.db.execute(
+            "INSERT INTO workspace VALUES (?,?) ON CONFLICT (id) DO UPDATE SET body=excluded.body",
+            (str(sid), json.dumps(value, ensure_ascii=False)))
+
+
+def set_status(client, sid, headers, service, status, comment="", order=""):
+    from uuid import uuid4
+    return client.post(f"/api/v1/student/sessions/{sid}/services", headers=headers, json={
+        "message_id": str(uuid4()), "service": service, "status": status,
+        "comment": comment, "order_number": order})
+
+
+def test_dispatcher_leads_only_their_own_service(classroom):
+    c = classroom
+    client, h, sid = c["client"], c["headers"]["student1"], c["session"]["id"]
+    prepare_own_service(c["store"], sid)
+    refused = set_status(client, sid, h, "ЦОДД", "Начало реагирования")
+    assert refused.status_code == 403
+    assert "только свою службу" in refused.json()["detail"]
+    # Чужая служба не предлагает ни одного статуса.
+    value = client.get(f"/api/v1/student/sessions/{sid}", headers=h).json()
+    assert value["allowed_service_statuses"]["ЦОДД"] == []
+    assert value["owner_service"] == "Служба 101"
+
+
+def test_progress_status_waits_for_the_field_report(classroom):
+    """Нельзя прокликать цепочку: статус открывает сообщение с места."""
+    c = classroom
+    client, h, sid = c["client"], c["headers"]["student1"], c["session"]["id"]
+    prepare_own_service(c["store"], sid)
+    early = set_status(client, sid, h, "Служба 101", "Начало реагирования")
+    assert early.status_code == 409 and "не подтверждён с места" in early.json()["detail"]
+    # Пока вводная не пришла, статус не предлагается и в интерфейсе.
+    value = client.get(f"/api/v1/student/sessions/{sid}", headers=h).json()
+    assert "Начало реагирования" not in value["allowed_service_statuses"]["Служба 101"]
+
+    plant(c["store"], sid, OPERATIONAL, created_shift_seconds=50)
+    prepare_own_service(c["store"], sid)
+    plant(c["store"], sid, OPERATIONAL, created_shift_seconds=50)
+    arm(client, sid, h)
+    assert set_status(client, sid, h, "Служба 101", "Начало реагирования").status_code == 200
+    # Следующий статус всё ещё закрыт: о прибытии пока не сообщали.
+    assert set_status(client, sid, h, "Служба 101", "Прибытие").status_code == 409
+
+
+def test_closing_works_requires_the_result_in_the_comment(classroom):
+    c = classroom
+    client, h, sid = c["client"], c["headers"]["student1"], c["session"]["id"]
+    prepare_own_service(c["store"], sid)
+    done = [{"id": "done", "after_seconds": 10, "source": "Дежурный",
+             "text": "Работы закончены", "unlocks_status": "Работы завершены"}]
+    plant(c["store"], sid, done, created_shift_seconds=50)
+    prepare_own_service(c["store"], sid)
+    value = json.loads(c["store"].db.execute(
+        "SELECT body FROM workspace WHERE id=?", (str(sid),)).fetchone()[0])
+    value["planned_unlocks"] = {"done": "Работы завершены"}
+    with c["store"].db:
+        c["store"].db.execute(
+            "INSERT INTO workspace VALUES (?,?) ON CONFLICT (id) DO UPDATE SET body=excluded.body",
+            (str(sid), json.dumps(value, ensure_ascii=False)))
+    plant(c["store"], sid, done, created_shift_seconds=50)
+    arm(client, sid, h)
+
+    short = set_status(client, sid, h, "Служба 101", "Работы завершены", comment="ок")
+    assert short.status_code == 422 and "результат" in short.json()["detail"]
+    full = set_status(client, sid, h, "Служба 101", "Работы завершены",
+                      comment="Возгорание ликвидировано, пострадавших нет, объект передан собственнику")
+    assert full.status_code == 200
+
+
+def test_scenario_without_unlocks_keeps_the_old_behaviour(classroom):
+    """Сценарии без оперативных вводных работают как раньше."""
+    c = classroom
+    client, h, sid = c["client"], c["headers"]["student1"], c["session"]["id"]
+    prepare_own_service(c["store"], sid)
+    value = json.loads(c["store"].db.execute(
+        "SELECT body FROM workspace WHERE id=?", (str(sid),)).fetchone()[0])
+    value.pop("planned_unlocks", None)
+    with c["store"].db:
+        c["store"].db.execute(
+            "INSERT INTO workspace VALUES (?,?) ON CONFLICT (id) DO UPDATE SET body=excluded.body",
+            (str(sid), json.dumps(value, ensure_ascii=False)))
+    assert set_status(client, sid, h, "Служба 101", "Начало реагирования").status_code == 200
