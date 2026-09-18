@@ -107,3 +107,5 @@ body.alt-hints .options button{outline:1px dotted var(--blue)}
 .service-tile.foreign-service{opacity:.72}
 .own-badge{display:inline-block;margin:3px 0;padding:1px 5px;background:var(--blue);color:#fff;font-size:9px;align-self:flex-start}
 .response-hint{margin:6px 0 0;font-size:11px;color:#d7dee2}
+.dds-critical{color:#a32b22;font-weight:bold}
+.dds-warning{color:#8a5a1a}

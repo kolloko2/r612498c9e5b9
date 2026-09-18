@@ -146,7 +146,7 @@ def ensure_assignments(teacher: Client, group_id: str, scenarios: list[str],
     _, existing = teacher.call("GET", "/instructor/assignments")
     have = {item["title"] for item in existing}
     made = 0
-    for scenario_id in scenarios[:3]:
+    for scenario_id in scenarios[:3] + [s for s in scenarios if s.startswith("refusal_")]:
         title = "Свободная тренировка: " + titles_by_id.get(scenario_id, scenario_id)[:60]
         if title in have:
             continue
@@ -155,6 +155,74 @@ def ensure_assignments(teacher: Client, group_id: str, scenarios: list[str],
         made += 1
     if made:
         print("создано свободных назначений:", made)
+
+
+# Карточки, которые правильно НЕ принимать. Памятка уделяет этому много
+# внимания: диспетчер обязан не только отказать, но и обосновать — почему и
+# куда передана информация. Данные синтетические.
+REFUSAL_SCENARIOS = [
+    {
+        "id": "refusal_territory",
+        "title": "Не наша территория: подтопление в соседнем округе",
+        "category_id": "utilities", "difficulty": "standard", "dds_profile": "utilities",
+        "victim_name": "Зайцева Ольга Петровна",
+        "incident": "Подтопление подвала жилого дома, адрес относится к соседнему округу",
+        "location": "Московская область, Люберцы, улица Инициативная, дом 4",
+        "known_facts": ["Адрес за пределами зоны ответственности службы",
+                        "Вода поступает в подвал около часа"],
+        "unknown_facts": ["Источник поступления воды неизвестен"],
+        "emotion": "Встревожена", "behavior": "Сообщает известные факты",
+        "opening": "Здравствуйте, у нас подвал заливает, дом на Инициативной.",
+        "owner_service": "Деп. ЖКХ",
+        "dds_expectation": {
+            "should_accept": False, "refusal_kind": "foreign_territory",
+            "refusal_keywords": ["территория", "передан"],
+            "update_response_limit_seconds": 90,
+        },
+        "learning_objectives": "Отработать отказ по территориальности с обоснованием и передачей.",
+        "description": "Учебная карточка: происшествие вне зоны ответственности службы.",
+    },
+    {
+        "id": "refusal_duplicate",
+        "title": "Дубль: повторное сообщение о том же происшествии",
+        "category_id": "fire", "difficulty": "standard", "dds_profile": "fire",
+        "victim_name": "Ковалёв Артём Игоревич",
+        "incident": "Повторное сообщение о задымлении по адресу, который уже отрабатывается",
+        "location": "Москва, улица Берзарина, дом 21",
+        "known_facts": ["Происшествие по этому адресу уже принято ранее",
+                        "Основная карточка № 910001 в работе"],
+        "unknown_facts": ["Новых обстоятельств заявитель не сообщает"],
+        "emotion": "Спокоен", "behavior": "Повторяет ранее сообщённые сведения",
+        "opening": "Здравствуйте, тут дым из мусоропровода, я уже звонил.",
+        "owner_service": "Служба 101",
+        "dds_expectation": {
+            "should_accept": False, "refusal_kind": "duplicate",
+            "refusal_keywords": ["дубль", "910001"],
+            "update_response_limit_seconds": 90,
+        },
+        "learning_objectives": "Отработать распознавание дубля и отказ со ссылкой на основную карточку.",
+        "description": "Учебная карточка: дубль уже отрабатываемого происшествия.",
+    },
+]
+
+
+def ensure_refusal_scenarios(teacher: Client) -> list[str]:
+    """Создать сценарии неправильного приёма, если их ещё нет."""
+    existing = {item["id"] for item in teacher.catalog()}
+    created = []
+    for scenario in REFUSAL_SCENARIOS:
+        if scenario["id"] in existing:
+            continue
+        saved = teacher.base_path
+        teacher.base_path = "/api"
+        try:
+            teacher.call("POST", "/scenarios", {**scenario, "enabled": True}, expect=(200, 201, 409))
+        finally:
+            teacher.base_path = saved
+        created.append(scenario["id"])
+    if created:
+        print("созданы сценарии отказа:", ", ".join(created))
+    return [scenario["id"] for scenario in REFUSAL_SCENARIOS]
 
 
 def ensure_lessons(teacher: Client, group_id: str, scenarios: list[str],
@@ -226,7 +294,9 @@ def main() -> None:
     if not scenarios:
         scenarios = [item["id"] for item in teacher.catalog() if item.get("enabled")][:6]
     titles = {item["id"]: item["title"] for item in teacher.catalog()}
-    ensure_assignments(teacher, group_id, scenarios, titles)
+    refusals = ensure_refusal_scenarios(teacher)
+    titles.update({item["id"]: item["title"] for item in REFUSAL_SCENARIOS})
+    ensure_assignments(teacher, group_id, scenarios + refusals, titles)
     ensure_lessons(teacher, group_id, scenarios, student_ids)
     print()
     print("Готово. Вход:", args.base_url + "/login")

@@ -7,6 +7,7 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Literal
 from uuid import UUID, uuid4
 
 import httpx
@@ -54,6 +55,30 @@ class SituationUpdate(BaseModel):
     unlocks_status: str = Field("", max_length=60)
 
 
+class DdsExpectation(BaseModel):
+    """Чего ждут от диспетчера ДДС по этой карточке.
+
+    Эталон по полям проверяет заполненность, а в основном режиме поля приходят
+    уже заполненными Службой 112. Оценивать надо решения: принял ли профильную
+    карточку, правильно ли отказался от чужой, вовремя ли отразил доклад с
+    места, доложил ли дежурному и записал ли результат перед закрытием работ.
+    Все проверки выводятся из журнала событий карточки и воспроизводимы.
+    """
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    # Ложь означает, что карточку правильно НЕ принимать: не та территория,
+    # дубль уже отрабатываемого происшествия, работы выполнять не будут.
+    should_accept: bool = True
+    refusal_kind: Literal["", "foreign_territory", "duplicate", "no_works"] = ""
+    # Слова, которые обязаны прозвучать в обосновании отказа. Проверка
+    # буквальная, как и в эталоне по полям.
+    refusal_keywords: list[str] = Field(default_factory=list, max_length=6)
+    # Кому диспетчер обязан доложить. Пусто — доклад не проверяется.
+    brief_service: str = Field("", max_length=160)
+    # Норматив реакции на оперативную вводную: сколько секунд даётся на то,
+    # чтобы отразить доклад с места соответствующим статусом.
+    update_response_limit_seconds: int = Field(90, ge=5, le=1800)
+
+
 class Scenario(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{2,63}$")
@@ -78,6 +103,8 @@ class Scenario(BaseModel):
     # ДДС; остальные назначенные службы видит, но не трогает — так устроен
     # реальный АРМ.
     owner_service: str = Field("", max_length=160)
+    # Ожидаемые решения диспетчера. Пусто — оценка решений не выставляется.
+    dds_expectation: DdsExpectation | None = None
     enabled: bool = True
 
     @field_validator("known_facts", "unknown_facts")

@@ -4236,6 +4236,10 @@ components:
           maxLength: 160
           title: Owner Service
           default: ''
+        dds_expectation:
+          anyOf:
+          - $ref: '#/components/schemas/DdsExpectation'
+          - type: 'null'
         enabled:
           type: boolean
           title: Enabled
@@ -5092,6 +5096,10 @@ components:
           maxLength: 160
           title: Owner Service
           default: ''
+        dds_expectation:
+          anyOf:
+          - $ref: '#/components/schemas/DdsExpectation'
+          - type: 'null'
         enabled:
           type: boolean
           title: Enabled
@@ -5238,6 +5246,10 @@ components:
           maxLength: 160
           title: Owner Service
           default: ''
+        dds_expectation:
+          anyOf:
+          - $ref: '#/components/schemas/DdsExpectation'
+          - type: 'null'
         enabled:
           type: boolean
           title: Enabled
@@ -6471,3 +6483,50 @@ components:
         модели: одна и та же карточка обязана вести себя одинаково у всех
 
         обучающихся группы.'
+    DdsExpectation:
+      properties:
+        should_accept:
+          type: boolean
+          title: Should Accept
+          default: true
+        refusal_kind:
+          type: string
+          enum:
+          - ''
+          - foreign_territory
+          - duplicate
+          - no_works
+          title: Refusal Kind
+          default: ''
+        refusal_keywords:
+          items:
+            type: string
+          type: array
+          maxItems: 6
+          title: Refusal Keywords
+        brief_service:
+          type: string
+          maxLength: 160
+          title: Brief Service
+          default: ''
+        update_response_limit_seconds:
+          type: integer
+          maximum: 1800.0
+          minimum: 5.0
+          title: Update Response Limit Seconds
+          default: 90
+      additionalProperties: false
+      type: object
+      title: DdsExpectation
+      description: 'Чего ждут от диспетчера ДДС по этой карточке.
+
+
+        Эталон по полям проверяет заполненность, а в основном режиме поля приходят
+
+        уже заполненными Службой 112. Оценивать надо решения: принял ли профильную
+
+        карточку, правильно ли отказался от чужой, вовремя ли отразил доклад с
+
+        места, доложил ли дежурному и записал ли результат перед закрытием работ.
+
+        Все проверки выводятся из журнала событий карточки и воспроизводимы.'

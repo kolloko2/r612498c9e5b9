@@ -261,6 +261,27 @@ function receiveSituationUpdates(data){
   notify(`Новая вводная от ${item.source}: ${item.text}`);
  }
 }
+// Разбор решений диспетчера — главное в основном режиме: поля карточки пришли
+// заполненными, и оценивать надо не их, а принятые решения.
+function renderDdsReview(){
+ const review=current?.dds_review;
+ if(!review)return;
+ const box=$('auditContent');
+ box.append(element('h3','Решения диспетчера'));
+ box.append(element('p',`Служба: ${review.service}. Выполнено ${review.passed_count} из ${review.total_count}`
+  +(review.score_percent===null?'':` · ${review.score_percent}%`)));
+ if(review.critical_errors.length){
+  const errors=element('p','Критические ошибки: '+review.critical_errors.join('; '));
+  errors.className='dds-critical';box.append(errors);
+ }
+ for(const check of review.checks){
+  const mark=check.passed===true?'✓':check.passed===false?'×':'○';
+  const line=element('p',`${mark} ${check.label}${check.detail?' — '+check.detail:''}`);
+  if(check.passed===false)line.className=check.critical?'dds-critical':'dds-warning';
+  box.append(line);
+ }
+ box.append(element('small',review.note,'subtle'));
+}
 function updateIncidentState(){$('incidentState').textContent=`Происшествие: ${current.incident_status||'Новая'} · занятие: ${current.status}`;}
 $('openMap').onclick=()=>{if(!current)return;if(dirty){notify('Сначала сохраните карточку: карта показывает сохранённые координаты.',true);return;}window.open('/map?sid='+encodeURIComponent(current.id),'_blank','noopener,noreferrer,width=1100,height=760');};
 // Реальная опросная карта задаёт вопросы, а не нумерует признаки: «где»,
@@ -463,6 +484,7 @@ function showAudit() {
  if(current.unsaved_draft)$('auditContent').append(element('p','Несохранённый черновик не включён в оценку. Он хранится в этой вкладке и доступен в JSON отдельным полем unsaved_draft.'));
  const review=current.ai_review,finished=current.status==='Завершена';
  if(current.exercise_mode==='actions')$('auditContent').append(element('p','Выдана готовая карточка. Действия и изменения фиксируются отдельно.'));
+ renderDdsReview();
  if(current.action_report)$('auditContent').append(element('p',`Изменено полей: ${current.action_report.changed_fields.length}. Действий служб: ${current.action_report.service_actions}. ${current.action_report.note}`));
  if(finished&&current.lesson_id){const next=element('button','Следующая карточка серии');next.onclick=()=>guarded(async()=>{next.disabled=true;try{const result=await api(`student/lessons/${current.lesson_id}/next`,'POST',{...nextMode(),workstation:workstation()});current=result;dirty=false;viewing=false;transcriptKey='';localStorage.setItem('studentSession',current.id);$('auditDialog').close();renderCard();if(current.exercise_mode!=='actions')$('dialogueDialog').showModal();else notify('Готовая карточка: внесите действия и результаты реагирования служб');}finally{next.disabled=false;}});$('auditContent').append(next);}
  $('requestReview').hidden=!finished;

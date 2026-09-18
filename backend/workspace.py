@@ -19,6 +19,7 @@ from evaluation import (DEFAULT_RESPONSE_LIMIT_SECONDS, DEFAULT_TIME_LIMIT_SECON
                         Rubric, evaluate)
 from grammar import analyze as grammar_report
 from semantic_grading import review as semantic_review
+from dds_review import review as dds_decision_review
 from voice_client import request as voice_request
 from adaptive import attempt_view, recommend
 from ai_review import review as review_card
@@ -649,6 +650,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                    if item.get('unlocks_status')}
         if unlocks:
             value['planned_unlocks'] = unlocks
+        if scenario.get('dds_expectation'):
+            value['dds_expectation'] = scenario['dds_expectation']
         store.save(sid, state)
         persist(value, "session.created")
         if body.transport == "text" and not template:
@@ -1014,6 +1017,11 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         # Ошибки ручного ввода считаются отдельным числом: преподаватель просил
         # видеть их количество в отчёте, а опечатки в адресе — критическими.
         value['grammar'] = grammar_report(value['card'], assessment['rubric'])
+        # Разбор решений диспетчера: отдельно от эталона по полям, потому что в
+        # основном режиме поля приходят заполненными и ничего не измеряют.
+        decisions = dds_decision_review(value, value.get('dds_expectation'))
+        if decisions:
+            value['dds_review'] = decisions
         value["evaluation"]["rubric_revision"] = assessment["revision"]
         finish_event = {'seq': len(value['events']) + 1, 'type': 'session.finished', 'at': value['finished_at'], 'detail': completed_by}
         value['policy_result'] = evaluate_policy(store.load(str(sid)).get('assessment_policy'), value['evaluation'], [*value['events'], finish_event])

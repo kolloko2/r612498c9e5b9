@@ -384,6 +384,13 @@ def build(source: dict[str, Any], keep_source_phones: bool) -> dict[str, Any]:
                     # вводных открывает статусы хода работ, часть осложняет
                     # обстановку и требует пересмотра решения.
                     "owner_service": CATEGORY_OWNER.get(category, ""),
+                    # Ожидаемые решения: профильную карточку принимают, доклад
+                    # дежурному обязателен, на доклад с места даётся 90 секунд.
+                    "dds_expectation": {
+                        "should_accept": True,
+                        "brief_service": CATEGORY_OWNER[category],
+                        "update_response_limit_seconds": 90,
+                    } if category in CATEGORY_OWNER else None,
                     "updates": (_operational(CATEGORY_OWNER[category])[:3]
                                 + CATEGORY_UPDATES.get(category, [])[:1]
                                 + _operational(CATEGORY_OWNER[category])[3:]
