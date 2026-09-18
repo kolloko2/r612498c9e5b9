@@ -36,7 +36,9 @@ def test_sip_assignment_validation_and_live_privacy(classroom):
     c, h = classroom['client'], classroom['headers']
     uid = classroom['users']['student1']['id']
     assert create_lesson(classroom, transport='sip', sip_extensions={uid:'bad'}).status_code == 422
-    assert create_lesson(classroom, sip_extensions={uid:'201'}).status_code == 422
+    # Учебный номер допустим и в текстовом занятии: доклад дежурному службы
+    # идёт отдельным исходящим звонком, даже когда карточка пришла данными.
+    assert create_lesson(classroom, sip_extensions={uid:'201'}).status_code == 201
     assert create_lesson(classroom, transport='sip', sip_extensions={'foreign':'201'}).status_code == 422
     lesson = create_lesson(classroom, transport='sip').json()
     url = '/api/v1/instructor/lessons/' + lesson['id']

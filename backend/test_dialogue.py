@@ -148,8 +148,12 @@ def test_model_profiles_select_provider_and_model(monkeypatch):
 
     monkeypatch.setenv('LLM_PROFILE', 'standard')
     config = llm.configuration()
-    assert config['provider'] == 'ollama' and config['model'] == 'qwen3:4b'
+    assert config['provider'] == 'ollama' and config['model'] == 'qwen3:8b'
     assert config['configured'] is True and config['context'] == 8192
+
+    # Быстрый профиль для слабого сервера: та же схема, меньшая модель.
+    monkeypatch.setenv('LLM_PROFILE', 'fast')
+    assert llm.configuration()['model'] == 'qwen3:4b'
 
     monkeypatch.setenv('LLM_PROFILE', 'mock')
     assert llm.configuration()['provider'] == 'mock'

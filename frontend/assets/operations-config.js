@@ -2,7 +2,7 @@
 let runtimeXml='',importedConfiguration=null;
 const runtimeLabels={sip_external_address:'Объявляемый IP SIP',sip_local_net:'Локальная сеть SIP (CIDR)',allowed_extensions:'Разрешённые номера через запятую',max_calls:'Лимит звонков',postgres_max_connections:'PostgreSQL: соединения',postgres_shared_buffers_mb:'PostgreSQL: shared_buffers, МиБ',backend_memory_mb:'Backend: память, МиБ',voice_memory_mb:'Voice: память, МиБ',backend_cpus:'Backend: CPU',voice_cpus:'Voice: CPU',llm_profile:'Профиль языковой модели'};
 // Профили описаны на сервере; здесь только подписи для администратора.
-const llmProfiles=[['mock','Без модели — детерминированные ответы'],['standard','Стандартная (CPU) — рекомендуемая'],['accelerated','Ускоренная — требует видеокарту']];
+const llmProfiles=[['mock','Без модели — детерминированные ответы'],['standard','Точная — рекомендуется'],['fast','Быстрая — для слабого сервера']];
 async function loadRuntime(){
  try{const data=await api('/api/v1/admin/operations/configuration');runtimeXml=data.xml;el('runtimeFields').replaceChildren();
  for(const [key,value] of Object.entries(data.values)){const label=node('label',runtimeLabels[key]||key);let input;if(key==='llm_profile'){input=document.createElement('select');for(const [id,title] of llmProfiles)input.add(new Option(title,id));}else{input=document.createElement('input');input.type=typeof value==='number'?'number':'text';}input.name=key;input.value=value;input.required=true;label.append(input);el('runtimeFields').append(label);}}

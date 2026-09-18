@@ -78,6 +78,10 @@ class Criterion(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
+    # Человекочитаемая подсказка для отчёта. Критерий может сравнивать основы
+    # слов («дерутс»), и показывать их обучающемуся бессмысленно — в отчёт идёт
+    # исходная формулировка. На сравнение поле не влияет.
+    expected_hint: str = ""
     label: str = Field(min_length=1, max_length=200)
     field: str
     expected: list[str] = Field(min_length=1, max_length=100)
@@ -207,7 +211,7 @@ def _passed(criterion: Criterion, actual: str | list[str] | bool) -> bool:
 def _recommendation(criterion: Criterion, passed: bool) -> str:
     if passed:
         return "Критерий выполнен."
-    expected = ", ".join(criterion.expected)
+    expected = criterion.expected_hint.strip() or ", ".join(criterion.expected)
     if criterion.field == SERVICE_FIELD:
         return f"Проверьте выбор служб в учебной карточке; ожидаемый набор: {expected}."
     if criterion.field in FLAG_FIELDS:
@@ -263,6 +267,7 @@ def evaluate(rubric: dict[str, Any] | None, card: dict[str, Any], elapsed_second
                 "label": criterion.label,
                 "field": criterion.field,
                 "expected": list(criterion.expected),
+                "expected_hint": criterion.expected_hint,
                 "actual": actual,
                 "passed": passed,
                 "weight": criterion.weight,

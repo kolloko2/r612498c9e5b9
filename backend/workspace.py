@@ -18,6 +18,7 @@ from routing import preview, service_catalog
 from evaluation import (DEFAULT_RESPONSE_LIMIT_SECONDS, DEFAULT_TIME_LIMIT_SECONDS,
                         Rubric, evaluate)
 from grammar import analyze as grammar_report
+from semantic_grading import review as semantic_review
 from voice_client import request as voice_request
 from adaptive import attempt_view, recommend
 from ai_review import review as review_card
@@ -906,6 +907,9 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         value["evaluation"] = evaluate(assessment["rubric"], value["card"], value["elapsed_seconds"],
                                        value.get('response_seconds'))
         apply_default_norms(value)
+        # Смысловая доводка идёт после детерминированной оценки и только в плюс:
+        # см. semantic_grading.py. Сбой модели оставляет оценку как есть.
+        await semantic_review(value["evaluation"])
         # Ошибки ручного ввода считаются отдельным числом: преподаватель просил
         # видеть их количество в отчёте, а опечатки в адресе — критическими.
         value['grammar'] = grammar_report(value['card'], assessment['rubric'])
@@ -961,8 +965,10 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         group = learning._group(body.group_id, user['id'])
         if body.transport == 'sip' and body.mode == 'actions':
             raise HTTPException(422, 'Готовые карточки не используют звонки')
-        if body.transport == 'text' and body.sip_extensions:
-            raise HTTPException(422, 'SIP-номера допустимы только в голосовом режиме')
+        # Учебный номер назначается и в текстовом занятии. В работе диспетчера
+        # ДДС карточка приходит данными, а доклад дежурному службы — это
+        # отдельный исходящий звонок с его рабочего телефона. Запрет на номера
+        # в текстовом занятии закрывал именно этот, основной сценарий.
         if any(uid not in group['member_ids'] for uid in body.sip_extensions):
             raise HTTPException(422, 'Назначайте SIP-номера только участникам группы')
         if len(set(body.sip_extensions.values())) != len(body.sip_extensions):

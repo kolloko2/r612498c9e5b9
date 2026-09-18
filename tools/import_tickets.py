@@ -271,7 +271,9 @@ def _rubric(ticket: int, call: int, caller: str, known: list[str], situation: st
     anchors = _anchors(summary) if len(summary) >= 4 else []
     if anchors:
         criteria.append({"id": "summary", "label": "Суть происшествия в описании", "field": "description",
-                         "mode": "contains_all", "expected": anchors, "weight": 1})
+                         "mode": "contains_all", "expected": anchors,
+                         # В отчёте показывается исходная фабула, а не основы слов.
+                         "expected_hint": summary, "weight": 1})
     if not criteria:
         fallback = _anchors(situation[:200])
         criteria.append({"id": "summary", "label": "Описание заполнено", "field": "description",

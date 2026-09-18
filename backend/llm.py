@@ -11,10 +11,10 @@ import httpx
 PROFILES = {
     "mock": {"model": "scenario-mock", "context": 0, "title": "Без модели",
              "hint": "Детерминированные ответы. Занятия идут, генерация сценариев недоступна."},
-    "standard": {"model": "qwen3:4b", "context": 8192, "title": "Стандартная (CPU)",
-                 "hint": "Рекомендуемый профиль без видеокарты. Генерация сценария — секунды."},
-    "accelerated": {"model": "qwen3:8b", "context": 8192, "title": "Ускоренная (видеокарта)",
-                    "hint": "Требует видеокарту. Та же работа в десятки раз быстрее."},
+    "fast": {"model": "qwen3:4b", "context": 8192, "title": "Быстрая (слабый сервер)",
+             "hint": "Отвечает вдвое быстрее, но чаще ошибается и теряет запросы под нагрузкой."},
+    "standard": {"model": "qwen3:8b", "context": 8192, "title": "Точная (рекомендуется)",
+                 "hint": "Работает на процессоре; видеокарта только ускоряет. Замеры — docs/LOCAL_MODEL.md."},
 }
 DEFAULT_PROFILE = "mock"
 LOCAL_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "300"))

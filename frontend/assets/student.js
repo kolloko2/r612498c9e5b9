@@ -418,7 +418,7 @@ function showAudit() {
  if(current.exercise_mode==='actions')$('auditContent').append(element('p','Выдана готовая карточка. Действия и изменения фиксируются отдельно.'));
  if(current.action_report)$('auditContent').append(element('p',`Изменено полей: ${current.action_report.changed_fields.length}. Действий служб: ${current.action_report.service_actions}. ${current.action_report.note}`));
  if(finished&&current.lesson_id){const next=element('button','Следующая карточка серии');next.onclick=()=>guarded(async()=>{next.disabled=true;try{const result=await api(`student/lessons/${current.lesson_id}/next`,'POST',{...nextMode(),workstation:workstation()});current=result;dirty=false;viewing=false;transcriptKey='';localStorage.setItem('studentSession',current.id);$('auditDialog').close();renderCard();if(current.exercise_mode!=='actions')$('dialogueDialog').showModal();else notify('Готовая карточка: внесите действия и результаты реагирования служб');}finally{next.disabled=false;}});$('auditContent').append(next);}
- $('requestReview').hidden=!finished;$('reviewDisclosure').hidden=!finished;
+ $('requestReview').hidden=!finished;
  $('requestReview').disabled=pendingReviews.has(current.id)||['ready','mock'].includes(review?.status);
  $('requestReview').textContent=pendingReviews.has(current.id)?'ИИ анализирует…':review?.status==='failed'?'Повторить ИИ-разбор':['ready','mock'].includes(review?.status)?'ИИ-разбор сохранён':'Получить ИИ-разбор';
  if(current.status==='Завершена'){
