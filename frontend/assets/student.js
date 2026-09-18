@@ -80,6 +80,23 @@ function receiveRemoteCompletion(data){
  dirty=false;viewing=true;window.speechSynthesis?.cancel();$('dialogueDialog').close();renderCard();showAudit();
  notify(draft?'Преподаватель завершил карточку. Несохранённый черновик доступен в JSON-экспорте.':'Карточка завершена преподавателем',true);
 }
+// Панель занятия должна объяснять себя: что за карточки прилетают, по какому
+// каналу идёт разговор и что будет после завершения. Без этого «войти в
+// занятие» выглядит как вход в неизвестность.
+function lessonExplanation(lesson){
+ const mode=lesson.mode==='actions'
+  ? 'готовые карточки ДДС: поля уже заполнены, нужны действия'
+  : lesson.mode==='fill'
+  ? 'полный цикл 112: карточку заполняете вы со слов заявителя'
+  : 'смешанное: и готовые карточки, и приём вызова';
+ const channel=lesson.transport==='sip'
+  ? `разговор по телефону, ваш номер ${lesson.sip_extension||'не назначен'}`
+  : 'разговор текстом в окне «Диалог»';
+ const next=lesson.state==='running'&&!lesson.exhausted
+  ? 'после завершения карточки сразу выдаётся следующая'
+  : '';
+ return [mode, channel, next].filter(Boolean).join(' · ');
+}
 async function refreshLessonFlow(){
  if(!studentUserId||lessonFlowBusy||document.hidden)return;lessonFlowBusy=true;
  try{
@@ -95,8 +112,9 @@ async function refreshLessonFlow(){
   if(switchable)$('modeSwitch').textContent=studentMode==='fill'
    ? 'Обычный режим: работа диспетчера ДДС'
    : 'Расширенный режим: полный цикл 112';
-  if(!lesson){$('lessonState').textContent=activeLessonId?'Занятие недоступно':'Выберите занятие и войдите в него';return;}
-  $('lessonState').textContent=`${lesson.title}: ${labels[lesson.state]} · выполнено ${lesson.completed}${lesson.cards_per_student===null?'':` из ${lesson.cards_per_student}`}`;
+  if(!lesson){$('lessonState').textContent=activeLessonId?'Занятие недоступно'
+   :'Занятие — это серия карточек от преподавателя. Для одиночной тренировки занятие не нужно: нажмите «создать новую карточку».';return;}
+  $('lessonState').textContent=`${lesson.title}: ${labels[lesson.state]} · выполнено ${lesson.completed}${lesson.cards_per_student===null?'':` из ${lesson.cards_per_student}`} · ${lessonExplanation(lesson)}`;
   if(lesson.state!=='running'){
    if(current?.lesson_id===lesson.id&&current.status!=='Завершена'){
     const data=await api(`student/sessions/${current.id}`);if(data.status==='Завершена')receiveRemoteCompletion(data);

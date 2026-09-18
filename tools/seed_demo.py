@@ -41,6 +41,7 @@ class Client:
     def __init__(self, base_url: str):
         self.base = base_url.rstrip("/")
         self.cookie = ""
+        self.base_path = "/api/v1"
         self.context = ssl._create_unverified_context() if self.base.startswith("https") else None
 
     def call(self, method: str, path: str, body=None, *, expect=(200, 201)):
@@ -52,7 +53,7 @@ class Client:
         if self.cookie:
             headers["Cookie"] = self.cookie
         request = urllib.request.Request(
-            self.base + "/api/v1" + path, method=method,
+            self.base + self.base_path + path, method=method,
             data=json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None,
             headers=headers,
         )
@@ -69,6 +70,15 @@ class Client:
             if error.code in expect:
                 return error.code, detail
             raise SystemExit(f"{method} {path} -> {error.code}: {detail}")
+
+    def catalog(self):
+        """Каталог сценариев лежит вне /api/v1, поэтому запрашивается отдельно."""
+        saved, self.base_path = self.base_path, "/api"
+        try:
+            status, payload = self.call("GET", "/scenarios", expect=(200, 404))
+        finally:
+            self.base_path = saved
+        return payload if isinstance(payload, list) else []
 
     def login(self, username: str) -> None:
         self.cookie = ""
@@ -123,6 +133,28 @@ def ensure_scenarios(teacher: Client) -> list[str]:
     if published:
         print("опубликовано сценариев из билетов:", len(published))
     return published
+
+
+def ensure_assignments(teacher: Client, group_id: str, scenarios: list[str],
+                       titles_by_id: dict[str, str]) -> None:
+    """Прямые назначения: карточку можно создать без входа в занятие.
+
+    Без них кнопка «создать новую карточку» не предлагает ни одного сценария, и
+    единственным входом остаётся занятие преподавателя — для одиночной
+    тренировки это лишний шаг.
+    """
+    _, existing = teacher.call("GET", "/instructor/assignments")
+    have = {item["title"] for item in existing}
+    made = 0
+    for scenario_id in scenarios[:3]:
+        title = "Свободная тренировка: " + titles_by_id.get(scenario_id, scenario_id)[:60]
+        if title in have:
+            continue
+        teacher.call("POST", "/instructor/assignments",
+                     {"group_id": group_id, "scenario_id": scenario_id, "title": title})
+        made += 1
+    if made:
+        print("создано свободных назначений:", made)
 
 
 def ensure_lessons(teacher: Client, group_id: str, scenarios: list[str],
@@ -192,8 +224,9 @@ def main() -> None:
     group_id = ensure_group(teacher, list(student_ids.values()))
     scenarios = ensure_scenarios(teacher)
     if not scenarios:
-        _, lessons_scenarios = teacher.call("GET", "/scenarios")
-        scenarios = [item["id"] for item in lessons_scenarios if item.get("enabled")][:6]
+        scenarios = [item["id"] for item in teacher.catalog() if item.get("enabled")][:6]
+    titles = {item["id"]: item["title"] for item in teacher.catalog()}
+    ensure_assignments(teacher, group_id, scenarios, titles)
     ensure_lessons(teacher, group_id, scenarios, student_ids)
     print()
     print("Готово. Вход:", args.base_url + "/login")
