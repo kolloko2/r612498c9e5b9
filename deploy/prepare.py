@@ -63,6 +63,28 @@ def create(source, output):
     ensure_key(ROOT)
 
 
+def report_assets():
+    """Сообщить, каких необязательных ресурсов не хватает, и как их получить.
+
+    Стенд поднимается без них: без речевых моделей не работает распознавание и
+    синтез в SIP, без модели генерация сценариев, без карты — окно карты.
+    Занятие, карточки, нормативы и доклад дежурному идут в любом случае.
+    """
+    models = ROOT / 'deploy' / 'models'
+    missing = []
+    if not (models / 'vosk-model-small-ru-0.22' / 'am').exists():
+        missing.append('vosk')
+    if not (models / 'sherpa-onnx-nemo-ctc-giga-am-v2-russian-2025-04-19' / 'model.int8.onnx').exists():
+        missing.append('gigaam')
+    if not (models / 'v5_5_ru.pt').is_file():
+        missing.append('silero')
+    if missing:
+        print(f"Речевые модели не найдены ({', '.join(missing)}): python tools/fetch_models.py")
+    if not (ROOT / 'deploy' / 'maps' / 'regional.sqlite').is_file():
+        print('Карта не найдена: python tools/prepare_regional_map.py --download')
+    print('Локальная модель: python tools/fetch_llm.py')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--source', type=Path, default=ROOT / '.env')
@@ -74,3 +96,4 @@ if __name__ == '__main__':
         parser.exit(1, 'Deployment ENV already exists; left unchanged.\n')
     (ROOT / 'deploy' / 'models').mkdir(exist_ok=True)
     print('Created private deployment ENV. Existing .env/database unchanged; no secrets printed.')
+    report_assets()
