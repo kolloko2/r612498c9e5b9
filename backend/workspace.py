@@ -782,6 +782,35 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         return await complete_session(sid, {'role': 'student', 'user_id': (actor.get() or {}).get('id'),
                                             'reason': 'Нерезультативный вызов'})
 
+    @api.post('/sessions/{sid}/updates', dependencies=[Depends(serialize_mutation)])
+    async def situation_updates(sid: UUID):
+        """Доставить вводные, срок которых наступил.
+
+        Момент срабатывания считается от выдачи карточки по её же секундомеру,
+        поэтому одна и та же карточка ведёт себя одинаково у всех обучающихся
+        группы и не зависит ни от модели, ни от того, когда рабочее место
+        обратилось за обновлением. Повторный вызов ничего не дублирует.
+        """
+        value = load(sid)
+        if value['status'] == 'Завершена':
+            return public(value)
+        scenario = store.load(str(sid)).get('scenario') or {}
+        planned = scenario.get('updates') or []
+        if not planned:
+            return public(value)
+        delivered = {event['detail'].get('id') for event in value['events']
+                     if event['type'] == 'situation.update'}
+        elapsed = (datetime.now(timezone.utc)
+                   - datetime.fromisoformat(value['created_at'])).total_seconds()
+        fresh = [item for item in planned
+                 if item['id'] not in delivered and elapsed >= item['after_seconds']]
+        if not fresh:
+            return public(value)
+        for item in fresh:
+            value.setdefault('situation_updates', []).append({**item, 'at': now()})
+            persist(value, 'situation.update', item)
+        return public(load(sid))
+
     @api.post('/sessions/{sid}/reminders', dependencies=[Depends(serialize_mutation)])
     async def reminder(sid: UUID, body: Reminder):
         """Напоминание по карточке. Срабатывает на рабочем месте обучающегося."""

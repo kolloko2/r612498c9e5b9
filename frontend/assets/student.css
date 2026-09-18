@@ -97,3 +97,8 @@ body.alt-hints .options button{outline:1px dotted var(--blue)}
 .card-panel.dds-mode .contact-flags{display:none}
 .card-panel.dds-mode .phone-row .phone-field span::after{content:" · из карточки 112";font-size:9px;color:#9aa0a3}
 .card-panel.dds-mode .description-block>label::after{content:" (передано Службой 112)";color:#8b9196}
+/* Вводная: изменившаяся обстановка по ходу работы с карточкой. */
+.situation-feed{margin-top:10px;display:grid;gap:6px;max-height:150px;overflow:auto}
+.situation-update{background:#fff4e8;border-left:3px solid var(--orange);padding:7px 9px}
+.situation-update small{display:block;color:#8a6a55;font-size:10px;margin-bottom:3px}
+.situation-update p{margin:0;line-height:1.45}

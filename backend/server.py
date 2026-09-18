@@ -28,6 +28,28 @@ SEED = json.loads(Path(__file__).with_name("scenario.json").read_text(encoding="
 app = FastAPI(title="Учебный диалог 112")
 
 
+class SituationUpdate(BaseModel):
+    """Вводная: новое обстоятельство, приходящее по ходу работы с карточкой.
+
+    Заказчик просил моделировать полный жизненный цикл происшествия, а не
+    заполнение формы. Настоящая работа диспетчера состоит в том, что обстановка
+    меняется: бригада не проехала, появился второй пострадавший, заявитель
+    перезвонил. Вводная приходит через заданное время после выдачи карточки и
+    требует от диспетчера пересмотреть решение.
+
+    Срабатывание детерминированное — по секундомеру карточки, а не по решению
+    модели: одна и та же карточка обязана вести себя одинаково у всех
+    обучающихся группы.
+    """
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,31}$")
+    # Отсчёт идёт от выдачи карточки: норматив реакции считается оттуда же.
+    after_seconds: int = Field(ge=5, le=3600)
+    text: str = Field(min_length=3, max_length=600)
+    # Источник вводной виден диспетчеру: он должен понимать, кто сообщил.
+    source: str = Field("Служба 112", min_length=1, max_length=120)
+
+
 class Scenario(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{2,63}$")
@@ -45,6 +67,9 @@ class Scenario(BaseModel):
     emotion: str = Field(min_length=2, max_length=200)
     behavior: str = Field("", max_length=1000)
     opening: str = Field(min_length=3, max_length=1000)
+    # До шести вводных на сценарий: больше превращает занятие в поток
+    # уведомлений, за которым не видно работы с карточкой.
+    updates: list[SituationUpdate] = Field(default_factory=list, max_length=6)
     enabled: bool = True
 
     @field_validator("known_facts", "unknown_facts")

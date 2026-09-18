@@ -252,6 +252,36 @@ def _anchors(summary: str) -> list[str]:
     return [word[:STEM_LENGTH] for word in chosen]
 
 
+# Вводные по категории происшествия. Источник — билеты — их не содержит, и
+# выдумывать обстоятельства за источник нельзя, поэтому берутся общие для
+# категории осложнения, одинаковые и проверяемые. Преподаватель правит их при
+# валидации, как и остальной черновик.
+CATEGORY_UPDATES: dict[str, list[dict[str, Any]]] = {
+    "fire": [
+        {"id": "spread", "after_seconds": 45, "source": "Заявитель",
+         "text": "Огонь перекинулся дальше, людей выводят из здания"},
+        {"id": "access", "after_seconds": 150, "source": "Служба 101",
+         "text": "Проезд к месту затруднён припаркованными машинами"},
+    ],
+    "medical": [
+        {"id": "worse", "after_seconds": 45, "source": "Заявитель",
+         "text": "Состояние пострадавшего ухудшилось, он потерял сознание"},
+    ],
+    "public": [
+        {"id": "escalation", "after_seconds": 45, "source": "Заявитель",
+         "text": "Конфликт разрастается, участников стало больше"},
+    ],
+    "traffic": [
+        {"id": "jam", "after_seconds": 60, "source": "ЦОДД",
+         "text": "На участке образовался затор, движение перекрыто"},
+    ],
+    "utilities": [
+        {"id": "spreading", "after_seconds": 60, "source": "Деп. ЖКХ",
+         "text": "Подтопление распространяется на соседние подъезды"},
+    ],
+}
+
+
 def _rubric(ticket: int, call: int, caller: str, known: list[str], situation: str) -> dict[str, Any]:
     """Deterministic draft reference built only from literal source fragments.
 
@@ -322,6 +352,8 @@ def build(source: dict[str, Any], keep_source_phones: bool) -> dict[str, Any]:
                     "emotion": EMOTIONS[category],
                     "behavior": BEHAVIOR,
                     "opening": _opening(situation, category),
+                    # Вводные меняют обстановку уже после передачи карточки.
+                    "updates": CATEGORY_UPDATES.get(category, []),
                     "enabled": False,
                 },
                 "rubric": _rubric(ticket["number"], call["n"], caller, known, situation),

@@ -4026,6 +4026,49 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - bearerAuth: []
+  /student/sessions/{sid}/updates:
+    post:
+      summary: Situation Updates
+      description: 'Доставить вводные, срок которых наступил.
+
+
+        Момент срабатывания считается от выдачи карточки по её же секундомеру,
+
+        поэтому одна и та же карточка ведёт себя одинаково у всех обучающихся
+
+        группы и не зависит ни от модели, ни от того, когда рабочее место
+
+        обратилось за обновлением. Повторный вызов ничего не дублирует.'
+      operationId: situation_updates_api_v1_student_sessions__sid__updates_post
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
 components:
   securitySchemes:
     bearerAuth:
@@ -4182,6 +4225,12 @@ components:
           maxLength: 1000
           minLength: 3
           title: Opening
+        updates:
+          items:
+            $ref: '#/components/schemas/SituationUpdate'
+          type: array
+          maxItems: 6
+          title: Updates
         enabled:
           type: boolean
           title: Enabled
@@ -5027,6 +5076,12 @@ components:
           maxLength: 1000
           minLength: 3
           title: Opening
+        updates:
+          items:
+            $ref: '#/components/schemas/SituationUpdate'
+          type: array
+          maxItems: 6
+          title: Updates
         enabled:
           type: boolean
           title: Enabled
@@ -5162,6 +5217,12 @@ components:
           maxLength: 1000
           minLength: 3
           title: Opening
+        updates:
+          items:
+            $ref: '#/components/schemas/SituationUpdate'
+          type: array
+          maxItems: 6
+          title: Updates
         enabled:
           type: boolean
           title: Enabled
@@ -6342,3 +6403,51 @@ components:
         преподаватель: реальная интеграция отсутствует, и доставка ничего не
 
         отправляет за пределы стенда.'
+    SituationUpdate:
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,31}$
+          title: Id
+        after_seconds:
+          type: integer
+          maximum: 3600.0
+          minimum: 5.0
+          title: After Seconds
+        text:
+          type: string
+          maxLength: 600
+          minLength: 3
+          title: Text
+        source:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Source
+          default: Служба 112
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - after_seconds
+      - text
+      title: SituationUpdate
+      description: 'Вводная: новое обстоятельство, приходящее по ходу работы с карточкой.
+
+
+        Заказчик просил моделировать полный жизненный цикл происшествия, а не
+
+        заполнение формы. Настоящая работа диспетчера состоит в том, что обстановка
+
+        меняется: бригада не проехала, появился второй пострадавший, заявитель
+
+        перезвонил. Вводная приходит через заданное время после выдачи карточки и
+
+        требует от диспетчера пересмотреть решение.
+
+
+        Срабатывание детерминированное — по секундомеру карточки, а не по решению
+
+        модели: одна и та же карточка обязана вести себя одинаково у всех
+
+        обучающихся группы.'

@@ -228,10 +228,37 @@ function renderCard() {
  $('modeNote').textContent=dds?'АРМ диспетчера ДДС':'Расширенный режим: приём вызова 112';
  $('conversation').hidden=dds;
  if(dds){$('messageForm').hidden=true;$('speak').disabled=true;$('callStatus').textContent='карточка передана Службой 112';}
- $('openNotification').disabled=finished||!current.revision;$('openForward').disabled=finished||!current.revision;$('openBriefing').disabled=finished||!current.revision;$('openLinks').disabled=finished||!current.revision;$('openReminder').disabled=finished;$('printCard').hidden=!current.revision;$('printCard').disabled=false;renderSurvey(); renderServices(); renderDialogue(); renderServiceHistory();renderNotificationHistory();renderLinkedCards(); tick();
+ $('openNotification').disabled=finished||!current.revision;$('openForward').disabled=finished||!current.revision;$('openBriefing').disabled=finished||!current.revision;$('openLinks').disabled=finished||!current.revision;$('openReminder').disabled=finished;$('printCard').hidden=!current.revision;$('printCard').disabled=false;renderSurvey(); renderServices(); renderDialogue(); renderServiceHistory();renderNotificationHistory();renderLinkedCards(); renderSituationUpdates(); tick();
  const pending=storedMessage(current.id);if(pending&&current.transport==='text'&&current.status!=='Завершена'){$('operatorText').value=pending.text;$('send').textContent='Повторить отправку';}
  if(!finished&&current.lesson_id&&current.transport==='sip'&&!current.call_id&&!attemptedLessonCalls.has(current.id)){
   attemptedLessonCalls.add(current.id);startSipCall();
+ }
+}
+// Новая вводная — это изменившаяся обстановка, а не подсказка: диспетчер
+// должен её заметить и пересмотреть решение. Поэтому она попадает и в ленту
+// карточки, и в уведомление, и её нельзя пропустить незаметно.
+const seenUpdates=new Set();
+function renderSituationUpdates(){
+ const list=current?.situation_updates||[];
+ const box=$('situationFeed');
+ box.replaceChildren();
+ box.hidden=!list.length;
+ for(const item of list){
+  const line=element('article',undefined,'situation-update');
+  line.append(element('small',`${formatted(item.at)} · ${item.source}`),element('p',item.text));
+  box.append(line);
+ }
+}
+function receiveSituationUpdates(data){
+ const list=data.situation_updates||[];
+ if(list.length===(current.situation_updates||[]).length)return;
+ current.situation_updates=list;
+ current.events=data.events||current.events;
+ renderSituationUpdates();
+ for(const item of list){
+  if(seenUpdates.has(item.id))continue;
+  seenUpdates.add(item.id);
+  notify(`Новая вводная от ${item.source}: ${item.text}`);
  }
 }
 function updateIncidentState(){$('incidentState').textContent=`Происшествие: ${current.incident_status||'Новая'} · занятие: ${current.status}`;}
@@ -737,7 +764,8 @@ window.addEventListener('offline',()=>{noteDisconnected();notify('Соедине
 window.addEventListener('online',()=>{healthText='Проверка связи…';$('health').textContent=healthText;guarded(recoverCurrentSession);});
 window.addEventListener('beforeunload',e=>{if(dirty){persistDraft();e.preventDefault();e.returnValue='';}});
 let feedbackPolling=false;
-setInterval(async()=>{if(feedbackPolling||!current||document.hidden)return;const sid=current.id;feedbackPolling=true;try{const data=await api(`student/sessions/${sid}`);if(current?.id!==sid)return;if(current.status!=='Завершена'&&data.status==='Завершена'){receiveRemoteCompletion(data);return;}current.incident_status=data.incident_status;updateIncidentState();const previous=(current.teacher_feedback||[]).length;current.teacher_feedback=data.teacher_feedback||[];if(current.teacher_feedback.length>previous){notify('Новое замечание преподавателя — откройте «Отчёт и история»');if($('auditDialog').open)showAudit();}}catch{/* The normal health indicator handles connectivity. */}finally{feedbackPolling=false;}},5000);
+setInterval(async()=>{if(feedbackPolling||!current||document.hidden)return;const sid=current.id;feedbackPolling=true;try{// Вводные приходят по секундомеру карточки; сервер решает, чей срок настал.
+ const data=current.status==='Завершена'?await api(`student/sessions/${sid}`):await api(`student/sessions/${sid}/updates`,'POST',{});if(current?.id!==sid)return;if(current.status!=='Завершена'&&data.status==='Завершена'){receiveRemoteCompletion(data);return;}current.incident_status=data.incident_status;updateIncidentState();receiveSituationUpdates(data);const previous=(current.teacher_feedback||[]).length;current.teacher_feedback=data.teacher_feedback||[];if(current.teacher_feedback.length>previous){notify('Новое замечание преподавателя — откройте «Отчёт и история»');if($('auditDialog').open)showAudit();}}catch{/* The normal health indicator handles connectivity. */}finally{feedbackPolling=false;}},5000);
 let polling=false;setInterval(async()=>{if(polling)return;polling=true;try{if($('autoRefresh').checked&&!$('journalPanel').hidden)await loadSessions();if(current?.transport==='sip'&&current.call_id&&current.status!=='Завершена'){
  const sid=current.id,data=await api(`student/sessions/${sid}`);if(current?.id!==sid)return;
  current.messages=data.messages;current.provider_error=data.provider_error;current.call_id=data.call_id;renderDialogue();
