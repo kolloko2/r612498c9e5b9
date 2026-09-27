@@ -3831,6 +3831,13 @@ paths:
   /student/sessions/{sid}/briefings/{bid}/messages:
     post:
       summary: Speak
+      description: >-
+        The report may include server-generated semantic_evidence (verdict,
+        quote, detail, fingerprint, provider, model). Local semantic checking
+        applies only to incident_type; a credited check has granted_by=model.
+        Addresses and numbers remain strict. Evidence is bound to the full
+        transcript and expected incident and retained in accepted notifications
+        as briefing_report. Text and SIP share a 15-second inference budget.
       operationId: speak_api_v1_student_sessions__sid__briefings__bid__messages_post
       parameters:
       - name: sid

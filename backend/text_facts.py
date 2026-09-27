@@ -57,6 +57,14 @@ def incident_asserted(text, incident):
               ({'дтп', 'столкновение'}, ['дтп', 'столкновение']),
               ({'задымление', 'дым'}, ['задымление', 'дым'])]
     expected = {lemma(w) for w in tokens(incident)}
+    if expected <= {'повреждение', 'труба', 'водоснабжение'} and {'повреждение', 'труба'} <= expected:
+        # A bounded alternative for the water-pipe exercise, not a generic
+        # equivalence between every utility incident and any mention of water.
+        leak = any(asserted(text, phrase) for phrase in (
+            'вода вытекает из трубы', 'вода течёт из трубы', 'течёт вода из трубы',
+            'прорвало водопроводную трубу', 'прорыв трубы водоснабжения'))
+        if leak:
+            return True
     for keys, alternatives in groups:
         if expected & keys:
             present = [word for word in alternatives if lemma(word) in {lemma(w) for w in tokens(text)}]

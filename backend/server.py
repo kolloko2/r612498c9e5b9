@@ -15,7 +15,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocke
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 import llm
 from llm import complete, configuration, reply as speak
-from briefing import check as briefing_check, duty_reply as briefing_duty_reply, SUPERIOR_TITLE, CREW_VOICE
+from briefing import check_live as briefing_check_live, duty_reply as briefing_duty_reply, SUPERIOR_TITLE, CREW_VOICE
 from field_dialogue import answer as field_answer, crew_speech, report_speech
 from categories import CategoryId
 from curriculum import Difficulty, DdsProfile
@@ -396,17 +396,20 @@ class Engine:
                 state["echoes_ignored"] = state.get("echoes_ignored", 0) + 1
                 self.store.save(sid, state)
                 return None
-            spoken = " ".join([*(m["content"] for m in state["messages"] if m["role"] == "user"), utterance])
+            spoken = ". ".join([*(m["content"] for m in state["messages"] if m["role"] == "user"), utterance])
             # Полнота доклада считается по сохранённой карточке, а не моделью:
             # ответ собеседника не может подтвердить приём вместо проверки.
-            state["duty_report"] = briefing_check(spoken, duty["card"])
+            started = asyncio.get_running_loop().time()
+            state["duty_report"] = await briefing_check_live(spoken, duty["card"], state.get('duty_report'))
             history = [{"role": m["role"], "content": m["content"]} for m in state["messages"][-8:]]
             history.append({"role": "user", "content": utterance})
             try:
                 text = spoken_reply(await briefing_duty_reply(history, duty.get("known_card") or duty["card"], duty["service"],
                                                               state["duty_report"]["missing"],
                                                               duty.get("teacher_corrections"),
-                                                              duty.get("teacher_materials")))
+                                                              duty.get("teacher_materials"),
+                                                              transcript=spoken, report=state["duty_report"],
+                                                              timeout_seconds=llm.VOICE_REPLY_TIMEOUT_SECONDS - (asyncio.get_running_loop().time() - started)))
             except (httpx.HTTPError, ValueError, KeyError, TypeError):
                 text = "Повторите, пожалуйста, последнюю фразу."
                 state["provider_error"] = "Сервис диалога недоступен. Повторите запрос позднее."

@@ -253,13 +253,19 @@ def _briefing(value: dict, expectation: dict) -> list[dict]:
         # A correction to a received card must not rewrite the source facts
         # against which the dispatcher is assessed.
         card = reference_card(value, expectation, at=source[-1].get('at'))
-        lost = [item['label'] for item in briefing_check(spoken, card)['checks']
+        accepted_report = source[-1].get('briefing_report') or {}
+        verified_report = briefing_check(spoken, card, accepted_report.get('semantic_evidence'))
+        lost = [item['label'] for item in verified_report['checks']
                 if not item['passed']]
         lost.extend(word for word in expectation.get('brief_keywords', [])
                     if not asserted(spoken, word))
         checks.append(_check("briefing_facts", "Сведения переданы без потерь", not lost,
                              ("В докладе не прозвучало: " + ", ".join(lost)) if lost else "",
                              critical=True, actual=spoken, missing=lost))
+        credited = next((item for item in verified_report['checks'] if item.get('granted_by') == 'model'), None)
+        if credited and not lost:
+            checks[-1].update(granted_by='model',
+                              detail=f"Тип происшествия засчитан по смыслу: «{credited['quote']}».")
     return checks
 
 

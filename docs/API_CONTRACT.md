@@ -1,5 +1,22 @@
 # API Contract
 
+## Live DDS incident meaning (2026-09-28)
+
+Text and SIP briefing reports may add `semantic_evidence` with `verdict`
+(`equivalent`, `insufficient`, `contradiction`), literal student `quote`, `detail`
+(`none`, `participants`, `injuries`, `object`, `hazard`, `stage`, `general`),
+`fingerprint` (SHA256 of the full transcript and expected incident), `provider`
+and `model`. Only an otherwise failed `incident_type` check can be credited;
+it adds `granted_by: model` and `quote`. Addresses/numbers remain rule-checked.
+Evidence is server-generated, never accepted in request bodies. New text or a
+changed reference invalidates it. Only local Ollama is used; mock, oversized
+input (>6000 characters), invalid output or timeout keep rule-based clarification.
+Semantic inference and free reply share the existing 15-second turn budget.
+Accepted telephone notifications retain `briefing_report` and full operator
+transcript (no previous 1000-character truncation), allowing DDS grading to reuse
+the same validated decision. GET/finish do not invoke inference. Other fields
+and endpoint request schemas are unchanged.
+
 Student workspace responses add `completion_missing: string[]`, the same outstanding
 requirements enforced by the existing finish action; no answers or future report text
 are exposed. DdsExpectation optionally accepts `update_keywords` (up to six update IDs

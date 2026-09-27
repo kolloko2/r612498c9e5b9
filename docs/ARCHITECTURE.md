@@ -1,5 +1,14 @@
 # Architecture
 
+Live DDS incident semantics stays inside Backend (`incident_meaning.py`), using
+the existing local phone model adapter. It can credit only the otherwise failed
+incident_type fact, never address/number checks. Strict JSON, a literal quote and
+a full-transcript/reference fingerprint bind the saved decision. Accepted
+briefing notifications retain the evidence, reused by DDS grading without a
+second inference. New speech invalidates prior evidence. Semantic assessment
+and free-form answering share the existing 15-second turn budget; mock, timeout
+or malformed output retain deterministic clarification. No new service or DB.
+
 Live dialogue has a separate local `PHONE_LLM_MODEL` from the authoring profile.
 Both use the existing Ollama adapter with CPU-only `num_gpu=0`; no new service.
 Phone requests use context4096, at most120 output tokens, bounded recent history
