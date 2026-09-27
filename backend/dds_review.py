@@ -58,12 +58,16 @@ def _service_events(value: dict, service: str) -> list[dict]:
 
 
 def _check(check_id: str, label: str, passed: bool | None, detail: str = "",
-           critical: bool = False, actual: str = "", missing: list[str] | None = None) -> dict:
+           critical: bool = False, actual: str = "", missing: list[str] | None = None,
+           reference: str = "") -> dict:
     result = {"id": check_id, "label": label, "passed": passed,
               "detail": detail, "critical": critical}
     if missing:
         # Текст ученика и недостающие факты — для смысловой доводки моделью.
         result.update(actual=actual, missing=list(missing))
+    if reference:
+        # Доклад бригады целиком: модель сверяет с ним смысл всей записи.
+        result.update(actual=actual, reference=reference)
     return result
 
 
@@ -148,7 +152,8 @@ def _update_reactions(value: dict, expectation: dict, service: str) -> list[dict
                                  f'Обстановка записана при статусе «{status}»', not lost,
                                  'В комментарии не отражено: ' + ', '.join(lost) if lost else
                                  'Существенные сведения доклада сохранены.', critical=True,
-                                 actual=comment, missing=lost))
+                                 actual=comment, missing=lost,
+                                 reference=event.get('detail', {}).get('text', '')))
     return checks
 
 
@@ -198,11 +203,14 @@ def _result_recorded(value: dict, service: str, expectation: dict) -> list[dict]
         return []
     comment = (closing["detail"].get("comment") or "").strip()
     missing = [word for word in expectation.get('result_keywords', []) if not asserted(comment, word)]
+    final_report = next((event.get('detail', {}).get('text', '') for event in reversed(value.get('events', []))
+                         if event.get('type') == 'situation.update'
+                         and event.get('detail', {}).get('unlocks_status') == closing['detail'].get('status')), '')
     return [_check("result", "Результат работ записан в комментарий",
                    len(comment) >= MIN_RESULT_CHARS and not missing,
                    "В итоге не отражено: " + ', '.join(missing) if missing else
                    ("Перед закрытием работ не записан итог." if len(comment) < MIN_RESULT_CHARS else ""),
-                   critical=True, actual=comment, missing=missing)]
+                   critical=True, actual=comment, missing=missing, reference=final_report)]
 
 
 def _spoken_reports(value: dict) -> list[dict]:

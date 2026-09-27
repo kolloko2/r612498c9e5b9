@@ -403,7 +403,7 @@ class Engine:
             history = [{"role": m["role"], "content": m["content"]} for m in state["messages"][-8:]]
             history.append({"role": "user", "content": utterance})
             try:
-                text = spoken_reply(await briefing_duty_reply(history, duty["card"], duty["service"],
+                text = spoken_reply(await briefing_duty_reply(history, duty.get("known_card") or duty["card"], duty["service"],
                                                               state["duty_report"]["missing"],
                                                               duty.get("teacher_corrections"),
                                                               duty.get("teacher_materials")))

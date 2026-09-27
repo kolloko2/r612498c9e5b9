@@ -52,6 +52,8 @@ def test_local_proxy_origin_and_server_token(monkeypatch):
         assert result.status_code==200
         assert len(requests)==1
         assert client.get('/assets/student.js').status_code==200
+        assert client.get('/favicon.ico').headers['content-type']=='image/x-icon'
+        assert client.get('/assets/favicon.svg').status_code==200
         assert client.get('/.env').status_code==404
         assert client.get('/instructor').status_code==200
         assert client.get('/assets/instructor.js').status_code==200

@@ -148,7 +148,7 @@ async def review(evaluation: dict) -> dict:
 __all__ = ["review", "reviewable", "REVIEWABLE_FIELDS", "MAX_REVIEWS"]
 
 
-MAX_DDS_FACTS = 6
+MAX_DDS_FACTS = 10
 
 
 async def review_dds(result: dict, expectation: dict) -> dict:
@@ -187,8 +187,31 @@ async def review_dds(result: dict, expectation: dict) -> dict:
                          detail=f"Засчитано по смыслу: «{check['actual'][:160]}» передаёт "
                                 f"{', '.join(check['missing'])}. Преподаватель может отменить это решение.")
             granted += 1
+    # Смысл всей записи: ключевые факты найдены, но передан ли доклад бригады
+    # без искажений? Модель сверяет запись с докладом целиком. Её вывод —
+    # предупреждение ученику и преподавателю, балл он не меняет: у малой модели
+    # бывают ложные «не совпадает», а итог остаётся за правилами и преподавателем.
+    warned = 0
+    for check in result.get("checks", []):
+        if budget <= 0:
+            break
+        if check.get("passed") is not True or not check.get("reference") or not str(check.get("actual", "")).strip():
+            continue
+        budget -= 1
+        try:
+            same, reason = await asyncio.wait_for(
+                _same_meaning(check["actual"], [check["reference"]]), timeout=TIMEOUT_SECONDS)
+        except Exception as error:
+            LOGGER.warning("Сверка смысла записи ДДС пропущена: %s: %s", type(error).__name__, error)
+            continue
+        check["meaning"] = {"conveyed": same, "reason": reason}
+        if not same:
+            warned += 1
+            note = f"ИИ: запись передаёт доклад бригады не полностью{': ' + reason if reason else ''}. Сверьте формулировку."
+            check["detail"] = (check.get("detail", "") + " " + note).strip()
     if granted:
         rescore(result, expectation)
-        result["semantic_review"] = {"granted_checks": granted, "provider": config["provider"],
-                                     "model": config["model"]}
+    if granted or warned:
+        result["semantic_review"] = {"granted_checks": granted, "meaning_warnings": warned,
+                                     "provider": config["provider"], "model": config["model"]}
     return result

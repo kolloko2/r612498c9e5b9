@@ -280,3 +280,14 @@ def test_negated_correct_value_is_not_a_correction():
     assert verdict(review(value, expectation), 'correction:house')['passed'] is False
     value['error_reports'] = [{'field': 'house', 'correct_value': 'дом 22', 'source': 'Старший бригады'}]
     assert verdict(review(value, expectation), 'correction:house')['passed'] is True
+
+
+def test_duty_officer_does_not_know_the_correction_before_the_brigade_reports():
+    from briefing import known_card, reference_card
+    value = {'card': {'street': 'Берзарина', 'house': '20'}, 'events': [],
+             'dds_expectation': {'expected_corrections': {'house': '22'}, 'correction_update_id': 'arrived'}}
+    assert reference_card(value)['house'] == '22' and known_card(value)['house'] == '20'
+    value['events'].append({'type': 'situation.update', 'at': '2026-09-18T10:03:00+00:00',
+                            'detail': {'id': 'arrived', 'unlocks_status': 'Прибытие'}})
+    assert known_card(value)['house'] == '22'
+    assert not any(key.startswith('_') for key in known_card(value))

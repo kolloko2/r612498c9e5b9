@@ -209,6 +209,15 @@ def reference_card(value: dict, expectation: dict | None = None, at: str | None 
                                   'description', 'incident_type'} and isinstance(answer, str)}}
 
 
+def known_card(value: dict, expectation: dict | None = None) -> dict:
+    """Карточка, какой её знает собеседник-дежурный: исправление бригады в ней
+    появляется только после доклада, который его открывает. Полноту доклада
+    проверяет reference_card, а собеседник не должен подсказывать ответ."""
+    card = reference_card(value, expectation)
+    unaware = card.get('_source_values') or {}
+    return {key: unaware.get(key, item) for key, item in card.items() if not key.startswith('_')}
+
+
 async def duty_reply(history: list[dict], card: dict, service: str, missing: list[str],
                      corrections: list[dict] | None = None,
                      materials: list[dict] | None = None) -> str:
@@ -373,6 +382,7 @@ def router(store, accounts, authorize, learning=None, voice=None):
             store.save(identifier, {'step': 0, 'seq': 0, 'messages': [], 'replies': {}, 'ended': False,
                                     'duty': {'service': body.service, 'greeting': greeting,
                                              'card': reference_card(value),
+                                             'known_card': known_card(value),
                                              'briefing_id': identifier, 'voice': briefing['voice'],
                                              'teacher_corrections': guidance_examples(
                                                  store, value.get('teacher_id'), value.get('dds_profile', 'general')),
@@ -463,7 +473,7 @@ def router(store, accounts, authorize, learning=None, voice=None):
         spoken = ' '.join(m['content'] for m in briefing['messages'] if m['role'] == 'user')
         briefing['report'] = check(spoken, reference_card(value))
         reply = await duty_reply([{'role': m['role'], 'content': m['content']} for m in briefing['messages']],
-                                 {k: v for k, v in reference_card(value).items() if not k.startswith('_')},
+                                 known_card(value),
                                  briefing['service'], briefing['report']['missing'],
                                  guidance_examples(store, value.get('teacher_id'), value.get('dds_profile', 'general')),
                                  material_context(store, value.get('teacher_id'), value.get('dds_profile', 'general'),

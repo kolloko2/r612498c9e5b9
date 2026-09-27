@@ -409,6 +409,7 @@ function renderDdsReview(){
   const mark=check.passed===true?'✓':check.passed===false?'×':'○';
   const line=element('p',`${mark} ${check.label}${check.detail?' — '+check.detail:''}`);
   if(check.passed===false)line.className=check.critical?'dds-critical':'dds-warning';
+  else if(check.meaning?.conveyed===false)line.className='dds-warning';
   box.append(line);
  }
  box.append(element('small',review.note,'subtle'));

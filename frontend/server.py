@@ -209,6 +209,10 @@ async def instructor_proxy(path: str, request: Request):
 
 app.mount('/assets', StaticFiles(directory=Path(__file__).with_name('assets')), name='assets')
 
+@app.get('/favicon.ico', include_in_schema=False)
+async def favicon():
+    return FileResponse(Path(__file__).with_name('assets') / 'favicon.ico', media_type='image/x-icon')
+
 @app.api_route('/api/v1/student/{path:path}', methods=['GET', 'POST', 'PUT'])
 async def student_proxy(path: str, request: Request):
     # This namespace is exclusively backed by Backend; the browser never calls Voice.

@@ -167,3 +167,21 @@ async def test_dds_fact_written_in_own_words_is_granted(monkeypatch):
     result['checks'][1].pop('granted_by')
     graded = await semantic_grading.review_dds(result, {'pass_percent': 100})
     assert graded['checks'][1]['passed'] is False
+
+
+@pytest.mark.asyncio
+async def test_whole_record_meaning_is_a_warning_not_a_grade(monkeypatch):
+    import semantic_grading
+    monkeypatch.setattr(semantic_grading.llm, 'configuration', lambda: {'provider': 'ollama', 'configured': True, 'model': 'm'})
+
+    async def same(actual, expected):
+        return False, 'не сказано, что вода подана'
+    monkeypatch.setattr(semantic_grading, '_same_meaning', same)
+    result = {'passed': True, 'score_percent': 100.0, 'checks': [
+        {'id': 'result', 'label': 'Результат', 'passed': True, 'critical': True, 'detail': '',
+         'actual': 'повреждение устранено', 'reference': 'Повреждение устранено. Водоснабжение восстановлено.'}]}
+    graded = await semantic_grading.review_dds(result, {'pass_percent': 100})
+    check = graded['checks'][0]
+    assert check['passed'] is True and graded['passed'] is True
+    assert check['meaning'] == {'conveyed': False, 'reason': 'не сказано, что вода подана'}
+    assert 'ИИ: запись передаёт доклад бригады не полностью' in check['detail']
