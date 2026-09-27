@@ -52,12 +52,15 @@ def test_sip_query_waits_for_playback(classroom, monkeypatch):
     assert c['client'].post(f'/api/v1/student/sessions/{sid}/updates/dispatched/confirm', headers=c['headers']['student1']).status_code == 409
 
 
-def test_frozen_handling_budget_is_used():
-    value = {'exercise_mode': 'actions', 'handling_limit_seconds': 320,
-             'evaluation': {'timing': {'elapsed_seconds': 260, 'response_seconds': 15}}}
+def test_dds_norms_have_no_overall_handling_limit():
+    # Работы могут идти часами: нормируется только первая запись (3 мин).
+    value = {'exercise_mode': 'actions', 'owner_service': 'Служба 101', 'first_record_seconds': 40,
+             'evaluation': {'timing': {'elapsed_seconds': 7200, 'response_seconds': 15}}}
     apply_default_norms(value)
-    assert value['evaluation']['timing']['within_limit'] is True
-    assert value['evaluation']['timing']['response_limit_seconds'] == 30
+    timing = value['evaluation']['timing']
+    assert timing['within_limit'] is True and timing['limit_seconds'] == 180
+    assert timing['first_record_seconds'] == 40
+    assert timing['response_limit_seconds'] == 30 and timing['response_within_limit'] is True
 
 
 def test_operational_reports_start_after_assignment_not_receipt():

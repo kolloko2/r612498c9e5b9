@@ -1,0 +1,10 @@
+mark('Назначение бригады и телефонный доклад');
+await page.keyboard.press('Escape');
+await page.locator('#cardResponseTools').click();
+await page.locator('#assignCrew').click();
+await page.waitForTimeout(1200);
+await page.locator('#openBriefing').click();
+await page.locator('#startBriefing').click();
+mark('SIP · соединение с дежурным');
+await page.waitForTimeout(1000);
+return await shot();

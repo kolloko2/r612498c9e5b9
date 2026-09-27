@@ -116,3 +116,17 @@ body.alt-hints .options button{outline:1px dotted var(--blue)}
 .response-hint{margin:6px 0 0;font-size:11px;color:#d7dee2}
 .dds-critical{color:#a32b22;font-weight:bold}
 .dds-warning{color:#8a5a1a}
+
+/* Аудит интерфейса 27.09: читаемость на тёмном и сером фоне, текст в границах кнопок. */
+.training-strip a{color:#d6dfe4;text-decoration:underline}
+.training-strip a:hover,.training-strip a:focus-visible{color:#fff}
+.incidents th{color:#f4f7f9}
+.card-footer #processed,.card-footer #finish{white-space:normal;overflow-wrap:normal;word-break:normal;line-height:1.15}
+.dds-mode #processed,.dds-mode #finish{max-width:none;min-width:88px;width:auto}
+#latestReport{margin:6px 0 2px;padding:6px 8px;border-left:3px solid #f49b79;background:#ffffff14;font-size:12px;line-height:1.4}
+#latestReport b{display:block;font-size:11px;color:#f7c2ae;margin-bottom:2px}
+.briefing-start input,.briefing-start select,#errorReportDialog input,#errorReportDialog select{height:36px;padding:6px 8px;border:1px solid #b7bdc1;background:#fff;color:#303638}
+dialog input::placeholder,dialog textarea::placeholder,.response-input input::placeholder{color:#8a949a;-webkit-text-fill-color:#8a949a;opacity:1}
+#errorReportDialog table{width:100%;margin-top:14px;border-collapse:collapse;font-size:12px}
+#errorReportDialog th,#errorReportDialog td{padding:5px 6px;text-align:left;border-bottom:1px solid #c7ccd0}
+#errorReportDialog table:has(tbody:empty){display:none}

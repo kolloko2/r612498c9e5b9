@@ -8,9 +8,9 @@ import httpx
 
 logger = logging.getLogger('uvicorn.error.llm')
 
-# Профили выбираются администратором под доступное железо. Требования к серверу в
-# ТЗ заданы диапазоном и без видеокарты; профили авторинга и телефонная модель
-# используют CPU, независимо от наличия видеокарты.
+# Профили выбираются администратором под доступное железо. Минимальный сервер
+# по ТЗ — без видеокарты, поэтому всё работает на CPU; видеокарту заказчик
+# разрешил (Q&A 16.09) и она ускоряет ответы. Устройство — LLM_DEVICE.
 # Модель разворачивается локально через Ollama: внешние сервисы контуру запрещены.
 PROFILES = {
     "mock": {"model": "scenario-mock", "context": 0, "title": "Без модели",
@@ -36,12 +36,27 @@ def phone_configuration():
     return config
 
 
+DEVICES = {
+    'auto': 'Автоматически: видеокарта, если есть, иначе процессор',
+    'cpu': 'Только процессор (минимальный сервер по ТЗ)',
+    'gpu': 'Видеокарта (все слои модели на GPU)',
+}
+
+
+def device() -> str:
+    value = os.getenv('LLM_DEVICE', 'auto').strip().lower()
+    return value if value in DEVICES else 'auto'
+
+
 def local_options(config, max_tokens, *, phone=False):
     options = {'num_ctx': config.get('context') or 8192,
-               'num_predict': max_tokens, 'temperature': 0.2, 'presence_penalty': 0,
-               # CPU is the deployment target, including on a GPU-equipped PC.
-               'num_gpu': 0}
-    if phone:
+               'num_predict': max_tokens, 'temperature': 0.2, 'presence_penalty': 0}
+    selected = device()
+    # auto (-1): Ollama сама выгружает слои на видеокарту, а без неё работает на
+    # CPU. Значение передаётся явно: иначе модель, загруженная ранее в режиме
+    # cpu (keep_alive=-1), так и осталась бы на процессоре.
+    options['num_gpu'] = {'cpu': 0, 'gpu': 999}.get(selected, -1)
+    if phone and selected != 'gpu':
         options['num_thread'] = max(1, min(32, int(os.getenv('PHONE_LLM_THREADS', '6'))))
     return options
 
@@ -52,6 +67,11 @@ async def warm_phone_model():
     if config['provider'] != 'ollama':
         return
     async with httpx.AsyncClient(timeout=90, trust_env=False) as client:
+        # Смена LLM_DEVICE перезапускает Backend. Модель, загруженная с прежним
+        # устройством (keep_alive=-1), выгружается, иначе Ollama продолжит
+        # работать на старом устройстве.
+        await client.post(os.getenv('OLLAMA_URL', 'http://127.0.0.1:11434') + '/api/generate',
+                          json={'model': config['model'], 'keep_alive': 0})
         response = await client.post(os.getenv('OLLAMA_URL', 'http://127.0.0.1:11434') + '/api/chat',
             json={'model': config['model'], 'messages': [], 'stream': False,
                   'keep_alive': -1, 'options': local_options(config, 120, phone=True)})
@@ -128,9 +148,9 @@ async def complete(messages, *, max_tokens=220, json_mode=False, phone=False):
             text = response.json()["message"]["content"]
             if phone:
                 data = response.json()
-                logger.info('phone_llm model=%s elapsed_ms=%d prompt_tokens=%s output_tokens=%s reason=%s cpu_only=true',
+                logger.info('phone_llm model=%s elapsed_ms=%d prompt_tokens=%s output_tokens=%s reason=%s device=%s',
                             config['model'], int((time.monotonic() - started) * 1000),
-                            data.get('prompt_eval_count'), data.get('eval_count'), data.get('done_reason'))
+                            data.get('prompt_eval_count'), data.get('eval_count'), data.get('done_reason'), device())
     if not isinstance(text, str) or not text.strip():
         raise ValueError("Empty model reply")
     if max_tokens > 220:

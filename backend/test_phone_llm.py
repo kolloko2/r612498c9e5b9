@@ -10,6 +10,7 @@ async def test_phone_model_separate_from_authoring_and_cpu(monkeypatch):
     monkeypatch.setenv('LLM_PROFILE', 'standard')
     monkeypatch.setenv('PHONE_LLM_MODEL', 'test-phone')
     monkeypatch.setenv('OLLAMA_URL', 'http://local-model:11434')
+    monkeypatch.setenv('LLM_DEVICE', 'cpu')
     calls = []
     class Response:
         def raise_for_status(self):
@@ -30,8 +31,11 @@ async def test_phone_model_separate_from_authoring_and_cpu(monkeypatch):
     await llm.warm_phone_model()
     assert await llm.reply([{'role':'user','content':'Что видно?'}], max_tokens=80) == 'Принято.'
     await llm.complete([{'role':'user','content':'Сценарий'}], max_tokens=1000)
-    warm, phone, author = [payload for _, payload in calls]
-    assert all(url == 'http://local-model:11434/api/chat' for url, _ in calls)
+    unload, *chat = calls
+    # Прогрев сначала выгружает модель, загруженную с прежним LLM_DEVICE.
+    assert unload == ('http://local-model:11434/api/generate', {'model': 'test-phone', 'keep_alive': 0})
+    warm, phone, author = [payload for _, payload in chat]
+    assert all(url == 'http://local-model:11434/api/chat' for url, _ in chat)
     assert warm['model'] == phone['model'] == 'test-phone'
     assert author['model'] == 'qwen3:8b'
     assert phone['options']['num_predict'] == 80
@@ -63,3 +67,13 @@ async def test_mock_warmup_does_not_contact_ollama(monkeypatch):
     monkeypatch.setattr(llm.httpx, 'AsyncClient', forbidden)
     await llm.warm_phone_model()
     assert llm.phone_configuration()['provider'] == 'mock'
+
+
+@pytest.mark.parametrize('value, gpu, threads', [
+    ('cpu', 0, True), ('gpu', 999, False), ('auto', -1, True), ('bogus', -1, True)])
+def test_device_switch(monkeypatch, value, gpu, threads):
+    """auto передаёт -1: Ollama сама берёт видеокарту или процессор."""
+    monkeypatch.setenv('LLM_DEVICE', value)
+    options = llm.local_options({'context': 4096}, 80, phone=True)
+    assert options.get('num_gpu') == gpu
+    assert ('num_thread' in options) is threads

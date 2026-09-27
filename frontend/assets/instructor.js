@@ -1,7 +1,7 @@
 'use strict';
 const el=id=>document.getElementById(id);
 let scenarios=[],revision=0,dirty=false,busy=false,loadedId='';
-const fieldNames={caller_name:'Имя заявителя',street:'Улица',house:'Дом',apartment:'Квартира',description:'Описание',incident_type:'Итоговый тип происшествия',injured:'Пострадавшие',no_access:'Нет доступа',services:'Службы'};
+const fieldNames={caller_name:'Имя заявителя',street:'Улица',house:'Дом',apartment:'Квартира',description:'Описание',incident_type:'Итоговый тип происшествия',injured:'Пострадавшие',no_access:'Нет доступа',services:'Службы',city:'Населённый пункт',district:'Район',area:'Округ',object:'Объект',building:'Корпус',structure:'Строение',entrance:'Подъезд',floor:'Этаж',address_note:'Описательный адрес',phone:'Телефон',classifier_id:'Код классификатора',caller_status:'Статус заявителя'};
 function status(text,error=false){el('status').textContent=text;el('status').className=error?'error':'';}
 function changed(){dirty=true;status('Есть несохранённые изменения');}
 async function api(path,method='GET',body){const response=await fetch(path,{method,headers:{'Content-Type':'application/json','X-Voice-UI':'1'},...(body===undefined?{}:{body:JSON.stringify(body)})});if(response.status===401)location.replace('/login');if(response.status===403)location.replace('/portal');const data=await response.json();if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Проверьте критерии: поля, режимы, допустимые ответы и веса.');return data;}

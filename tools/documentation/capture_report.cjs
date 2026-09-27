@@ -1,0 +1,22 @@
+const {chromium}=require('playwright');
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'../..');
+(async()=>{
+ const browser=await chromium.launch({headless:true});
+ const ctx=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:1440,height:960}});
+ const page=await ctx.newPage();
+ const password=fs.readFileSync(path.join(root,'tools/seed_demo.py'),'utf8').match(/^PASSWORD = "([^"]+)"/m)[1];
+ await page.goto('https://127.0.0.1:3000/login');
+ await page.locator('[name=username]').fill('kursant1');
+ await page.locator('[name=password]').fill(password);
+ await page.locator('button[type=submit]').click();await page.waitForURL('**/portal');
+ const {session_id:sid}=JSON.parse(fs.readFileSync(path.join(root,'artifacts/cpu-phone-2026-09-27/sip-final2/result.json')));
+ await page.evaluate(s=>localStorage.setItem('studentSession',s),sid);
+ await page.goto('https://127.0.0.1:3000/');
+ await page.addLocatorHandler(page.locator('.onboarding'),async()=>page.locator('[data-onboarding="stop"]').click());
+ const detail=await (await page.request.get('https://127.0.0.1:3000/api/v1/student/sessions/'+sid)).json();
+ await page.getByRole('button',{name:'Открыть карточку '+detail.number,exact:true}).click();
+ await page.locator('#audit').click();await page.locator('#auditDialog').waitFor({state:'visible'});
+ await page.screenshot({path:path.join(root,'artifacts/documentation-2026-09-27/screens/08_report.png')});
+ await browser.close();console.log('Completed session report captured');
+})().catch(e=>{console.error(e.message);process.exitCode=1});

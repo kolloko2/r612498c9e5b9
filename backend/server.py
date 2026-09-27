@@ -15,8 +15,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocke
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 import llm
 from llm import complete, configuration, reply as speak
-from briefing import check as briefing_check, duty_reply as briefing_duty_reply
-from field_dialogue import answer as field_answer
+from briefing import check as briefing_check, duty_reply as briefing_duty_reply, SUPERIOR_TITLE
+from field_dialogue import answer as field_answer, crew_speech
 from categories import CategoryId
 from curriculum import Difficulty, DdsProfile
 from database import connect_database
@@ -76,6 +76,7 @@ class DdsExpectation(BaseModel):
     refusal_keywords: list[str] = Field(default_factory=list, max_length=6)
     brief_keywords: list[str] = Field(default_factory=list, max_length=8)
     result_keywords: list[str] = Field(default_factory=list, max_length=8)
+    update_keywords: dict[str, Annotated[list[Annotated[str, StringConstraints(min_length=1, max_length=120)]], Field(max_length=8)]] = Field(default_factory=dict, max_length=6)
     # Teacher-verified facts independent of the incoming 112 card. Use when
     # the lesson deliberately contains an error the DDS can discover.
     expected_corrections: dict[str, Annotated[str, StringConstraints(max_length=200)]] = Field(default_factory=dict)
@@ -363,10 +364,10 @@ class Engine:
                              if m['role'] == 'assistant'), '')
                 text = 'Связь восстановлена. ' + (last or 'Продолжайте, пожалуйста.')
             elif field_report:
-                text = f"{field_report['source']}. {field_report['text']}"
+                text = crew_speech(f"{field_report['source']}. {field_report['text']}")
             elif duty:
                 # Доклад из ДДС в службу: собеседник принимает информацию, а не просит помощи.
-                text = f"Дежурный, {duty['service']}. Слушаю вас."
+                text = f"{duty.get('greeting') or SUPERIOR_TITLE + ', ' + duty['service']}. Слушаю вас."
             else:
                 requested = event.get("payload", {}).get("scenario_id")
                 scenario = state.get("scenario") or (self.store.scenario(requested) if requested else self.store.first_enabled())
@@ -383,7 +384,7 @@ class Engine:
                 self.store.save(sid, state)
                 return None
             state["messages"].append({"role": "user", "content": utterance})
-            text = spoken_reply(await field_answer(field_report, state["messages"]))
+            text = spoken_reply(crew_speech(await field_answer(field_report, state["messages"])))
         elif duty:
             utterance = event["payload"]["text"].strip()[:4000]
             if not utterance:

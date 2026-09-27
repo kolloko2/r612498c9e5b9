@@ -1,0 +1,16 @@
+mark('Итоговый доклад · результат работ');
+await page.getByRole('button',{name:'Подтвердить услышанный доклад',exact:true}).first().click();
+await page.waitForTimeout(1000);
+if(!await page.locator('#responseStatus').isVisible())await page.locator('#cardResponseTools').click();
+await page.locator('#responseStatus').selectOption({label:'Работы завершены'});
+await page.locator('#responseComment').fill('Ребёнок осмотрен. Результаты осмотра переданы медицинской службе, вызов бригады завершён.');
+await page.locator('#addResponse').click();
+await page.waitForTimeout(2200);
+mark('Завершение происшествия и оценка');
+await page.locator('#processed').click();
+await page.waitForTimeout(1000);
+await page.locator('#finish').click();
+await page.locator('#confirmFinish').click();
+await page.locator('#auditDialog').waitFor({state:'visible'});
+await page.waitForTimeout(5000);
+return await shot();

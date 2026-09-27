@@ -60,7 +60,7 @@ def main():
             for student in students:
                 w=api(student,'POST',f'/student/lessons/{lid}/next',{})
                 base='/student/sessions/'+w['id']
-                api(student,'POST',base+'/services',{'service':w['owner_service'],'status':'Принята','message_id':str(uuid4())})
+                api(student,'POST',base+'/services',{'service':w['owner_service'],'status':'Принята','comment':'Принято в работу','message_id':str(uuid4())})
                 api(student,'POST',base+'/crew',{'crew_id':w['crew_options'][0]['id'],'decision_by':'dispatcher','message_id':str(uuid4())})
                 work.append(base)
             deadline=time.monotonic()+100

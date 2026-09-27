@@ -30,6 +30,7 @@ async function serve(page){
    else if(p==='/api/v1/student/routing/preview')data={rules_version:'full-v2',source_row:null,suggestions:[],excluded:[],unresolved:[],warnings:[]};
    else if(p==='/api/v1/student/assignments'||p==='/api/v1/student/lessons')data=[];
    else if(p==='/api/v1/student/sessions')data=cards.map(copy);
+   else if(p==='/api/v1/student/inbox/poll')data=[];
    else {
     const match=p.match(/^\/api\/v1\/student\/sessions\/([^/]+)(?:\/(card|services|notifications|links|forward|processed))?$/);
     if(!match)throw Error('Unexpected API '+request.method()+' '+p);
@@ -84,7 +85,7 @@ async function serve(page){
   await page.locator('#mapDialog button').first().click();
   await expect(page.locator('#mapDialog')).toBeHidden();
 
-  await expect(page.locator('#responseStatus option')).toHaveText(['Принята','Не принята']);
+  await expect(page.locator('#responseStatus option')).toHaveText(['Выберите статус…','Принята','Не принята']);
   await page.locator('#responseStatus').selectOption('Принята');await page.locator('#responseComment').fill('Принял учебное сообщение');await page.locator('#addResponse').click();
   await expect(page.locator('#serviceHistory')).toContainText('Принята');
   if(!serviceBody?.message_id||serviceBody.status!=='Принята'||serviceBody.service!=='Служба 101')throw Error('Invalid service action payload');

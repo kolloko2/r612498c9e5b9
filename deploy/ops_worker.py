@@ -56,6 +56,12 @@ def _atomic_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
+        # On Linux the host worker may be root while Backend/backup use the
+        # state directory's unprivileged owner. Keep private mode 0600, but
+        # publish files readable by that owner rather than root alone.
+        if os.name == 'posix' and os.geteuid() == 0:
+            owner = path.parent.stat()
+            os.fchown(fd, owner.st_uid, owner.st_gid)
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
             json.dump(value, stream, ensure_ascii=False, separators=(",", ":"))
             stream.write("\n")

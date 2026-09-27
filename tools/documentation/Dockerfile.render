@@ -1,0 +1,4 @@
+FROM python:3.12-slim-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends libreoffice-writer poppler-utils fonts-liberation && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir pdf2image
+WORKDIR /work

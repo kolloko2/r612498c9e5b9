@@ -6,6 +6,12 @@ from server import Engine, Store
 from uuid import uuid4
 
 
+def test_crew_speech_removes_callsign_but_preserves_facts():
+    from field_dialogue import crew_speech
+    assert crew_speech('Старший бригады 01-3. Ребёнку 11 лет, дом 13.') == 'Старший бригады. Ребёнку 11 лет, дом 13.'
+    assert crew_speech('Бригада №17 прибыла.') == 'Бригада прибыла.'
+
+
 def test_context_excludes_future_and_grading():
     context = report_context({'initial_card': {'street': 'Учебная', 'house': '7'},
                               'dds_expectation': {'secret': True},

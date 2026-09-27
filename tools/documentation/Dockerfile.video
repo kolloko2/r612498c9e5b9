@@ -1,0 +1,9 @@
+FROM trainer112-doc-render:local
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources && apt-get update && apt-get install -y --no-install-recommends chromium nodejs npm ffmpeg libnss3-tools fonts-liberation fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
+WORKDIR /recorder
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN npm install node@22 playwright@1.62.1
+ENV PATH=/recorder/node_modules/node/bin:$PATH
+RUN node node_modules/playwright/cli.js install ffmpeg
+ENV NODE_PATH=/recorder/node_modules
+CMD ["sleep", "infinity"]

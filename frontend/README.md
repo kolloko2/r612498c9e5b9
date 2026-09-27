@@ -1,5 +1,17 @@
 # Local web console
 
+В редакторе эталона ДДС можно задать факты комментария к каждому докладу:
+`working = повреждена труба; перекрыли воду`. Статус в АРМ не выбирается
+автоматически, в том числе после принятия карточки: следующее решение за учеником.
+
+DDS practical coaching (`assets/dds-coach.js`) is opt-in for an existing card and
+auto-enabled for the introductory `dds-guided-practice-v1` scenario. Steps derive
+from persisted actions and already delivered reports, never the private rubric.
+Finish displays the backend completion checklist. The crew is the default phone
+recipient after assignment; status and comment entry remain manual.
+Regression: `node test_dds_coach.cjs`; `BROWSER_PATH` selects an installed Chromium
+for `ARM_DDS_PREVIEW=1 node test_briefing_browser.cjs`.
+
 27 September: DDS source-screen alignment refines the call row, incident actions,
 service tiles, per-service history and compact response strip without copying the
 browser chrome. Live ARM checks cover 1920×1080, 1280×720 and 760×900. The narrow

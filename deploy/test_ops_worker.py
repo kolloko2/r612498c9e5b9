@@ -12,6 +12,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ops_worker import OperationsWorker, SingleInstanceLock  # noqa: E402
 
 
+@pytest.mark.skipif(os.name != 'posix' or getattr(os, 'geteuid', lambda: 1)() != 0,
+                    reason='requires a Linux root worker')
+def test_root_snapshot_keeps_shared_directory_owner(tmp_path):
+    from ops_worker import _atomic_json
+    folder = tmp_path / 'shared'
+    folder.mkdir()
+    os.chown(folder, 10001, 10001)
+    target = folder / 'status.json'
+    _atomic_json(target, {'sampled_at': 1})
+    assert target.stat().st_uid == 10001
+    assert target.stat().st_gid == 10001
+    assert target.stat().st_mode & 0o777 == 0o600
+
+
 def make_root(tmp_path: Path) -> Path:
     (tmp_path / "deploy" / "operations" / "requests").mkdir(parents=True)
     (tmp_path / "deploy" / "backups").mkdir(parents=True)

@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import json
 import ssl
 import sys
@@ -230,6 +231,26 @@ def ensure_lessons(teacher: Client, group_id: str, scenarios: list[str],
     _, lessons = teacher.call("GET", "/instructor/lessons")
     titles = {lesson["title"] for lesson in lessons}
     places = {student_ids["kursant1"]: "АРМ-1", student_ids["kursant2"]: "АРМ-2"}
+
+    # Первое занятие — пошаговое обучение: наставник на экране показывает, куда
+    # нажать, какой статус поставить и что записать по каждому докладу бригады.
+    guided_title = "Обучение: первое занятие ДДС с подсказками"
+    if guided_title not in titles:
+        guided = json.loads((Path(__file__).parent / "data" / "dds_guided_practice.json").read_text(encoding="utf-8"))
+        if guided["id"] not in {item["id"] for item in teacher.catalog()}:
+            saved = teacher.base_path
+            teacher.base_path = "/api"
+            try:
+                teacher.call("POST", "/scenarios", guided, expect=(200, 201, 409))
+            finally:
+                teacher.base_path = saved
+        _, lesson = teacher.call("POST", "/instructor/lessons", {
+            "title": guided_title, "group_id": group_id, "mode": "actions",
+            "prefilled_scenario_ids": [guided["id"]], "cards_per_student": 1,
+            "workstations": places, "transport": "text",
+        })
+        teacher.call("POST", f"/instructor/lessons/{lesson['id']}/start")
+        print("создано и запущено занятие:", guided_title)
 
     dds_title = "ДДС: дежурная смена (демо)"
     if dds_title not in titles and len(scenarios) >= 4:

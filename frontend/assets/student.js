@@ -176,7 +176,7 @@ for (const input of fields) input.addEventListener('input', () => {
  if(routingCatalog?.flags.some(flag=>flag.id===input.dataset.field))guarded(refreshRouting);
 });
 function confirmLeave() { return !dirty || confirm('Изменения карточки не сохранены. Продолжить без сохранения?'); }
-function journal() { if (!confirmLeave()) return; dirty = false; $('cardPanel').hidden = true; $('journalPanel').hidden = false; $('journal').classList.add('selected'); $('openCard').classList.remove('selected'); guarded(loadSessions); }
+function journal() { if (!confirmLeave()) return; dirty = false; $('cardPanel').hidden = true; window.updateDdsCoach?.(current); $('journalPanel').hidden = false; $('journal').classList.add('selected'); $('openCard').classList.remove('selected'); guarded(loadSessions); }
 async function loadSessions() {
  const next=[];for(let offset=0;offset<10000;offset+=200){const batch=await api(`student/sessions?limit=200&offset=${offset}`);next.push(...batch);if(batch.length<200)break;if(next.length===10000)notify('Загружены первые 10 000 карточек; более старые записи не загружены.',true);}
  if(JSON.stringify(next)!==JSON.stringify(sessions)){sessions=next;const selected=$('filterIncidentStatus').value,statuses=[...new Set(sessions.map(s=>s.incident_status).filter(Boolean))];$('filterIncidentStatus').replaceChildren(new Option('все статусы',''));for(const value of statuses)$('filterIncidentStatus').add(new Option(value,value));$('filterIncidentStatus').value=selected;renderRows();}
@@ -196,9 +196,9 @@ function renderRows() {
  $('rows').replaceChildren(); $('empty').hidden = sessions.length > 0; $('count').textContent = `Записей: ${list.length}`;
  for (const s of list) {
   const row = document.createElement('tr'),detailId=`journal-detail-${s.id}`,expanded=expandedJournalRows.has(s.id);row.tabIndex=0;row.setAttribute('aria-label', `Происшествие ${s.number}`);
-  const awaitingReceipt=s.exercise_mode==='actions'&&s.owner_service&&!s.receipt_decided_at&&s.status!=='Завершена';
+  const awaitingReceipt=s.exercise_mode==='actions'&&s.owner_service&&!s.opened_at&&s.status!=='Завершена';
   const receiptSeconds=awaitingReceipt?Math.ceil(30-(Date.now()-new Date(s.created_at).getTime())/1000):null;
-  const receiptLabel=awaitingReceipt?(receiptSeconds>0?` · ${receiptSeconds} с до подтверждения`:' · подтверждение просрочено'):'';
+  const receiptLabel=awaitingReceipt?(receiptSeconds>0?` · ${receiptSeconds} с на открытие`:' · открытие просрочено'):'';
   const toggle=element('button',expanded?'⌃':'⌄','row-toggle');toggle.type='button';toggle.setAttribute('aria-expanded',String(expanded));toggle.setAttribute('aria-controls',detailId);toggle.setAttribute('aria-label',`${expanded?'Скрыть':'Показать'} сведения карточки ${s.number}`);const toggleCell=element('td');toggleCell.append(toggle);row.append(toggleCell);
   const registration=s.registration||{},values=[(s.linked_cards||[]).length||'',s.card.bookmarked?'▮':'',s.card.important?'!':'',s.card.emergency?'ϟ':'',registration.operator||'—',registration.workstation||'—',s.number,new Date(s.created_at).toLocaleDateString('ru-RU'),new Date(s.created_at).toLocaleTimeString('ru-RU'),s.card.incident_type||'Не классифицировано',s.card.injured?'Да':'Нет',`${s.incident_status||'Новая'} / ${s.status}${receiptLabel}`,addressText(s.card)];
   values.forEach((v,index)=>{const cell=element('td',v);if(index===11&&['Не оповещено','Отказ','Не завершено'].includes(s.incident_status))cell.classList.add('incident-status-abnormal');row.append(cell);});
@@ -218,7 +218,7 @@ function renderCard() {
   const finished = current.status === 'Завершена', readonly = Boolean(viewing || finished || current.card_locked);
  if(viewing||finished)savedServices=new Set(current.card.services||[]);
  $('cardPanel').classList.toggle('readonly',readonly); $('cardPanel').classList.remove('dirty');
- for (const input of fields) { if(input.type==='checkbox') input.checked=!!current.card[input.dataset.field]; else input.value=current.card[input.dataset.field] ?? ''; input.disabled=readonly; }
+ for (const input of fields) { if(input.type==='checkbox') input.checked=!!current.card[input.dataset.field]; else input.value=current.card[input.dataset.field] ?? ''; input.disabled=readonly||(current.exercise_mode==='actions'&&!(current.dds_editable_fields||[]).includes(input.dataset.field)); }
  for(const [key,short,long] of [['injured','Пострадавшие','Пострадавшие'],['refused','Отказ от скорой','Нет на месте / Отказ от скорой'],['no_access','Заблокированные','Нет доступа / Заблокированные']]){
   const input=fields.find(field=>field.dataset.field===key);
   input.parentElement.replaceChildren(input,document.createTextNode(current.exercise_mode==='actions'?short:long));
@@ -233,7 +233,9 @@ function renderCard() {
  $('save').hidden=readonly; $('edit').hidden=!readonly||finished||current.card_locked; $('finish').disabled=finished;$('processed').disabled=finished||!current.revision||!!current.processed_at;
  $('cardView').disabled=readonly||!current.revision;
  $('cardView').classList.toggle('active',readonly);
- $('cardSupplement').hidden=finished||current.card_locked;
+ $('cardSupplement').hidden=finished||current.card_locked||current.exercise_mode==='actions';
+ // Поля карточки 112 ДДС не правит: об ошибке сообщает в 112 (ответ заказчика 27.09.2026).
+ if(current.exercise_mode==='actions')$('edit').hidden=true;
  $('cardSupplement').disabled=!readonly;
  $('cardSupplement').classList.toggle('active',!readonly);
  $('clearAddress').disabled=readonly; $('addService').hidden=readonly||current.exercise_mode==='actions'; $('responseSection').hidden=!current.revision;
@@ -284,20 +286,23 @@ function renderCard() {
    }finally{progress.disabled=current?.status==='Завершена'||!current?.assigned_crew;}
   });
   $('responseSection').querySelector('.response-tools').append(progress);
-  const tools=element('button','✎');tools.id='cardResponseTools';tools.type='button';
+  const tools=element('button','Реагирование');tools.id='cardResponseTools';tools.type='button';
   tools.setAttribute('aria-label','Действия карточки и реагирование');
   tools.onclick=()=>{const panel=$('cardPanel');if(panel.classList.contains('response-compact')){panel.classList.remove('response-compact');panel.classList.add('response-open');}else panel.classList.toggle('response-open');};
   $('closeCard').before(tools);
+  const practice=element('button','Практика с подсказками');practice.id='cardPractice';practice.type='button';
+  practice.onclick=()=>window.startDdsCoach?.();$('closeCard').before(practice);
  }
+ $('cardPractice').hidden=!dds;
+ window.updateDdsCoach?.(current);
  $('modeNote').textContent=dds?'АРМ диспетчера ДДС':'Расширенный режим: приём вызова 112';
  $('requestProgress').hidden=!dds;$('requestProgress').disabled=finished||!current.assigned_crew;
  let evidence=$('correctionEvidence');if(!evidence){evidence=element('div');evidence.id='correctionEvidence';}
  $('cardPanel').querySelector('.phone-row').after(evidence);
- evidence.replaceChildren();for(const text of current.correction_evidence||[])evidence.append(element('p','Уточнение от источника: '+text));
- if(dds&&current.handling_limit_seconds)$('timer').title=`Приём: 30 с. Обработка с учётом вводных: ${current.handling_limit_seconds} с.`;
+ evidence.replaceChildren();for(const text of current.correction_evidence||[])evidence.append(element('p','Сведения с места — сверьте с карточкой и при ошибке сообщите в 112: '+text));
  $('conversation').hidden=dds;
  if(dds){$('messageForm').hidden=true;$('speak').disabled=true;$('callStatus').textContent='карточка передана Службой 112';}
- $('openNotification').disabled=finished||!current.revision;$('openForward').hidden=dds;$('openForward').disabled=dds||finished||!current.revision;$('openBriefing').disabled=finished||!current.revision;$('openLinks').disabled=finished||!current.revision;$('openReminder').disabled=finished;$('printCard').hidden=!current.revision;$('printCard').disabled=false;renderSurvey(); renderServices();renderCrew();renderDialogue();renderServiceHistory();renderNotificationHistory();renderLinkedCards();renderSituationUpdates();tick();
+ $('openNotification').disabled=finished||!current.revision;$('openForward').hidden=dds;$('openForward').disabled=dds||finished||!current.revision;$('openBriefing').disabled=finished||!current.revision;$('openErrorReport').hidden=!dds;$('openErrorReport').disabled=finished||!current.revision||current.card_locked;$('openLinks').disabled=finished||!current.revision;$('openReminder').disabled=finished;$('printCard').hidden=!current.revision;$('printCard').disabled=false;renderSurvey(); renderServices();renderCrew();renderDialogue();renderServiceHistory();renderNotificationHistory();renderLinkedCards();renderSituationUpdates();tick();
  const pending=storedMessage(current.id);if(pending&&current.transport==='text'&&current.status!=='Завершена'){$('operatorText').value=pending.text;$('send').textContent='Повторить отправку';}
  if(!finished&&current.lesson_id&&current.transport==='sip'&&!current.call_id&&!attemptedLessonCalls.has(current.id)){
   attemptedLessonCalls.add(current.id);startSipCall();
@@ -329,7 +334,8 @@ function renderSituationUpdates(){
      situation_updates:data.situation_updates,events:data.events,
      allowed_service_statuses:data.allowed_service_statuses,
      field_report_calls:data.field_report_calls});
-    renderSituationUpdates();renderServices();
+    current.completion_missing=data.completion_missing;
+    renderSituationUpdates();renderServices();window.updateDdsCoach?.(current);
     notify(action==='call'?'Примите вызов на учебный IP-телефон. После доклада подтвердите получение.':'Телефонный доклад внесён в карточку.');
    }finally{button.disabled=false;}
   }));
@@ -352,8 +358,20 @@ function renderSituationUpdates(){
  for(const item of list){
   const line=element('article',undefined,'situation-update');
   line.append(element('small',`${formatted(item.at)} · ${item.source}`),element('p',item.text));
+  if(item.unlocks_status){
+   const recorded=current.events.some(e=>e.type==='service.updated'&&e.detail?.service===current.owner_service&&e.detail?.status===item.unlocks_status&&e.at>=item.at);
+   line.append(element('small',recorded?'✓ Отражено в статусе своей службы':'Нужно отразить в статусе своей службы и записать существенные сведения в комментарий.'));
+  }
   box.append(line);
  }
+ box.scrollTop=box.scrollHeight;
+ // Панель реагирования перекрывает ленту докладов: дублируем в ней доклад,
+ // который ещё не отражён статусом, — ученик видит, что пришло и что делать.
+ let latest=$('latestReport');
+ if(!latest){latest=element('div');latest.id='latestReport';$('responseSection').querySelector('.response-input')?.before(latest);}
+ const open=[...list].reverse().find(item=>item.unlocks_status&&!current.events.some(e=>e.type==='service.updated'&&e.detail?.service===current.owner_service&&e.detail?.status===item.unlocks_status&&e.at>=item.at));
+ latest.hidden=!open;latest.replaceChildren();
+ if(open)latest.append(element('b',`Доклад с места · ${open.source} · ${formatted(open.at)}`),element('span',open.text),element('div',`Отразите: статус «${open.unlocks_status}» и запишите в комментарий, что сообщили.`));
 }
 function receiveSituationUpdates(data){
  const list=data.situation_updates||[];
@@ -440,9 +458,13 @@ function primaryServices(){
 function renderServices() {
  if(!window.ddsFooterObserver&&window.ResizeObserver){
   window.ddsFooterObserver=new ResizeObserver(entries=>{
-   for(const entry of entries)$('cardPanel').style.setProperty('--dds-footer-height',`${entry.target.getBoundingClientRect().height+8}px`);
+   for(const entry of entries){
+    if(entry.target===$('services')){const box=entry.target.getBoundingClientRect();const tiles=[...entry.target.querySelectorAll('.service-tile')];const top=Math.min(box.top,...tiles.map(t=>t.getBoundingClientRect().top));$('cardPanel').style.setProperty('--dds-service-overflow',`${Math.max(0,box.top-top)}px`);}
+    else $('cardPanel').style.setProperty('--dds-footer-height',`${entry.target.getBoundingClientRect().height+8}px`);
+   }
   });
   window.ddsFooterObserver.observe($('services').parentElement);
+  window.ddsFooterObserver.observe($('services'));
  }
  const opened=new Set([...$('services').querySelectorAll('details[open]')].map(item=>item.dataset.service));
  $('services').replaceChildren(); $('responseService').replaceChildren();
@@ -504,8 +526,8 @@ $('assignCrew').onclick=()=>{guarded(async()=>{
  renderCard();notify('Бригада назначена');
 });};
 function populateResponseStatuses(){const values=current?.allowed_service_statuses?.[$('responseService').value]||[];
- $('responseHint').textContent=current?.card_locked?'Работа с карточкой завершена.':values.length?'':(current?.owner_service?'Следующий статус откроется, когда служба сообщит о ходе работ.':'');$('responseStatus').replaceChildren();for(const value of values)$('responseStatus').add(new Option(value,value));const terminal=!values.length||current.status==='Завершена';$('responseStatus').disabled=terminal;$('responseOrderNumber').disabled=terminal;$('responseComment').disabled=terminal;$('addResponse').disabled=terminal;updateResponseHint();}
-function updateResponseHint(){$('responseComment').placeholder=$('responseStatus').value==='Работы завершены'?(current?.owner_service==='103'&&!current?.assigned_crew?'Укажите результат; без бригады — «Завершение работ без бригады»':'Результат работ: что сделано и какова обстановка'):'Комментарий (обязателен при отказе)';}
+ $('responseHint').textContent=current?.card_locked?'Работа с карточкой завершена.':values.length?'':(current?.owner_service?'Следующий статус откроется, когда служба сообщит о ходе работ.':'');$('responseStatus').replaceChildren();const prompt=new Option('Выберите статус…','');prompt.disabled=true;prompt.selected=true;$('responseStatus').add(prompt);for(const value of values)$('responseStatus').add(new Option(value,value));const terminal=!values.length||current.status==='Завершена';$('responseStatus').disabled=terminal;$('responseOrderNumber').disabled=terminal;$('responseComment').disabled=terminal;$('addResponse').disabled=terminal;updateResponseHint();}
+function updateResponseHint(){$('responseComment').placeholder=$('responseStatus').value==='Работы завершены'?(current?.owner_service==='103'&&!current?.assigned_crew?'Укажите результат; без бригады — «Завершение работ без бригады»':'Результат работ: что сделано и какова обстановка'):'Комментарий к статусу (обязателен): что сообщили, что сделано';}
 $('responseService').onchange=populateResponseStatuses;$('responseStatus').onchange=updateResponseHint;
 function renderServiceHistory() {
  $('serviceHistory').replaceChildren();
@@ -571,7 +593,7 @@ $('restoreDraft').onclick=()=>{if(!current?.unsaved_draft||current.status==='З�
 $('edit').onclick=()=>{viewing=false;renderCard();};
 $('cardView').onclick=()=>{if(dirty){notify('Сначала сохраните дополнение карточки.',true);return;}viewing=true;renderCard();};
 $('cardSupplement').onclick=()=>$('edit').click();
-$('finish').onclick=()=>{if(sending){notify('Дождитесь ответа заявителя');return;}if($('finishError'))$('finishError').textContent='';$('finishDialog').showModal();};
+$('finish').onclick=()=>{if(sending){notify('Дождитесь ответа заявителя');return;}if($('finishError'))$('finishError').textContent='';let list=$('finishChecklist');if(!list){list=element('div');list.id='finishChecklist';$('confirmFinish').before(list);}list.replaceChildren();const missing=current.completion_missing||[];$('confirmFinish').disabled=missing.length>0;$('confirmFinish').title=missing.length?'Сначала выполните перечисленные действия':'';if(missing.length){list.append(element('strong','Перед завершением осталось:'));const ul=element('ul');for(const item of missing)ul.append(element('li',item));list.append(ul);}else if(current.exercise_mode==='actions')list.append(element('p','Завершение отправит действия на оценку. Прослушанный доклад не заменяет статус и комментарий своей службы.'));$('finishDialog').showModal();};
 $('confirmFinish').onclick=()=>guarded(async()=>{const button=$('confirmFinish');button.disabled=true;try{if(dirty||!current.revision)await saveCard();current=await api(`student/sessions/${current.id}/finish`,'POST');dirty=false;viewing=true;window.speechSynthesis?.cancel();$('finishDialog').close();renderCard();if(current.lesson_id){chooseLesson(current.lesson_id);await refreshLessonFlow();if(current.status==='Завершена')showAudit();}else showAudit();}catch(error){let message=$('finishError');if(!message){message=element('p');message.id='finishError';message.setAttribute('role','alert');button.before(message);}message.textContent=error.message;throw error;}finally{button.disabled=false;}});
 $('processed').onclick=()=>guarded(async()=>{if(!current||current.status==='Завершена'||current.processed_at)return;if(dirty||!current.revision)throw Error('Сначала сохраните карточку');const button=$('processed');button.disabled=true;try{current=await api(`student/sessions/${current.id}/processed`,'POST',{});dirty=false;viewing=true;renderCard();notify('Происшествие отмечено как отработанное. Занятие не завершено.');}finally{button.disabled=!!current.processed_at;}});
 function renderServiceChoices(){
@@ -634,6 +656,11 @@ $('applyRouting').onclick=()=>{
 $('addResponse').onclick=()=>guarded(async()=>{if(dirty)throw Error('Сначала сохраните карточку');const service=$('responseService').value,status=$('responseStatus').value,order_number=$('responseOrderNumber').value.trim(),comment=$('responseComment').value.trim(),signature=JSON.stringify({sid:current.id,service,status,order_number,comment});if(!service||!status)throw Error('Для этой службы нет доступных статусов');if(!pendingServiceAction||pendingServiceAction.signature!==signature)pendingServiceAction={signature,body:{message_id:crypto.randomUUID(),service,status,order_number,comment}};const button=$('addResponse');button.disabled=true;try{current=await api(`student/sessions/${current.id}/services`,'POST',pendingServiceAction.body);pendingServiceAction=null;$('responseOrderNumber').value='';$('responseComment').value='';renderCard();notify('Статус службы сохранён');}finally{populateResponseStatuses();}});
 function renderNotificationHistory(){$('notificationHistory').replaceChildren();for(const item of current.notifications||[]){const tr=element('tr');for(const value of [formatted(item.at),item.service,item.destination,item.phone,item.recipient,item.comment||'—',item.operator||item.operator_name||'Оператор'])tr.append(element('td',value));$('notificationHistory').append(tr);}}
 function renderLinkedCards(){$('linkedCards').replaceChildren();if(!(current.linked_cards||[]).length)return;$('linkedCards').append(element('strong','Связанные карточки: '));for(const item of current.linked_cards){const button=element('button',`№ ${item.number}`);button.type='button';button.onclick=()=>guarded(async()=>{if(!confirmLeave())return;$('linksDialog').close();await openSession(item.id);});$('linkedCards').append(button);}}
+const ERROR_FIELDS={street:'Улица',house:'Дом',building:'Корпус',structure:'Строение',apartment:'Квартира',entrance:'Подъезд',city:'Город',district:'Район',area:'Округ',object:'Объект',address_note:'Описательный адрес',description:'Описание',incident_type:'Тип происшествия'};
+function renderErrorReports(){$('errorReportHistory').replaceChildren();for(const item of current?.error_reports||[]){const tr=element('tr');for(const value of [formatted(item.at),ERROR_FIELDS[item.field]||item.field,item.card_value||'—',item.correct_value,item.recipient])tr.append(element('td',value));$('errorReportHistory').append(tr);}}
+$('openErrorReport').onclick=()=>{if(!current?.revision||current.status==='Завершена')return;const select=$('errorReportField');select.replaceChildren();for(const [key,label] of Object.entries(ERROR_FIELDS))select.add(new Option(`${label}: ${current.card[key]||'—'}`,key));renderErrorReports();$('errorReportDialog').showModal();};
+let pendingErrorReport=null;
+$('errorReportForm').onsubmit=event=>{event.preventDefault();guarded(async()=>{const body={field:$('errorReportField').value,correct_value:$('errorReportValue').value.trim(),source:$('errorReportSource').value.trim(),recipient:$('errorReportRecipient').value.trim(),comment:$('errorReportComment').value.trim()},signature=JSON.stringify({sid:current.id,...body});if(!pendingErrorReport||pendingErrorReport.signature!==signature)pendingErrorReport={signature,body:{message_id:crypto.randomUUID(),...body}};const button=$('saveErrorReport');button.disabled=true;try{current=await api(`student/sessions/${current.id}/error-reports`,'POST',pendingErrorReport.body);pendingErrorReport=null;for(const id of ['errorReportValue','errorReportComment'])$(id).value='';renderErrorReports();renderCard();notify('Сообщение об ошибке передано в Службу 112.');}finally{button.disabled=false;}});};
 $('openNotification').onclick=()=>{if(dirty){notify('Сначала сохраните карточку',true);return;}if(!current?.revision||current.status==='Завершена')return;$('notificationService').replaceChildren();for(const service of current.card.services)if(current.exercise_mode!=='actions'||current.card.service_phones?.[service])$('notificationService').add(new Option(service,service));if(!$('notificationService').options.length){notify('У получателей нет доступных телефонов',true);return;}$('notificationDialog').showModal();};
 $('notificationForm').onsubmit=event=>{event.preventDefault();guarded(async()=>{if(dirty)throw Error('Сначала сохраните карточку');const body={service:$('notificationService').value,destination:$('notificationDestination').value.trim(),phone:$('notificationPhone').value.trim(),recipient:$('notificationRecipient').value.trim(),comment:$('notificationComment').value.trim()},signature=JSON.stringify({sid:current.id,...body});if(!pendingNotification||pendingNotification.signature!==signature)pendingNotification={signature,body:{message_id:crypto.randomUUID(),...body}};const button=$('saveNotification');button.disabled=true;try{current=await api(`student/sessions/${current.id}/notifications`,'POST',pendingNotification.body);pendingNotification=null;for(const id of ['notificationDestination','notificationPhone','notificationRecipient','notificationComment'])$(id).value='';$('notificationDialog').close();renderCard();notify('Телефонограмма записана.');}finally{button.disabled=false;}});};
 $('openLinks').onclick=()=>{if(dirty){notify('Сначала сохраните карточку',true);return;}if(!current?.revision||current.status==='Завершена')return;$('linkTarget').replaceChildren();const linked=new Set((current.linked_cards||[]).map(v=>v.id));for(const item of sessions)if(item.id!==current.id&&!linked.has(item.id))$('linkTarget').add(new Option(`№ ${item.number} · ${item.card.incident_type||'без типа'} · ${addressText(item.card)}`,item.id));$('addLink').disabled=!$('linkTarget').options.length;$('linksDialog').showModal();};
@@ -924,8 +951,8 @@ const advancedInputs=[...$('advancedFilters').querySelectorAll('input,select')];
 function resetFilters(all=false){for(const input of advancedInputs)input.value='';if(all){$('search').value='';$('statusFilter').value='';}renderRows();}
 $('applyAdvanced').onclick=renderRows;$('resetAdvanced').onclick=()=>resetFilters(false);$('resetSearch').onclick=()=>resetFilters(true);
 // В реальной Системе 112 поле таймера краснеет, когда время набора карточки
-// превышено. В ДДС 30 секунд идут до подтверждения получения, после этого
-// остаётся отдельный трёхминутный норматив обработки.
+// превышено. В ДДС 30 секунд идут от поступления до открытия карточки, 3 минуты —
+// до первой записи (статус и текст); дальше работы не нормируются.
 function tick(){
  const date=new Date();
  $('today').textContent=date.toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
@@ -934,11 +961,17 @@ function tick(){
  const seconds=Math.max(0,Math.floor(((current.finished_at?new Date(current.finished_at):date)-new Date(current.created_at))/1000));
  $('timer').textContent=`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
  const dds=current.exercise_mode==='actions'&&current.owner_service;
- const limit=dds?(current.receipt_decided_at?(current.handling_limit_seconds||180):30):current.time_limit_seconds;
- const over=Number.isFinite(limit)&&limit>0&&seconds>limit;
+ const stage=!dds?null:!current.opened_at?'open':!current.first_record_at?'record':'free';
+ const limit=dds?{open:current.time_limit_seconds||30,record:180,free:null}[stage]:current.time_limit_seconds;
+ const since=stamp=>Math.max(0,Math.floor((new Date(stamp)-new Date(current.created_at))/1000));
+ // Норматив, уже нарушенный на прошлом этапе, остаётся красным до конца карточки.
+ const missed=dds&&((current.opened_at&&since(current.opened_at)>(current.time_limit_seconds||30))
+  ||(current.first_record_at&&since(current.first_record_at)>180));
+ const over=missed||(Number.isFinite(limit)&&limit>0&&seconds>limit);
  $('cardPanel').querySelector('.timer').classList.toggle('overdue',over);
- const label=dds?(current.receipt_decided_at?'обработки':'подтверждения получения'):'занятия';
- $('timer').title=over?`Норматив ${label} ${limit} с превышен`:limit?`Норматив ${label} ${limit} с`:'Норматив не задан';
+ const label=dds?{open:'открытия карточки',record:'первой записи (статус и текст)',free:'—'}[stage]:'занятия';
+ if(stage==='free'){$('timer').title=missed?'Норматив открытия или первой записи был превышен. Дальнейшие работы не нормируются.':'Нормативы выполнены. Дальнейшие работы не нормируются.';return;}
+ $('timer').title=(limit&&seconds>limit)?`Норматив ${label} ${limit} с превышен`:limit?`Норматив ${label} ${limit} с${missed?' (норматив открытия превышен)':''}`:'Норматив не задан';
 }
 async function recoverCurrentSession(){
  if(recoveryBusy||!navigator.onLine)return;recoveryBusy=true;
@@ -980,7 +1013,7 @@ setInterval(async()=>{
   const data=values.find(value=>value.id===sid)||await api(`student/sessions/${sid}`);
   if(current?.id!==sid)return;
   if(current.status!=='Завершена'&&data.status==='Завершена'){receiveRemoteCompletion(data);return;}
-  current.incident_status=data.incident_status;updateIncidentState();receiveSituationUpdates(data);
+  current.incident_status=data.incident_status;current.completion_missing=data.completion_missing;updateIncidentState();receiveSituationUpdates(data);window.updateDdsCoach?.(current);
   const previous=(current.teacher_feedback||[]).length;current.teacher_feedback=data.teacher_feedback||[];
   if(current.teacher_feedback.length>previous){notify('Новое замечание преподавателя — откройте «Отчёт и история»');if($('auditDialog').open)showAudit();}
  }catch{/* Connection state is displayed by the common health indicator. */}
@@ -1016,9 +1049,9 @@ function renderBriefing(){
  $('briefingForm').hidden=!open||voice;
  $('briefingFinishForm').hidden=!open||!report.complete;
  $('briefingMissing').className='briefing-missing'+(report.complete?' ready':'');
- $('briefingMissing').textContent=!open?'Доклад принят дежурным.'
+ $('briefingMissing').textContent=!open?'Доклад принят.'
   :briefing.recovery?.state==='exhausted'?'Автовосстановление исчерпано. Проверьте телефон и создайте новый доклад; предыдущие реплики сохранены.'
-  :voice&&!briefing.messages.length?'Ожидание ответа дежурного по телефону…'
+  :voice&&!briefing.messages.length?'Ожидание ответа по телефону…'
   :report.complete?'Сведения названы полностью. Можно завершать доклад.'
   :'Ещё не названо: '+(report.missing||[]).join(', ');
 }
@@ -1029,6 +1062,7 @@ $('openBriefing').onclick=()=>{
  $('briefingService').replaceChildren();
  for(const service of current.card.services)if(current.exercise_mode!=='actions'||current.card.service_phones?.[service])$('briefingService').add(new Option(service,service));
  if(current.assigned_crew?.phone)$('briefingService').add(new Option(`${current.assigned_crew.id} · ${current.assigned_crew.leader}`,'crew:'+current.assigned_crew.id));
+ if(current.assigned_crew?.phone)$('briefingService').value='crew:'+current.assigned_crew.id;
  if(!$('briefingService').options.length){notify('У получателей нет доступных телефонов',true);return;}
  $('briefingPhone').value=current.card.service_phones?.[$('briefingService').value]||'';
  $('briefingPhone').readOnly=current.exercise_mode==='actions';

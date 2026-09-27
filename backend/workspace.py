@@ -285,6 +285,44 @@ class NotificationAction(BaseModel):
     comment: str = Field(min_length=1, max_length=1000)
 
 
+CORRECTABLE_FIELDS = ('city', 'district', 'area', 'object', 'street', 'house', 'building',
+                      'structure', 'apartment', 'entrance', 'address_note', 'description',
+                      'incident_type')
+# Поля карточки, которые ДДС ведёт сама. Остальное заполняет Служба 112, и
+# ДДС вправе только сообщить ей об ошибке (ответ заказчика 27.09.2026).
+DDS_EDITABLE_FIELDS = frozenset({'bookmarked'})
+
+
+class ErrorReport(BaseModel):
+    """Звонок ДДС в Службу 112: в карточке ошибка, правильное значение такое-то."""
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    message_id: UUID
+    field: Literal[CORRECTABLE_FIELDS]
+    correct_value: str = Field(min_length=1, max_length=200)
+    source: str = Field(min_length=1, max_length=160)
+    recipient: str = Field(min_length=1, max_length=160)
+    comment: str = Field('', max_length=1000)
+
+
+def correction_evidence_visible(value: dict) -> bool:
+    """Правильные сведения ДДС узнаёт из звонка бригады с места.
+
+    Уточнение становится доступно после оперативного доклада бригады или
+    запроса обстановки у старшего. В сценарии без бригады и докладов
+    источником остаётся вводная, доступная после приёма карточки.
+    """
+    if value.get('exercise_mode') != 'actions':
+        return True
+    for event in value.get('events', []):
+        if event.get('type') in ('progress.requested', 'field_report.call_started'):
+            return True
+        if event.get('type') == 'situation.update' and event.get('detail', {}).get('unlocks_status'):
+            return True
+    if value.get('planned_unlocks') or value.get('crew_options'):
+        return False
+    return bool(value.get('accepted_at'))
+
+
 class ForwardCard(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
     message_id: UUID
@@ -344,6 +382,22 @@ class GrammarPreview(BaseModel):
 PROGRESS_STATUSES = ('Начало реагирования', 'Прибытие', 'Проведение работ', 'Работы завершены')
 
 
+def sequential(value: dict, service: str, allowed: list[str]) -> list[str]:
+    """Своя ДДС проходит статусы хода работ по порядку, без пропусков.
+
+    Карточка считается отработанной, только когда активированы все статусы
+    (ответ заказчика 27.09.2026), а вернуться к пропущенному статусу нельзя.
+    Завершение 103 без бригады — отдельный явный путь источника.
+    """
+    if value.get('exercise_mode') != 'actions' or service != value.get('owner_service'):
+        return allowed
+    current = value['service_states'].get(service, {}).get('status')
+    progress = [status for status in allowed if status in PROGRESS_STATUSES
+                and not (not value.get('assigned_crew')
+                         and no_brigade_completion(service, current, status, NO_BRIGADE_COMMENT))]
+    return [status for status in allowed if status not in progress[1:]]
+
+
 def visible_statuses(value: dict) -> dict[str, list[str]]:
     """Что рабочее место вправе предложить по каждой службе.
 
@@ -358,7 +412,8 @@ def visible_statuses(value: dict) -> dict[str, list[str]]:
         if owner and service != owner:
             result[service] = []
             continue
-        allowed = allowed_statuses(service, value['service_states'].get(service, {}).get('status'))
+        allowed = sequential(value, service, allowed_statuses(
+            service, value['service_states'].get(service, {}).get('status')))
         if gated is not None:
             allowed = [status for status in allowed
                        if status not in PROGRESS_STATUSES or status in gated
@@ -394,11 +449,13 @@ def update_elapsed(value: dict, item: dict) -> float:
 
 
 def apply_default_norms(value: dict) -> None:
-    """Нормативы времени для готовой карточки ДДС, у которой нет эталона.
+    """Нормативы времени для готовой карточки ДДС.
 
-    В основном режиме оцениваются действия, а не уже заполненные поля.
-    Подтверждение получения (30 секунд) и учебный бюджет обработки относятся
-    именно к этому режиму и не зависят от наличия эталона по полям.
+    Ответ заказчика 27.09.2026: 30 секунд — от появления карточки в строке
+    сообщений до её открытия; 3 минуты — до первой записи своей службы
+    (статус и текст). Остальные сроки не нормируются: работы могут идти часами,
+    поэтому общего лимита обработки нет. ``limit_seconds``/``within_limit``
+    в этом режиме относятся к первой записи, а не ко всему времени занятия.
     """
     if value.get('exercise_mode') != 'actions':
         return
@@ -410,9 +467,14 @@ def apply_default_norms(value: dict) -> None:
     timing['response_limit_seconds'] = response_limit
     timing['response_within_limit'] = (None if response_seconds is None
                                        else response_seconds <= response_limit)
-    limit = value.get('handling_limit_seconds') or DEFAULT_TIME_LIMIT_SECONDS
-    timing['limit_seconds'] = limit
-    timing['within_limit'] = timing['elapsed_seconds'] <= limit
+    if value.get('owner_service'):
+        first_record = value.get('first_record_seconds')
+        timing['first_record_seconds'] = first_record
+        timing['limit_seconds'] = DEFAULT_TIME_LIMIT_SECONDS
+        timing['within_limit'] = None if first_record is None else first_record <= DEFAULT_TIME_LIMIT_SECONDS
+        return
+    timing['limit_seconds'] = DEFAULT_TIME_LIMIT_SECONDS
+    timing['within_limit'] = timing['elapsed_seconds'] <= DEFAULT_TIME_LIMIT_SECONDS
 
 
 def router(store, engine, authorize, accounts=None, learning=None, coordinator=None):
@@ -515,6 +577,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
     # входящей строки, а решение службы оценивается другим критерием.
     STUDENT_ACTIONS = {'card.saved', 'service.updated', 'notification.recorded',
                        'card.processed', 'card.linked', 'card.forwarded', 'operator.utterance',
+                       'card.error_reported',
                        # Закрытие нерезультативного вызова — тоже действие
                        # оператора, и норматив реакции к нему применим.
                        'card.unproductive'}
@@ -531,12 +594,17 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         if not actor.get() or actor.get()['role'] != 'teacher':
             for key in ('dds_expectation', 'planned_unlocks'):
                 result.pop(key, None)
-        result['correction_evidence'] = list((value.get('dds_expectation') or {}).get('correction_evidence', {}).values())
+        result['correction_evidence'] = (
+            list((value.get('dds_expectation') or {}).get('correction_evidence', {}).values())
+            if correction_evidence_visible(value) else [])
+        result['dds_editable_fields'] = sorted(DDS_EDITABLE_FIELDS)
         owner_state = value.get('service_states', {}).get(value.get('owner_service'), {})
         result['card_locked'] = (value.get('status') == 'Завершена' or
                                 value.get('exercise_mode') == 'actions' and
                                 owner_state.get('status') in ('Работы завершены', 'Отказ от выполнения работ'))
         result['dds_assessment_enabled'] = bool(value.get('dds_expectation'))
+        result['completion_missing'] = (unfinished_dds(value, value.get('dds_expectation'))
+                                        if value.get('exercise_mode') == 'actions' and value['status'] != 'Завершена' else [])
         return result
 
     def public(value):
@@ -755,11 +823,6 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                    if item.get('unlocks_status')}
         if unlocks:
             value['planned_unlocks'] = unlocks
-        if template:
-            last_report = max((item['after_seconds'] for item in scenario.get('updates', [])
-                               if item.get('unlocks_status')), default=0)
-            margin = (scenario.get('dds_expectation') or {}).get('update_response_limit_seconds', 90)
-            value['handling_limit_seconds'] = max(DEFAULT_TIME_LIMIT_SECONDS, last_report + margin + 30)
         if scenario.get('dds_expectation'):
             value['dds_expectation'] = scenario['dds_expectation']
         elif template and owner:
@@ -799,6 +862,15 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         if student_view(value)['card_locked']:
             raise HTTPException(409, 'Работы завершены; карточка доступна только для просмотра')
         card = body.card.model_dump()
+        if value.get('exercise_mode') == 'actions':
+            # Поля карточки 112 заполняет Служба 112. ДДС правит только свои
+            # поля, а об ошибке сообщает в 112 по телефону (POST /error-reports).
+            before = Card.model_validate(previous).model_dump()
+            foreign = sorted(key for key in card if key not in DDS_EDITABLE_FIELDS
+                             and card[key] != before.get(key))
+            if foreign:
+                raise HTTPException(403, 'Поля карточки 112 заполняет Служба 112. Об ошибке '
+                                         'сообщите в 112 по телефону: ' + ', '.join(foreign))
         if card["classifier_id"]:
             try:
                 record = resolve(card["classifier_id"], card["classifier_version"])
@@ -886,6 +958,14 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         if body.status == 'Работы завершены' and len(body.comment.strip()) < 10:
             raise HTTPException(422, 'Перед завершением работ внесите в комментарий результат: '
                                      'что сделано и чем закончилось.')
+        # В карточке ДДС запись — это статус и текст: заказчик считает карточку
+        # отработанной, когда все статусы активированы и поля заполнены.
+        own_record = value.get('exercise_mode') == 'actions' and owner and body.service == owner
+        if own_record and body.status in PROGRESS_STATUSES and body.status not in sequential(
+                value, body.service, allowed_statuses(body.service, value['service_states'].get(body.service, {}).get('status'))):
+            raise HTTPException(409, f'Статус «{body.status}» нельзя проставить, пропустив предыдущие этапы')
+        if own_record and not body.comment.strip():
+            raise HTTPException(422, f'Заполните комментарий к статусу «{body.status}»')
         payload = body.model_dump(mode='json')
         if body.message_id:
             for e in value['events']:
@@ -905,6 +985,11 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             value['receipt_decided_at'] = action_at
             if status == 'Принята':
                 value['accepted_at'] = action_at
+        if own_record:
+            # Статус ставится только в открытой карточке; открытие через API без
+            # отдельного запроса считается состоявшимся в момент записи.
+            value.setdefault('opened_at', action_at)
+            value.setdefault('first_record_at', action_at)
         value['service_states'][body.service] = {
             **old,
             'status': status,
@@ -966,6 +1051,33 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             raise HTTPException(409, 'Достигнут лимит оповещений карточки')
         value['notifications'].append({**payload, 'at': now(), 'operator': (actor.get() or {}).get('display_name', 'Учебный оператор')})
         persist(value, 'notification.recorded', payload)
+        return public(value)
+
+    @api.post('/sessions/{sid}/error-reports', dependencies=[Depends(serialize_mutation)])
+    async def error_report(sid: UUID, body: ErrorReport):
+        """ДДС сообщает в Службу 112 об ошибке в полученной карточке.
+
+        Ответ заказчика 27.09.2026: правильные сведения диспетчер узнаёт из
+        звонка бригады, затем звонит по обычному телефону в 112 и сообщает об
+        ошибке. Сама карточка 112 при этом не меняется: её поля ведёт 112.
+        """
+        value = load(sid)
+        editable(value)
+        if value.get('exercise_mode') != 'actions':
+            raise HTTPException(409, 'Сообщение в 112 об ошибке доступно в режиме ДДС')
+        payload = body.model_dump(mode='json')
+        reports = value.setdefault('error_reports', [])
+        for item in reports:
+            if item['message_id'] == str(body.message_id):
+                if any(item[key] != payload[key] for key in payload):
+                    raise HTTPException(409, 'Идентификатор сообщения уже использован')
+                return public(value)
+        if len(reports) >= 20:
+            raise HTTPException(409, 'Достигнут лимит сообщений об ошибках по карточке')
+        reports.append({**payload, 'at': now(),
+                        'card_value': value['card'].get(body.field, ''),
+                        'operator': (actor.get() or {}).get('display_name', 'Учебный оператор')})
+        persist(value, 'card.error_reported', payload)
         return public(value)
 
     @api.post('/sessions/{sid}/forward', dependencies=[Depends(serialize_mutation)])
@@ -1094,7 +1206,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                         refreshed = await call_field_report(UUID(value['id']), pending[0]['id'])
                         phone_started = True
                     except HTTPException as error:
-                        if error.status_code not in (409, 503):
+                        if error.status_code not in (409, 429, 503):
                             raise
                         refreshed['phone_error'] = error.detail
                 result.append(refreshed)
@@ -1353,11 +1465,16 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         value["finished_at"] = now()
         value["elapsed_seconds"] = round((datetime.now(timezone.utc) - datetime.fromisoformat(value["created_at"])).total_seconds())
         value["checks"] = [{"field": key, "passed": bool(value["card"][key])} for key in ("caller_name", "street", "house", "description", "incident_type", "services")]
-        reaction_at = (value.get('receipt_decided_at') if value.get('exercise_mode') == 'actions'
-                       and value.get('owner_service') else value.get('first_action_at'))
+        dds_card = value.get('exercise_mode') == 'actions' and value.get('owner_service')
+        # Норматив 30 секунд в ДДС — от появления карточки до её открытия.
+        reaction_at = value.get('opened_at') if dds_card else value.get('first_action_at')
         if value.get('exercise_mode') == 'actions' and value.get('opened_at'):
             value['opening_seconds'] = max(0, round((datetime.fromisoformat(value['opened_at'])
                 - datetime.fromisoformat(value['created_at'])).total_seconds()))
+        if dds_card and value.get('first_record_at'):
+            value['first_record_seconds'] = max(0, round(
+                (datetime.fromisoformat(value['first_record_at'])
+                 - datetime.fromisoformat(value['created_at'])).total_seconds()))
         if reaction_at:
             value['response_seconds'] = max(0, round(
                 (datetime.fromisoformat(reaction_at)

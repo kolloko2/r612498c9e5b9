@@ -1,5 +1,12 @@
 # API Contract
 
+Student workspace responses add `completion_missing: string[]`, the same outstanding
+requirements enforced by the existing finish action; no answers or future report text
+are exposed. DdsExpectation optionally accepts `update_keywords` (up to six update IDs
+mapped to required asserted facts in the corresponding status comment). These remain
+in the private rubric. Missing or negated facts produce critical `update_facts:<id>`
+checks in the completed DDS report. Existing scenarios retain their grading.
+
 Voice model inference is bounded to fifteen seconds per live turn, including
 112 role repair, separately from long authoring requests. DDS uses its deterministic
 clarification fallback; 112 returns a repetition request. No assessment fact is
@@ -73,9 +80,8 @@ messages are excluded. Not owned: 404; incompatible state: 409; unavailable Voic
 New prepared DDS attempts with crews freeze `updates_anchor=crew_assigned`:
 operational `unlocks_status` delays start at `assigned_crew.at`; applicant updates
 still start at receipt. Old issued attempts keep their original receipt anchor.
-`handling_limit_seconds` is frozen as max(180, last operational delay + response
-margin + 30). This is a training budget, not an official regulation. Receipt to
-acceptance remains an independent 30-second criterion.
+`handling_limit_seconds` is no longer issued (2026-09-27): per the customer the
+total handling time of a DDS card is not normed, works may last hours or days.
 
 ## Manual text checks and local territorial routing (2026-09-23)
 
@@ -858,9 +864,22 @@ per participant and `response_seconds`, `timing`, `grammar`, `workstation` per c
 `POST /api/v1/student/sessions/{sid}/open` идемпотентно фиксирует `opened_at`
 и событие `card.opened` при открытии входящей строки. Первый статус «Принята» или «Не принята» собственной ДДС фиксирует
 `receipt_decided_at`; для «Принята» также фиксируется `accepted_at`. Для
-готовой карточки с `owner_service` поле `response_seconds` и норматив 30 секунд
-считаются от `created_at` до `receipt_decided_at`, как указано в памятке ДДС (стр. 5, 21).
-`opening_seconds` отдельно измеряет открытие карточки. Обработка — 3 минуты. Политика оценки
+готовой карточки с `owner_service` нормативы заданы ответом заказчика 27.09.2026:
+
+- `response_seconds` = `opening_seconds` — от `created_at` (появление в строке сообщений)
+  до `opened_at`; норматив `response_limit_seconds` = 30 с (`dds_review` проверка `receipt_time`);
+- `first_record_seconds` — от `created_at` до `first_record_at`, первой записи своей службы
+  со статусом и текстом; в `timing` это `first_record_seconds`, `limit_seconds` = 180,
+  `within_limit` (проверка `first_record`, прежняя `handling` удалена);
+- общее время работы с карточкой (`elapsed_seconds`) не нормируется.
+
+`POST /services` для своей службы в режиме ДДС требует непустой `comment` (422) и
+не позволяет пропускать статусы хода работ (409); `allowed_service_statuses` предлагает
+только следующий этап и «Отказ от выполнения работ». Если статус выставлен без
+`/open`, `opened_at` фиксируется моментом записи. Досрочное завершение учеником
+отклоняется, пока не активированы все статусы цикла (Принята → Начало реагирования →
+Прибытие → Проведение работ → Работы завершены) либо не записан мотивированный
+«Отказ от выполнения работ». Политика оценки
 использует балл `dds_review` для действий ДДС. Отчёт занятия, статистика и
 подбор сложности также используют его, а не балл по уже заполненным полям.
 
@@ -872,7 +891,29 @@ per participant and `response_seconds`, `timing`, `grammar`, `workstation` per c
 Преподаватель может задать независимые верные сведения в
 `DdsExpectation.expected_corrections`, чтобы оценивать обнаружение ошибки во
 входящей карточке. Полнота телефонного доклада проверяется по снимку
-`initial_card`, а не по последующим правкам обучающегося.
+`initial_card` с наложенными исправлениями преподавателя.
+
+Ошибки входящей карточки (ответ заказчика 27.09.2026, П.3). ДДС правит только
+свои поля: в режиме ДДС `PUT /card` возвращает 403 при изменении любого поля,
+кроме `dds_editable_fields` (сейчас `bookmarked`). Правильные сведения ДДС
+узнаёт из звонка бригады: `correction_evidence` в ответе рабочего места пуст,
+пока не поступил оперативный доклад с `unlocks_status`, не было
+`progress.requested` или `field_report.call_started`. В сценарии без бригады и
+докладов уточнение становится доступно после «Принята». Разговор с бригадой
+(`field_dialogue`) называет фактический адрес с учётом `expected_corrections`.
+
+`POST /api/v1/student/sessions/{sid}/error-reports` — звонок ДДС в Службу 112
+об ошибке: `{message_id, field, correct_value<=200, source<=160, recipient<=160,
+comment?<=1000}`, где `field` — одно из полей адреса, `description` или
+`incident_type`. Карточка 112 не меняется; запись сохраняется в
+`error_reports[]` с `at`, `card_value`, `operator`, событие
+`card.error_reported`. Повтор `message_id` идемпотентен, с другим телом — 409;
+не в режиме ДДС — 409; не более 20 сообщений. Проверка `correction:{field}` в
+`dds_review` засчитывается, если в 112 сообщено правильное значение.
+
+Доклад по телефону (`POST /briefings`, П.7): при `crew_id` собеседник —
+руководитель назначенной бригады, иначе вышестоящий начальник («Начальник
+дежурной смены, <служба>»).
 
 `Scenario.crew_options` задаёт список учебных бригад с `id`, `leader` и `phone`.
 После статуса «Принята» диспетчер выбирает одну через

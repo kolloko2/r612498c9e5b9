@@ -167,10 +167,14 @@ def test_teacher_verified_correction_is_used_for_card_and_briefing():
                   service=SERVICE, source='briefing', message_id='report-3')]
     value = card(sent, notifications=[{'service': SERVICE, 'message_id': 'report-3',
                                       'comment': 'Берзарина, дом 22, пожар в квартире'}])
-    value['initial_card'] = dict(value['card'])
-    value['card']['house'] = '22'
-    result = review(value, {'should_accept': True, 'brief_service': SERVICE,
-                            'expected_corrections': {'house': '22'}})
+    expectation = {'should_accept': True, 'brief_service': SERVICE,
+                   'expected_corrections': {'house': '22'}}
+    # ДДС не правит карточку 112, а сообщает об ошибке в 112 (ответ 27.09.2026).
+    assert 'Ошибка не передана' in verdict(review(value, expectation), 'correction:house')['detail']
+    value['error_reports'] = [{'field': 'house', 'correct_value': '15', 'source': 'Старший бригады'}]
+    assert verdict(review(value, expectation), 'correction:house')['passed'] is False
+    value['error_reports'].append({'field': 'house', 'correct_value': '22', 'source': 'Старший бригады'})
+    result = review(value, expectation)
     assert verdict(result, 'correction:house')['passed'] is True
     assert verdict(result, 'briefing_facts')['passed'] is True
 
@@ -209,3 +213,20 @@ def test_score_counts_only_judged_checks():
 def test_review_is_skipped_without_expectation_or_service():
     assert review(card([]), None) is None
     assert review({**card([]), "owner_service": ""}, {"should_accept": True}) is None
+
+
+def test_card_is_worked_out_only_when_every_cycle_status_is_set():
+    """Ответ заказчика 27.09: отработана, когда все статусы активированы."""
+    from dds_review import unfinished
+    at = '2026-09-18T10:00:00+00:00'
+    partial = card([event(1, 'service.updated', at, service=SERVICE, status='Принята', comment='Принято'),
+                    event(2, 'service.updated', at, service=SERVICE, status='Работы завершены',
+                          comment='Пожар ликвидирован')])
+    partial['processed_at'] = at
+    assert unfinished(partial, {'should_accept': True}) == [
+        'статусы цикла: Начало реагирования, Прибытие, Проведение работ']
+    refused = card([event(1, 'service.updated', at, service=SERVICE, status='Принята', comment='Принято'),
+                    event(2, 'service.updated', at, service=SERVICE, status='Отказ от выполнения работ',
+                          comment='Работы выполнит другая служба')])
+    refused['processed_at'] = at
+    assert unfinished(refused, {'should_accept': True}) == []

@@ -71,7 +71,7 @@ def test_briefing_dialogue_and_acceptance(reporting):
                                                     'destination': 'ЦУКС', 'phone': '+7 900 000-00-01'})
     assert start.status_code == 201, start.text
     briefing = start.json()
-    assert briefing['messages'][0]['content'].startswith('Дежурный')
+    assert briefing['messages'][0]['content'].startswith('Начальник дежурной смены')
     assert briefing['state'] == 'open' and briefing['simulated'] is True
     assert briefing['voice'] in ('baya', 'aidar')
     url = base(card) + '/' + briefing['id']
@@ -206,7 +206,7 @@ def test_voice_briefing_reads_report_from_the_conversation(sip_reporting):
 
     # Неполный доклад по телефону завершить нельзя.
     state = c['store'].load(briefing['id'])
-    state['messages'] = [{'role': 'assistant', 'content': 'Дежурный, Служба 101. Слушаю вас.'},
+    state['messages'] = [{'role': 'assistant', 'content': 'Начальник дежурной смены, Служба 101. Слушаю вас.'},
                          {'role': 'user', 'content': 'Докладываю, улица Лесная'}]
     c['store'].save(briefing['id'], state)
     listed = client.get(base(card), headers=h).json()[0]

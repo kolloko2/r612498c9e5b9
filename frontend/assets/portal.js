@@ -113,7 +113,9 @@ async function showLessonReport(id){
   for(const c of person.cards){
    const t=c.timing||{},norm=value=>value===true?'в норме':value===false?'превышен':'не измерено';
    section.append(node('p',`№ ${c.number} · ${c.title} · ${c.status} · ${c.score_percent==null?'без автоматической оценки':c.score_percent+'%'}`),
-    node('p',`${c.exercise_mode==='actions'?'Подтверждение получения':'Реакция'}: ${c.response_seconds??'—'} с из ${t.response_limit_seconds??'—'} (${norm(t.response_within_limit)}) · обработка: ${c.elapsed_seconds??'—'} с из ${t.limit_seconds??'—'} (${norm(t.within_limit)})`),
+    node('p',c.exercise_mode==='actions'&&'first_record_seconds' in t
+     ?`Открытие карточки: ${c.response_seconds??'—'} с из ${t.response_limit_seconds??'—'} (${norm(t.response_within_limit)}) · первая запись (статус и текст): ${t.first_record_seconds??'—'} с из ${t.limit_seconds??'—'} (${norm(t.within_limit)}) · всего в работе: ${c.elapsed_seconds??'—'} с (не нормируется)`
+     :`${c.exercise_mode==='actions'?'Подтверждение получения':'Реакция'}: ${c.response_seconds??'—'} с из ${t.response_limit_seconds??'—'} (${norm(t.response_within_limit)}) · обработка: ${c.elapsed_seconds??'—'} с из ${t.limit_seconds??'—'} (${norm(t.within_limit)})`),
     button('Открыть карточку и историю',()=>act(async()=>{el('lessonReportDialog').close();await showSession(c.id);})));}
   container.append(section);}
  if(!el('lessonReportDialog').open)el('lessonReportDialog').showModal();

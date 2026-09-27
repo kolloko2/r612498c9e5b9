@@ -2,3 +2,7 @@
 .heading-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
 .guided-control{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0}
 .guided-control input{width:70px}
+
+/* Длинные названия сценариев в списках не растягивают колонку за край карточки. */
+.columns{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.stack>*,.panel{min-width:0}select,input,textarea{max-width:100%}
+@media(max-width:850px){.columns{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}@media(max-width:600px){.columns{grid-template-columns:minmax(0,1fr)}}

@@ -54,7 +54,7 @@ async function serve(page){
    else if(p===`/api/v1/student/sessions/${card.id}/briefings`&&request.method()==='POST'){
     const body=request.postDataJSON();
     briefing={id:'brief-1',service:body.service,state:'open',voice:'baya',simulated:true,
-     messages:[{role:'assistant',content:`Дежурный, ${body.service}. Слушаю вас.`,at:now}],report:null};
+     messages:[{role:'assistant',content:`Начальник дежурной смены, ${body.service}. Слушаю вас.`,at:now}],report:null};
     briefing.report=report();
     data=briefing;status=201;
    }
@@ -73,6 +73,7 @@ async function serve(page){
     data=briefing;
    }
    else if(p===`/api/v1/student/sessions/${card.id}`||p===`/api/v1/student/sessions/${card.id}/open`)data=JSON.parse(JSON.stringify(card));
+   else if(p==='/api/v1/student/inbox/poll')data=[];
    else throw Error('Unexpected API '+request.method()+' '+p);
    return route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
   }
@@ -85,7 +86,7 @@ async function serve(page){
 
 (async()=>{
  await fs.mkdir(shots,{recursive:true});
- const browser=await engine.launch({headless:true});
+ const browser=await engine.launch({headless:true,...(process.env.BROWSER_PATH?{executablePath:process.env.BROWSER_PATH}:{}),args:['--no-sandbox']});
  try{
   const page=await browser.newPage({viewport:{width:1600,height:1000}}),errors=[];
   page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
@@ -97,6 +98,17 @@ async function serve(page){
    await page.locator('#cardTutorial').click();
    await expect(page.locator('.onboarding-box')).toBeVisible();
    await page.locator('[data-onboarding="stop"]').click();
+   await page.locator('#cardPractice').click();
+   await expect(page.locator('#ddsCoach')).toContainText('Примите решение');
+   await page.getByRole('button',{name:'Показать, куда нажать'}).click();
+   await expect(page.locator('#responseStatus')).toBeVisible();
+   await expect(page.locator('#responseStatus')).toHaveClass(/dds-coach-target/);
+   await page.getByRole('button',{name:'Скрыть подсказки'}).click();
+   await page.locator('#closeResponsePanel').click();
+   await page.locator('#finish').click();
+   await expect(page.locator('#finishDialog')).toBeVisible();
+   await expect(page.locator('#finishChecklist')).toContainText('Прослушанный доклад не заменяет');
+   await page.locator('#finishDialog [data-close]').first().click();
    for(const [width,height] of [[1920,1080],[1280,720],[760,900]]){
     await page.setViewportSize({width,height});
     await expect(page.locator('.dds-mode')).toBeVisible();
@@ -114,7 +126,7 @@ async function serve(page){
       return {connection:box('.connection'),summary:box('.card-ident'),actions:box('.card-ident-actions'),footer:box('.card-footer'),description:box('.description-block'),upperTileY:Math.min(...tiles.map(tile=>tile.y))};
      });
      if(width===1920&&(Math.abs(metrics.connection.width-280)>2||Math.abs(metrics.summary.width-200)>2||metrics.actions.x<=metrics.summary.right))throw Error('DDS header columns differ from reference proportions');
-     if(metrics.footer.height>70||metrics.description.bottom>metrics.upperTileY+1)throw Error('DDS service overflow obscures the card');
+     if(metrics.footer.height>70||metrics.description.bottom>metrics.upperTileY+1)throw Error('DDS service overflow obscures the card '+JSON.stringify({width,metrics}));
     }
     await page.locator('.service-edit').click();
     await expect(page.locator('#responseSection')).toBeVisible();
@@ -158,7 +170,7 @@ async function serve(page){
   await expect(page.locator('#briefingService option')).toHaveCount(2);
 
   await page.locator('#startBriefing').click();
-  await expect(page.locator('#briefingTranscript')).toContainText('Дежурный, Служба 101. Слушаю вас.');
+  await expect(page.locator('#briefingTranscript')).toContainText('Начальник дежурной смены, Служба 101. Слушаю вас.');
   await expect(page.locator('#briefingMissing')).toContainText('Ещё не названо');
   // Пока доклад неполный, завершение недоступно.
   await expect(page.locator('#briefingFinishForm')).toBeHidden();
@@ -176,7 +188,7 @@ async function serve(page){
 
   await page.locator('#briefingRecipient').fill('Дежурный смены Петров');
   await page.locator('#finishBriefing').click();
-  await expect(page.locator('#briefingMissing')).toContainText('Доклад принят дежурным');
+  await expect(page.locator('#briefingMissing')).toContainText('Доклад принят');
   if(finishBody?.recipient!=='Дежурный смены Петров')throw Error('Invalid finish payload');
   if(!finishBody?.message_id)throw Error('Finish omitted message_id');
 

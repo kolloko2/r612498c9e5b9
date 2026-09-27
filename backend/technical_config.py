@@ -8,14 +8,14 @@ DEFAULTS = {'sip_external_address':'127.0.0.1', 'sip_local_net':'172.16.0.0/12',
             'allowed_extensions':'201', 'max_calls':20, 'postgres_max_connections':100,
             'postgres_shared_buffers_mb':128, 'backend_memory_mb':1024,
             'voice_memory_mb':2048, 'backend_cpus':2, 'voice_cpus':2,
-            'llm_profile':'mock'}
+            'llm_profile':'mock', 'llm_device':'auto'}
 ENV_KEYS = {'sip_external_address':'SIP_EXTERNAL_ADDRESS','sip_local_net':'SIP_LOCAL_NET',
             'allowed_extensions':'ALLOWED_EXTENSIONS','max_calls':'MAX_CALLS',
             'postgres_max_connections':'POSTGRES_MAX_CONNECTIONS',
             'postgres_shared_buffers_mb':'POSTGRES_SHARED_BUFFERS_MB',
             'backend_memory_mb':'BACKEND_MEMORY_MB','voice_memory_mb':'VOICE_MEMORY_MB',
             'backend_cpus':'BACKEND_CPUS','voice_cpus':'VOICE_CPUS',
-            'llm_profile':'LLM_PROFILE'}
+            'llm_profile':'LLM_PROFILE', 'llm_device':'LLM_DEVICE'}
 LIMITS = {'max_calls':(1,100),'postgres_max_connections':(20,500),
           'postgres_shared_buffers_mb':(64,8192),'backend_memory_mb':(256,32768),
           'voice_memory_mb':(512,65536),'backend_cpus':(1,64),'voice_cpus':(1,64)}
@@ -38,6 +38,10 @@ def validate(values):
             from llm import PROFILES
             if value not in PROFILES:
                 raise ValueError('Неизвестный профиль модели: ' + ', '.join(PROFILES))
+        elif key=='llm_device':
+            from llm import DEVICES
+            if value not in DEVICES:
+                raise ValueError('Неизвестное устройство модели: ' + ', '.join(DEVICES))
         elif key=='allowed_extensions':
             if not isinstance(value,str) or not re.fullmatch(r'\d{2,8}(,\d{2,8}){0,99}',value):
                 raise ValueError('Внутренние номера: только цифры через запятую')

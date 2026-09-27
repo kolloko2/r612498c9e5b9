@@ -3,6 +3,8 @@ info:
   title: 112 AI Trainer REST API
   version: 0.3.0
   description: Backend scenario API and Voice Gateway API on separate ports. Initial
+    Student workspace responses include completion_missing (array of strings), the
+    outstanding finish prerequisites without private answers or future report text.
     DDS 103 completion with the explicit no-brigade comment and no assigned crew counts
     as receipt and bypasses future brigade/report gates. This exception does not bypass
     teacher expected crew or result assessment. Territorial routing uses explicit
@@ -3924,6 +3926,53 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - bearerAuth: []
+  /student/sessions/{sid}/error-reports:
+    post:
+      summary: Error Report
+      description: 'ДДС сообщает в Службу 112 об ошибке в полученной карточке.
+
+
+        Ответ заказчика 27.09.2026: правильные сведения диспетчер узнаёт из
+
+        звонка бригады, затем звонит по обычному телефону в 112 и сообщает об
+
+        ошибке. Сама карточка 112 при этом не меняется: её поля ведёт 112.'
+      operationId: error_report_api_v1_student_sessions__sid__error_reports_post
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorReport'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
   /student/sessions/{sid}/forward:
     post:
       summary: Forward
@@ -5966,6 +6015,59 @@ components:
       required:
       - target_id
       title: LinkCard
+    ErrorReport:
+      properties:
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+        field:
+          type: string
+          enum:
+          - city
+          - district
+          - area
+          - object
+          - street
+          - house
+          - building
+          - structure
+          - apartment
+          - entrance
+          - address_note
+          - description
+          - incident_type
+          title: Field
+        correct_value:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Correct Value
+        source:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Source
+        recipient:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Recipient
+        comment:
+          type: string
+          maxLength: 1000
+          title: Comment
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - message_id
+      - field
+      - correct_value
+      - source
+      - recipient
+      title: ErrorReport
+      description: 'Звонок ДДС в Службу 112: в карточке ошибка, правильное значение такое-то.'
     NotificationAction:
       properties:
         message_id:
@@ -6969,6 +7071,14 @@ components:
           type: array
           maxItems: 8
           title: Result Keywords
+        update_keywords:
+          type: object
+          maxProperties: 6
+          additionalProperties:
+            type: array
+            maxItems: 8
+            items: {type: string, minLength: 1, maxLength: 120}
+          description: Private asserted facts required in each operational update status comment.
         expected_corrections:
           additionalProperties:
             type: string

@@ -1,0 +1,12 @@
+mark('Результат занятия и оценка действий ДДС');
+const lesson=page.locator('#lessons article').filter({has:page.getByRole('heading',{name:'Демонстрация ДДС · 28 сентября',exact:true})});
+await lesson.getByRole('button',{name:'Отчёт и участники'}).click();
+await page.locator('#lessonReportDialog').waitFor({state:'visible'});
+await page.waitForTimeout(3500);
+await page.locator('#lessonReportDialog').getByRole('button',{name:'Открыть карточку и историю'}).click();
+await page.locator('#sessionDialog').waitFor({state:'visible'});
+await page.waitForTimeout(3500);
+const decisions=page.getByText('Решения диспетчера',{exact:false}).first();
+if(await decisions.isVisible())await decisions.scrollIntoViewIfNeeded();
+await page.waitForTimeout(4000);
+return await shot();

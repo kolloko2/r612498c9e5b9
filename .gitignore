@@ -38,3 +38,15 @@ deploy/tls/manifest.json
 deploy/directory/private/
 # Local recordings, customer source documents and acceptance captures.
 /artifacts/
+
+# Скриншоты браузерных проверок Playwright MCP
+.playwright-mcp/
+
+# Материалы заказчика и устаревшие выпуски не публикуются
+output/ТЗ_QA_материалы_заказчика*
+output/documentation-2026-09-27/
+output/112_AI_Trainer_Документация_2026-09-27.zip
+output/112_AI_Trainer_Видео_*.zip
+output/videos-*/
+output/Сценарий_видеообзора_интерфейса.docx
+output/documentation-*/~$*

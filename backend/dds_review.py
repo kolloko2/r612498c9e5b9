@@ -27,6 +27,8 @@ ACCEPTED = "Принята"
 REFUSED = "Не принята"
 WORKS_DONE = "Работы завершены"
 WORK_REFUSED = "Отказ от выполнения работ"
+# Промежуточные статусы, которые должны быть активированы до итогового.
+CYCLE = (ACCEPTED, "Начало реагирования", "Прибытие", "Проведение работ")
 MIN_RESULT_CHARS = 10
 
 
@@ -134,6 +136,14 @@ def _update_reactions(value: dict, expectation: dict, service: str) -> list[dict
             seconds <= limit,
             f"Реакция заняла {seconds} с при нормативе {limit} с." if seconds > limit
             else f"Реакция за {seconds} с."))
+        keywords = expectation.get('update_keywords', {}).get(update_id, [])
+        if keywords:
+            comment = reaction['detail'].get('comment', '')
+            lost = [word for word in keywords if not asserted(comment, word)]
+            checks.append(_check(f'update_facts:{update_id}',
+                                 f'Обстановка записана при статусе «{status}»', not lost,
+                                 'В комментарии не отражено: ' + ', '.join(lost) if lost else
+                                 'Существенные сведения доклада сохранены.', critical=True))
     return checks
 
 
@@ -158,6 +168,12 @@ def unfinished(value: dict, expectation: dict | None) -> list[str]:
         missing.append('назначение реагирующей бригады')
     if not any(status in (WORKS_DONE, WORK_REFUSED) for status in statuses):
         missing.append('итоговый статус своей службы')
+    # Карточка отработана, когда активированы все статусы цикла (ответ
+    # заказчика 27.09.2026). Мотивированный отказ от работ завершает цикл раньше.
+    if WORK_REFUSED not in statuses:
+        skipped = [status for status in CYCLE if status not in statuses]
+        if skipped:
+            missing.append('статусы цикла: ' + ', '.join(skipped))
     if not value.get('processed_at'):
         missing.append('отметка об отработке происшествия')
     delivered = {item.get('detail', {}).get('id') for item in value.get('events', [])
@@ -194,8 +210,8 @@ def _briefing(value: dict, expectation: dict) -> list[dict]:
     reports = [item for item in value.get("notifications", [])
                if item.get("service") == service and item.get('message_id') in briefing_ids]
     delivered = bool(reports)
-    checks = [_check("briefing", f"Доклад дежурному ({service}) состоялся", delivered,
-                     "Доклад дежурному службы не передан." if not delivered else "",
+    checks = [_check("briefing", f"Доклад по телефону ({service}) состоялся", delivered,
+                     "Доклад по телефону не передан." if not delivered else "",
                      critical=True)]
     if delivered:
         # Факты доклада сверены при его приёме: незавершённый доклад в
@@ -218,12 +234,22 @@ def _card_corrections(value: dict, expectation: dict) -> list[dict]:
     allowed = {'city', 'district', 'area', 'object', 'street', 'house', 'building',
                'structure', 'apartment', 'entrance', 'address_note', 'description',
                'incident_type'}
+    # ДДС не правит карточку 112, а сообщает об ошибке в 112 по телефону
+    # (ответ заказчика 27.09.2026). Засчитывается сообщение с правильным значением.
     expected = expectation.get('expected_corrections') or {}
-    return [_check(f'correction:{field}', f'Исправлено поле «{field}»',
-                   (value.get('card', {}).get(field) or '').strip().casefold()
-                   == answer.strip().casefold(),
-                   f'Ожидается: {answer}', critical=field in {'street', 'house', 'incident_type'})
-            for field, answer in expected.items() if field in allowed and isinstance(answer, str)]
+    reports = value.get('error_reports') or []
+    checks = []
+    for field, answer in expected.items():
+        if field not in allowed or not isinstance(answer, str):
+            continue
+        told = [item for item in reports if item.get('field') == field]
+        right = any(item.get('correct_value', '').strip().casefold() == answer.strip().casefold()
+                    or _contains(item.get('correct_value', ''), answer) for item in told)
+        checks.append(_check(f'correction:{field}', f'В 112 сообщено об ошибке в поле «{field}»', right,
+                             '' if right else (f'Сообщено неверное значение. Ожидается: {answer}' if told
+                                               else f'Ошибка не передана в 112. Ожидается: {answer}'),
+                             critical=field in {'street', 'house', 'incident_type'}))
+    return checks
 
 
 def _crew_decision(value: dict, expectation: dict) -> list[dict]:
@@ -259,14 +285,18 @@ def review(value: dict, expectation: dict | None) -> dict | None:
     checks: list[dict] = []
     timing = (value.get('evaluation') or {}).get('timing') or {}
     if value.get('status') == 'Завершена':
-        checks.append(_check('receipt_time', 'Получение подтверждено за 30 секунд',
+        # Нормативы по ответу заказчика 27.09.2026; остальные сроки не нормируются.
+        checks.append(_check('receipt_time',
+                             f"Карточка открыта за {timing.get('response_limit_seconds') or 30} секунд",
                              timing.get('response_within_limit') is True,
-                             'Получение не подтверждено.' if not value.get('receipt_decided_at')
-                             else f"Подтверждение через {timing.get('response_seconds')} с.",
+                             'Карточка не открыта.' if not value.get('opened_at')
+                             else f"Открытие через {timing.get('response_seconds')} с.",
                              critical=True))
-        checks.append(_check('handling', f"Карточка обработана за {timing.get('limit_seconds', 180)} с",
+        checks.append(_check('first_record',
+                             f"Первая запись (статус и текст) за {timing.get('limit_seconds') or 180} секунд",
                              timing.get('within_limit') is True,
-                             f"Обработка заняла {timing.get('elapsed_seconds')} с."))
+                             'Запись со статусом и текстом не внесена.' if not value.get('first_record_at')
+                             else f"Первая запись через {timing.get('first_record_seconds')} с."))
     checks += _acceptance(value, expectation, service)
     # A terminal no-brigade decision has no subsequent reports to wait for.
     if not _closed_without_brigade(value, service):

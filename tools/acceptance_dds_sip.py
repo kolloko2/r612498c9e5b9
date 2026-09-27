@@ -26,7 +26,7 @@ def docker(*args):
 
 
 def client(name):
-    c = Client('https://127.0.0.1:3000')
+    c = Client(os.environ.get('DDS_ACCEPTANCE_BASE_URL', 'https://127.0.0.1:3000'))
     c.context = ssl.create_default_context(cafile=str(ROOT/'deploy/tls/ca/ca.cert.pem'))
     c.login(name)
     return c
@@ -135,7 +135,7 @@ def main(args):
                 return call(student, 'POST', base+'/services', {'service':workspace['owner_service'],
                     'status':value,'comment':comment,'message_id':str(uuid4())})
             if not workspace.get('assigned_crew'):
-                status('Принята')
+                status('Принята', 'Принято в работу')
                 workspace = call(student,'POST',base+'/crew',{'message_id':str(uuid4()),
                     'crew_id':workspace['crew_options'][0]['id'],'decision_by':'dispatcher'})
             crew = workspace['assigned_crew']

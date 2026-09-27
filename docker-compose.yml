@@ -46,6 +46,7 @@ services:
       # Профиль выбирает администратор в техническом кабинете; модель обслуживает
       # локальный Ollama на хосте, внешние сервисы контуру запрещены.
       LLM_PROFILE: ${LLM_PROFILE:-mock}
+      LLM_DEVICE: ${LLM_DEVICE:-auto}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       PHONE_LLM_MODEL: ${PHONE_LLM_MODEL:-qwen3:4b-instruct-2507-q4_K_M}
       PHONE_LLM_THREADS: ${PHONE_LLM_THREADS:-6}
@@ -79,7 +80,7 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://127.0.0.1:3000,http://localhost:3000}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
     ports:
-      - "${WEB_BIND_ADDRESS:-127.0.0.1}:3000:3000"
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-3000}:3000"
     depends_on:
       backend:
         condition: service_healthy
