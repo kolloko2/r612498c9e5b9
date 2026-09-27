@@ -44,9 +44,26 @@
     "rule_based_turn": 0.2
   },
   "tests": {
-    "backend_passed": 363,
+    "backend_passed": 368,
+    "deploy_passed": 46,
     "browser_scenarios_passed": 12,
     "voice_passed": 56
   },
-  "source": "docs/CPU_PHONE_2026-09-27.md, docs/LOCAL_MODEL.md"
+  "source": "docs/CPU_PHONE_2026-09-27.md, docs/LOCAL_MODEL.md",
+  "sip_voice_cycle_gpu": {
+    "calls": 5,
+    "dds_score_percent": 100.0,
+    "end_of_speech_to_first_audio_s": [
+      1.4,
+      2.0
+    ],
+    "model_reply_s": [
+      0.75,
+      0.97
+    ],
+    "rule_reply_ms": [
+      20,
+      70
+    ]
+  }
 }
