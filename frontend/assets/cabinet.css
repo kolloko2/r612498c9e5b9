@@ -23,3 +23,14 @@ body:has(#loginForm){background:#e8edf0}body:has(#loginForm)>main{max-width:470p
 @media(max-width:650px){main{padding:0 14px;margin-top:22px}body>header{padding:16px 20px;flex-wrap:wrap;gap:14px}h1{font-size:24px}.columns,.split,.form-grid,#lessonForm{grid-template-columns:1fr}.panel,.form-grid,.structured-editor{padding:18px}.heading-actions{justify-content:flex-start}.structured-fields{grid-template-columns:1fr}body:has(#loginForm)>main{margin:40px 14px;max-width:none;padding:24px}.section-head{flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){button,.button{transition:none}}
 .preview-section{border-radius:10px;border-color:var(--line);padding:22px}.draft{display:block;text-align:left;font-weight:400}.draft strong{font-weight:600}.draft[aria-current=true]{background:#e9eff3;border-color:#718b9e}.fact strong{font-size:12px;color:#667787;font-weight:600}.fact ul{padding-left:20px;margin:6px 0}.fact li{margin:5px 0}.approval{border-color:#718b9e}#rubricForm{background:white;border:1px solid var(--line);border-radius:10px;padding:24px}
+.student-section{margin:0 0 24px}.student-section h2{margin:0 0 4px}.student-section>.muted{margin:0 0 12px}
+.student-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;align-items:start}
+.student-grid .card{margin:0;min-width:0}.student-grid .card h3,.student-grid .card p{overflow-wrap:anywhere}
+.student-grid .card .button{display:inline-block;margin-top:8px}
+.card-featured{border:2px solid #1884b6;background:#f3f9fd}
+.student-done>summary{cursor:pointer;font-weight:600;padding:10px 0;color:#34495a}
+.student-grid .objectives{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.heading-actions .button.primary{background:#344b5b;color:#fff;border-color:#344b5b}
+.student-section>p.muted{color:#5f707e}
+#lessons .card>button,#lessons .card>.guided-control{margin:8px 8px 0 0}
+.lessons-done>summary{cursor:pointer;font-weight:600;padding:12px 0;color:#34495a}.lessons-done[open]>summary{margin-bottom:8px}

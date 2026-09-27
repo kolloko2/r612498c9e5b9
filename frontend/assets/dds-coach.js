@@ -1,26 +1,46 @@
 'use strict';
 // Derive guidance from received facts only. Never read the private marking rubric.
 (function(root){
+ // Готовые формулировки берутся из сведений этой карточки и полученных докладов,
+ // а не из скрытого эталона: ученик видит, что и как записать.
+ function facts(s){
+  const c=s.card||{},crew=s.assigned_crew||(s.crew_options||[])[0]||{};
+  const address=[c.city,c.street&&('ул. '+c.street),c.house&&('д. '+c.house)].filter(Boolean).join(', ')||c.address_note||'адрес из карточки';
+  return {address,incident:c.incident_type||'происшествие',crew:crew.id||'бригада',leader:crew.leader||'старший бригады',
+   injured:c.injured?'Есть пострадавшие':'Пострадавших нет'};
+ }
  function nextAction(s){
   if(!s||s.exercise_mode!=='actions')return null;
-  const events=s.events||[], status=s.service_states?.[s.owner_service]?.status;
-  if(s.status==='Завершена')return {title:'Занятие завершено',text:'Откройте отчёт: в разделе «Решения диспетчера» показано, какие действия выполнены и где допущены ошибки.',target:'audit'};
-  if(!status||['Добавлена','Получена службой'].includes(status))return {title:'1. Примите решение по карточке',text:'Прочитайте адрес и происшествие. В блоке своей службы выберите «Принята» либо обоснованный отказ и нажмите ✓. Нормативы: открыть карточку — 30 секунд, первая запись (статус и текст) — 3 минуты от поступления. Комментарий к статусу обязателен.',target:'responseStatus'};
-  if(status==='Не принята')return {title:'Проверьте обоснование отказа',text:'В комментарии должны быть причина и сведения о передаче информации. Затем завершите карточку: правильность решения проверит оценка.',target:'finish'};
-  if((s.crew_options||[]).length&&!s.assigned_crew&&!s.card_locked)return {title:'2. Организуйте реагирование',text:'Выберите бригаду своей службы, укажите, кто принял решение, и нажмите «Назначить». Номер наряда в статусе не заменяет назначение бригады.',target:'crewSelect'};
+  const events=s.events||[], status=s.service_states?.[s.owner_service]?.status, f=facts(s);
+  if(s.status==='Завершена')return {title:'Занятие завершено',text:'Откройте отчёт: в разделе «Решения диспетчера» видно, какие действия выполнены и где ошибки. Кнопка «Получить ИИ-разбор» разберёт ваши записи с цитатами.',target:'audit'};
+  if(!status||['Добавлена','Получена службой'].includes(status))return {title:'Шаг 1. Примите карточку',
+   text:`Прочитайте адрес и происшествие. В блоке «Реагирование» своей службы «${s.owner_service}» выберите статус «Принята», в поле «Комментарий службы» напишите, что приняли и что делаете дальше, и нажмите ✓ (она станет зелёной, когда статус и комментарий заполнены). Комментарий обязателен: без него статус не сохранится. Нормативы: открыть карточку — 30 секунд, первая запись — 3 минуты.`,
+   sample:`Принято в работу. ${f.incident}, ${f.address}. Направляем бригаду.`,fill:'responseComment',target:'responseStatus'};
+  if(status==='Не принята')return {title:'Проверьте обоснование отказа',text:'В комментарии должны быть причина и кому передана информация. Затем завершите карточку.',target:'finish'};
+  if((s.crew_options||[]).length&&!s.assigned_crew&&!s.card_locked)return {title:'Шаг 2. Назначьте бригаду',
+   text:`В блоке «Бригада» выберите «${f.crew} · ${f.leader}», в поле «Решение принял» оставьте «Диспетчер» и нажмите «Назначить». Номер наряда в статусе не заменяет назначение бригады.`,target:'crewSelect'};
   const briefs=events.filter(e=>e.type==='notification.recorded'&&e.detail?.source==='briefing');
   const crewBrief=briefs.some(e=>e.detail?.counterpart==='crew'||e.detail?.crew_id);
   const superiorBrief=briefs.some(e=>e.detail?.counterpart==='superior'||(!e.detail?.counterpart&&!e.detail?.crew_id));
-  if(s.assigned_crew&&!crewBrief&&!s.card_locked)return {title:'3. Передайте задачу бригаде',text:'Нажмите «Доложить по телефону», адресат — назначенная бригада. Передайте адрес, происшествие и сведения о пострадавших. Когда бригада подтвердит, укажите, кто принял информацию, и нажмите «Завершить доклад».',target:'openBriefing'};
-  if(!superiorBrief&&!s.card_locked)return {title:`${s.assigned_crew?'3б':'3'}. Доложите вышестоящему начальнику`,text:`О происшествии и принятом решении диспетчер докладывает начальнику дежурной смены своей службы: так руководство знает обстановку и может усилить реагирование. Нажмите «Доложить по телефону», адресат — «${s.owner_service} · начальник дежурной смены». Назовите адрес, что произошло и какая бригада направлена.`,target:'openBriefing'};
+  if(s.assigned_crew&&!crewBrief&&!s.card_locked)return {title:'Шаг 3. Передайте задачу бригаде',
+   text:`Нажмите «Доложить по телефону», адресат — «${f.crew} · ${f.leader}», нажмите «Позвонить». Когда бригада ответит, скажите (или напишите) текст ниже. После подтверждения в поле «Информацию принял» укажите «${f.leader}» и нажмите «Завершить доклад».`,
+   sample:`${f.crew}, выезжайте: ${f.address}. ${f.incident}. ${f.injured}.`,fill:'briefingText',target:'openBriefing'};
+  if(!superiorBrief&&!s.card_locked)return {title:`Шаг ${s.assigned_crew?'4':'3'}. Доложите начальнику дежурной смены`,
+   text:`Вышестоящему начальнику докладывают, где и что произошло и кто направлен: так руководство знает обстановку. Нажмите «Доложить по телефону», адресат — «${s.owner_service} · начальник дежурной смены», нажмите «Позвонить» и доложите текстом ниже. В поле «Информацию принял» укажите «Начальник дежурной смены» и нажмите «Завершить доклад». Без этого доклада карточку не завершить.`,
+   sample:`Докладываю: ${f.address}, ${f.incident}. ${f.injured}. Направлена ${f.crew}, старший — ${f.leader}.`,fill:'briefingText',target:'openBriefing'};
+  if((s.correction_evidence||[]).length&&!(s.error_reports||[]).length&&!s.card_locked)return {title:'Бригада сообщила сведения, отличные от карточки',
+   text:`Сверьте с карточкой: «${s.correction_evidence[0]}». Поля карточки 112 не правятся: нажмите «Сообщить в 112 об ошибке», выберите поле с ошибкой, впишите правильное значение ровно как сказала бригада, источник — «${f.leader}», и кто принял сообщение в 112.`,target:'openErrorReport'};
   const update=events.find(e=>e.type==='situation.update'&&e.detail?.unlocks_status&&!events.some(a=>a.type==='service.updated'&&a.detail?.service===s.owner_service&&a.detail?.status===e.detail.unlocks_status&&a.seq>e.seq));
-  if(update&&!s.card_locked)return {title:'4. Зафиксируйте доклад',text:`Получено: «${update.detail.text}». Выберите «${update.detail.unlocks_status}», внесите существенные сведения в «Комментарий службы» и нажмите ✓.${update.detail.unlocks_status==='Работы завершены'?' Сначала запишите результат: после сохранения итогового статуса редактирование закроется.':''}`,target:'responseComment'};
+  if(update&&!s.card_locked){const next=update.detail.unlocks_status,last=next==='Работы завершены';
+   return {title:`Отразите доклад: статус «${next}»`,
+    text:`Бригада сообщила: «${update.detail.text}». Выберите статус «${next}», в «Комментарий службы» запишите своими словами всё существенное из доклада — что делают, что установили${last?', каков результат работ':''} — и нажмите ✓. Слова «ок», «готово» не засчитываются.${last?' После этого статуса редактирование закроется, поэтому запишите итог полностью.':''}`,
+    sample:(last?'Работы завершены. ':'')+update.detail.text,fill:'responseComment',target:'responseComment'};}
   if(s.card_locked){
-   if(!s.processed_at)return {title:'5. Отметьте отработку',text:'Итоговый статус и результат сохранены. Нажмите «Отметить отработанным»: это отметка по происшествию, ещё не завершение занятия.',target:'processed'};
-   return {title:'6. Получите оценку',text:'Нажмите «Завершить карточку». Если остались обязательные действия, они будут перечислены перед завершением.',target:'finish'};
+   if(!s.processed_at)return {title:'Отметьте отработку',text:'Итоговый статус и результат сохранены. Нажмите «Отметить отработанным»: это отметка по происшествию, ещё не завершение занятия.',target:'processed'};
+   return {title:'Завершите карточку',text:'Нажмите «Завершить карточку». Если остались обязательные действия, они будут перечислены. Затем откройте отчёт и запросите ИИ-разбор.',target:'finish'};
   }
-  if((s.pending_phone_reports||[]).length)return {title:'4. Примите доклад с места',text:'Ответьте в телефоне, выслушайте доклад до конца. В списке докладов нажмите «Подтвердить получение». Затем обновите статус своей службы и запишите существенные сведения в комментарий.',target:'situationFeed'};
-  return {title:'4. Контролируйте ход работ',text:'Ждите доклада бригады или нажмите «Уточнить ход работ». Не ставьте следующий статус заранее. После доклада о выезде — «Начало реагирования», о прибытии — «Прибытие», о начале работ — «Проведение работ».',target:'requestProgress'};
+  if((s.pending_phone_reports||[]).length)return {title:'Примите доклад бригады',text:'Бригада звонит: ответьте в телефоне и выслушайте доклад до конца. В списке докладов нажмите «Подтвердить получение», затем обновите статус и запишите сведения в комментарий.',target:'situationFeed'};
+  return {title:'Ждите доклада бригады',text:'Следующий доклад поступит сам, после того как предыдущий отражён статусом. Можно нажать «Уточнить ход работ». Не ставьте следующий статус заранее: после доклада о выезде — «Начало реагирования», о прибытии — «Прибытие», о начале работ — «Проведение работ».',target:'requestProgress'};
  }
  if(typeof module!=='undefined')module.exports={nextAction};
  if(!root.document)return;
@@ -28,27 +48,56 @@
  const $=id=>document.getElementById(id);
  const panel=document.createElement('aside');panel.id='ddsCoach';panel.hidden=true;panel.setAttribute('aria-label','Практика диспетчера');
  const title=document.createElement('h3'),text=document.createElement('p'),go=document.createElement('button'),close=document.createElement('button');
- go.type=close.type='button';go.textContent='Показать, куда нажать';close.textContent='Скрыть подсказки';
- panel.append(title,text,go,close);document.body.append(panel);
+ const sample=document.createElement('blockquote'),insert=document.createElement('button');
+ go.type=close.type=insert.type='button';go.textContent='Показать, куда нажать';close.textContent='Скрыть подсказки';insert.textContent='Вставить текст';
+ sample.className='dds-coach-sample';insert.className='dds-coach-insert';
+ panel.append(title,text,sample,insert,go,close);document.body.append(panel);
+ // Вставляет образец в нужное поле; если окно доклада ещё не открыто — подскажет.
+ insert.onclick=()=>{const step=nextAction(state),field=step?.fill&&$(step.fill);
+  if(!field||field.closest('dialog:not([open])')||field.closest('[hidden]')){insert.textContent='Сначала откройте окно, затем вставьте';setTimeout(()=>insert.textContent='Вставить текст',2500);return;}
+  field.value=step.sample;field.dispatchEvent(new Event('input',{bubbles:true}));field.focus();};
  function key(){return 'ddsCoach:'+state?.id;}
  // Подсказка встаёт рядом с элементом, о котором говорит: над ним или под ним.
  function place(){
-  const step=nextAction(state),target=step&&$(step.target),box=target?.getBoundingClientRect();
   if(panel.hidden)return;
+  // Модальное окно (доклад, ошибка в 112) перекрывает всё остальное: подсказка
+  // переезжает в само окно и встаёт сбоку от него, чтобы её можно было нажать.
+  const dialog=document.querySelector('dialog[open]'),host=dialog||document.body;
+  if(panel.parentElement!==host)host.append(panel);
+  panel.style.width='';panel.style.maxHeight='';
+  const step=nextAction(state),target=step&&$(step.target);
+  // Не закрывать поля, которые нужно заполнить: якорь — вся панель реагирования или окно.
+  const anchor=dialog||target?.closest('#responseSection, .response-section')||target,box=anchor?.getBoundingClientRect();
   if(!box||!box.width||!box.height){panel.style.left='';panel.style.top='';panel.style.right='';return;}
-  const width=panel.offsetWidth,height=panel.offsetHeight;
-  let top=box.top-height-12;if(top<40)top=box.bottom+12;
-  top=Math.max(40,Math.min(top,innerHeight-height-10));
-  const left=Math.max(10,Math.min(box.left,innerWidth-width-10));
-  panel.style.right='auto';panel.style.left=left+'px';panel.style.top=top+'px';
+  let width=panel.offsetWidth;
+  const right=innerWidth-box.right-24,left=box.left-24;
+  let x,y;
+  if(dialog){
+   const room=Math.max(right,left);if(room<width&&room>=220){width=room;panel.style.width=room+'px';}
+   x=right>=width?box.right+12:left>=width?box.left-width-12:innerWidth-width-10;y=box.top;
+  }else{
+   // Справа над панелью: слева адрес и описание — их ученик читает во время шага.
+   x=Math.min(box.right-width,innerWidth-width-10);y=box.top-panel.offsetHeight-12;
+   if(y<10){
+    // Над панелью мало места: ниже — если помещается, иначе ужать и прокручивать.
+    if(box.bottom+12+panel.offsetHeight<=innerHeight-10)y=box.bottom+12;
+    else{panel.style.maxHeight=Math.max(160,box.top-22)+'px';y=10;}
+   }
+  }
+  const height=panel.offsetHeight;
+  y=Math.max(10,Math.min(y,innerHeight-height-10));x=Math.max(10,x);
+  panel.style.right='auto';panel.style.left=x+'px';panel.style.top=y+'px';
  }
  function render(){
   const step=nextAction(state);panel.hidden=!enabled||!step||$('cardPanel')?.hidden;
   document.querySelectorAll('.dds-coach-target').forEach(n=>n.classList.remove('dds-coach-target'));
   if(panel.hidden)return;title.textContent=step.title;text.textContent=step.text;
+  sample.hidden=insert.hidden=!step.sample;sample.textContent=step.sample?'Например: «'+step.sample+'»':'';
   requestAnimationFrame(place);
  }
  addEventListener('resize',()=>requestAnimationFrame(place));
+ // Открытие и закрытие окон меняет место подсказки.
+ new MutationObserver(()=>requestAnimationFrame(place)).observe(document.body,{subtree:true,attributes:true,attributeFilter:['open']});
  close.onclick=()=>{enabled=false;sessionStorage.setItem(key(),'off');render();};
  go.onclick=()=>{
   const step=nextAction(state);if(!step)return;

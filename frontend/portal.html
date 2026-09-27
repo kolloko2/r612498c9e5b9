@@ -63,11 +63,9 @@
     </section>
 
     <section id="studentPanel" hidden>
-      <h1>Мои задания</h1>
-      <p>Откройте рабочее место, чтобы начать назначенное преподавателем занятие.</p>
-      <p><a class="button" href="/assessment">Мои результаты</a> <a class="button" href="/materials">Справочные материалы</a></p>
-      <div id="studentAssignments" class="cards"></div>
-      <a class="button primary" href="/">Перейти в рабочее место</a>
+      <div class="heading"><div><h1>Мои задания</h1><p>Выберите занятие и нажмите «Начать работу» — откроется рабочее место диспетчера.</p></div>
+        <nav class="heading-actions"><a class="button primary" href="/">Рабочее место</a><a class="button" href="/assessment">Мои результаты</a><a class="button" href="/materials">Справочные материалы</a></nav></div>
+      <div id="studentAssignments"></div>
     </section>
   </main>
   <dialog id="lessonReportDialog"><div class="dialog-head"><h2>Отчёт занятия группы</h2><button id="closeLessonReport" type="button">Закрыть</button></div><div id="lessonReportContent"></div><button id="exportLessonReport" type="button">Скачать JSON</button></dialog>

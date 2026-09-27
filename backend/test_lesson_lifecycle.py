@@ -386,3 +386,19 @@ def test_mode_switch_is_refused_when_not_allowed(classroom):
                            headers=h["student1"], json={"mode": "actions"})
     assert response.status_code == 409
     assert "не разрешил" in response.json()["detail"]
+
+
+def test_restart_gives_the_group_a_fresh_lesson_and_keeps_old_results(classroom):
+    c, h = classroom["client"], classroom["headers"]
+    lid = create_lesson(classroom).json()["id"]
+    c.post(f"/api/v1/instructor/lessons/{lid}/start", headers=h["teacher1"])
+    card = c.post(f"/api/v1/student/lessons/{lid}/next", headers=h["student1"], json={})
+    assert card.status_code == 200, card.text
+    restarted = c.post(f"/api/v1/instructor/lessons/{lid}/restart", headers=h["teacher1"])
+    assert restarted.status_code == 201, restarted.text
+    fresh = restarted.json()
+    assert fresh["id"] != lid and fresh["state"] == "running" and fresh["restarted_from"] == lid
+    lessons = {item["id"]: item for item in c.get("/api/v1/instructor/lessons", headers=h["teacher1"]).json()}
+    assert lessons[lid]["state"] == "finished" and lessons[lid]["cards"][0]["status"] == "Завершена"
+    assert lessons[fresh["id"]]["cards"] == []
+    assert student_lesson(classroom, fresh["id"])["state"] == "running"

@@ -302,7 +302,7 @@ function renderCard() {
  evidence.replaceChildren();for(const text of current.correction_evidence||[])evidence.append(element('p','Сведения с места — сверьте с карточкой и при ошибке сообщите в 112: '+text));
  $('conversation').hidden=dds;
  if(dds){$('messageForm').hidden=true;$('speak').disabled=true;$('callStatus').textContent='карточка передана Службой 112';}
- $('openNotification').disabled=finished||!current.revision;$('openForward').hidden=dds;$('openForward').disabled=dds||finished||!current.revision;$('openBriefing').disabled=finished||!current.revision;$('openErrorReport').hidden=!dds;$('openErrorReport').disabled=finished||!current.revision||current.card_locked;$('openLinks').disabled=finished||!current.revision;$('openReminder').disabled=finished;$('printCard').hidden=!current.revision;$('printCard').disabled=false;renderSurvey(); renderServices();renderCrew();renderDialogue();renderServiceHistory();renderNotificationHistory();renderLinkedCards();renderSituationUpdates();tick();
+ $('openNotification').disabled=finished||!current.revision;$('openForward').hidden=dds;$('openForward').disabled=dds||finished||!current.revision;$('openBriefing').disabled=finished||!current.revision;$('openErrorReport').hidden=!dds;$('openErrorReport').disabled=finished||!current.revision||current.card_locked;$('openLinks').disabled=finished||!current.revision;$('openReminder').disabled=finished;$('printCard').hidden=!current.revision;$('printCard').disabled=false;renderSurvey(); renderServices();renderCrew();renderDialogue();renderServiceHistory();renderNotificationHistory();renderLinkedCards();renderSituationUpdates();tick();updateResponseReady();
  const pending=storedMessage(current.id);if(pending&&current.transport==='text'&&current.status!=='Завершена'){$('operatorText').value=pending.text;$('send').textContent='Повторить отправку';}
  if(!finished&&current.lesson_id&&current.transport==='sip'&&!current.call_id&&!attemptedLessonCalls.has(current.id)){
   attemptedLessonCalls.add(current.id);startSipCall();
@@ -534,7 +534,10 @@ $('assignCrew').onclick=()=>{guarded(async()=>{
 function populateResponseStatuses(){const values=current?.allowed_service_statuses?.[$('responseService').value]||[];
  $('responseHint').textContent=current?.card_locked?'Работа с карточкой завершена.':values.length?'':(current?.owner_service?'Следующий статус откроется, когда служба сообщит о ходе работ.':'');$('responseStatus').replaceChildren();const prompt=new Option('Выберите статус…','');prompt.disabled=true;prompt.selected=true;$('responseStatus').add(prompt);for(const value of values)$('responseStatus').add(new Option(value,value));const terminal=!values.length||current.status==='Завершена';$('responseStatus').disabled=terminal;$('responseOrderNumber').disabled=terminal;$('responseComment').disabled=terminal;$('addResponse').disabled=terminal;updateResponseHint();}
 function updateResponseHint(){$('responseComment').placeholder=$('responseStatus').value==='Работы завершены'?(current?.owner_service==='103'&&!current?.assigned_crew?'Укажите результат; без бригады — «Завершение работ без бригады»':'Результат работ: что сделано и какова обстановка'):'Комментарий к статусу (обязателен): что сообщили, что сделано';}
-$('responseService').onchange=populateResponseStatuses;$('responseStatus').onchange=updateResponseHint;
+$('responseService').onchange=()=>{populateResponseStatuses();updateResponseReady();};$('responseStatus').onchange=()=>{updateResponseHint();updateResponseReady();};
+// ✓ становится ярко-зелёной, когда выбраны статус и написан комментарий.
+function updateResponseReady(){$('addResponse').classList.toggle('ready',!$('addResponse').disabled&&Boolean($('responseStatus').value)&&$('responseComment').value.trim().length>=3);}
+$('responseComment').addEventListener('input',updateResponseReady);
 function renderServiceHistory() {
  $('serviceHistory').replaceChildren();
  for(const event of current.events.filter(e=>e.type==='service.updated')) {const tr=element('tr');[formatted(event.at),event.detail.service,event.detail.status,event.detail.order_number||'',event.detail.comment].forEach(v=>tr.append(element('td',v)));$('serviceHistory').append(tr);}
@@ -1048,7 +1051,7 @@ let polling=false;setInterval(async()=>{if(polling)return;polling=true;try{if($(
   catch(error){$('callStatus').textContent='Восстановление: '+error.message;}
  }
  }}catch{if(current?.transport==='sip')$('callStatus').textContent='нет связи с Voice';}finally{polling=false;}},3000);
-setInterval(tick,1000);tick();guarded(async()=>{const user=await api('auth/me');if(user.role!=='student'){location.replace('/portal');return;}studentUserId=user.id;$('operatorSeat').textContent=`${user.display_name} · АРМ ${workstation()||'не указан'}`;activeLessonId=sessionStorage.getItem('activeLesson:'+studentUserId)||'';await loadClassifier();await loadSessions();await refreshLessonFlow();refreshHealth();setInterval(refreshHealth,15000);});
+setInterval(tick,1000);tick();guarded(async()=>{const user=await api('auth/me');if(user.role!=='student'){location.replace('/portal');return;}studentUserId=user.id;$('operatorSeat').textContent=`${user.display_name} · АРМ ${workstation()||'не указан'}`;const requested=new URLSearchParams(location.search).get('lesson');if(requested){chooseLesson(requested);history.replaceState(null,'',location.pathname);}activeLessonId=activeLessonId||sessionStorage.getItem('activeLesson:'+studentUserId)||'';await loadClassifier();await loadSessions();await refreshLessonFlow();refreshHealth();setInterval(refreshHealth,15000);});
 
 // Доклад дежурному службы: учебный вызов из ДДС в службу (направление Б→C).
 let briefing=null,briefingTimer=null;
@@ -1172,3 +1175,7 @@ $('modeSwitch').onclick=()=>guarded(async()=>{
   ? 'Следующая карточка придёт с приёмом вызова от заявителя'
   : 'Следующая карточка придёт готовой, как в ДДС');
 });
+// Открытая карточка перекрывает журнал: шапка журнала и панель занятия под ней
+// скрываются, чтобы не проступать по краям и не ловить фокус клавиатуры.
+new MutationObserver(()=>document.body.classList.toggle('card-open',!$('cardPanel').hidden)).observe($('cardPanel'),{attributes:true,attributeFilter:['hidden']});
+document.body.classList.toggle('card-open',!$('cardPanel').hidden);

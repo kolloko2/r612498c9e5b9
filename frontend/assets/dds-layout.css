@@ -11,9 +11,13 @@ dialog button{white-space:normal;overflow-wrap:anywhere}
 #finishChecklist{padding:10px 12px;border-left:3px solid #c4782b;background:#fff4e7;color:#343b40}
 #finishChecklist:empty{display:none}
 #finishError{color:#a32b22;white-space:pre-wrap;line-height:1.5}
-#ddsCoach{position:fixed;right:18px;top:150px;width:320px;max-width:calc(100vw - 36px);max-height:45vh;overflow:auto;z-index:15;background:#fff;color:#26343d;border:2px solid #1884b6;box-shadow:0 6px 24px #0003;padding:14px;box-sizing:border-box}
+#ddsCoach{position:fixed;right:18px;top:150px;width:320px;max-width:calc(100vw - 36px);max-height:70vh;overflow:auto;z-index:15;background:#fff;color:#26343d;border:2px solid #1884b6;box-shadow:0 6px 24px #0003;padding:14px;box-sizing:border-box}
 #ddsCoach h3{font-size:16px;margin:0 0 8px}#ddsCoach p{font-size:13px;line-height:1.5;margin:0 0 12px}
 #ddsCoach button{color:#26343d;border:1px solid #859198;padding:7px;margin:3px;background:#f0f4f6;font-size:12px}
+#ddsCoach .dds-coach-sample{margin:0 0 8px;padding:8px 10px;background:#eef7fc;border-left:3px solid #1884b6;font-size:13px;line-height:1.45;color:#1d2a33;overflow-wrap:anywhere}
+#ddsCoach .dds-coach-insert{background:#1884b6;color:#fff;border-color:#1884b6;font-weight:600}
+/* ✓ загорается, когда выбраны статус и комментарий: изменение готово к сохранению. */
+#addResponse.ready,.dds-mode.response-compact #addResponse.ready{background:#1f9d55;color:#fff;border-color:#1f9d55;font-weight:700;box-shadow:0 0 0 3px #1f9d5540}
 .dds-coach-target{outline:3px solid #eb9238!important;outline-offset:3px}
 .dds-mode .card-footer #cardResponseTools,.dds-mode .card-footer #cardPractice{font-size:11px;max-width:95px;white-space:normal;line-height:1.25}
 .dds-mode .card-footer>button{flex-shrink:0;overflow-wrap:normal;line-height:1.25;white-space:normal}
@@ -210,3 +214,4 @@ body:has(.dds-mode:not([hidden])) .console-meta #clock{font-size:28px}
 .dds-mode .connection .phone-icon{font-size:24px;line-height:1;color:#4a555b}
 .dds-mode.response-compact #responseSection>table,.dds-mode.response-compact #latestReport,
 .dds-mode.response-compact #responseSection>h2~h2{display:none}
+body.card-open .lesson-control,body.card-open .workspace-head,body.card-open #journalPanel{visibility:hidden}

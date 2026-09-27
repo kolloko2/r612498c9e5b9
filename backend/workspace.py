@@ -1849,6 +1849,21 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             lesson_save(value, 'lesson.finished')
             return value
 
+    @instructor.post('/lessons/{lid}/restart', status_code=201)
+    async def restart_lesson(lid: UUID):
+        """Пройти занятие заново с нуля: прежнее завершается (его результаты
+        остаются в отчётах), создаётся и запускается такое же с новыми карточками."""
+        source = lesson_load(lid)
+        if source['state'] != 'finished':
+            await finish_lesson(lid, TeacherFinish(reason='Занятие начато заново'))
+        settings = CreateLesson.model_validate(
+            {key: source[key] for key in CreateLesson.model_fields if key in source}).model_dump(mode='json')
+        value = {**settings, 'templates': source.get('templates', []), 'scenario_ids': source.get('scenario_ids', []),
+                 'id': str(uuid4()), 'teacher_id': actor.get()['id'], 'state': 'planned', 'members': [],
+                 'created_at': now(), 'events': [], 'restarted_from': str(lid)}
+        lesson_save(value, 'lesson.created')
+        return await start_lesson(UUID(value['id']))
+
     @instructor.get('/lessons/{lid}/report')
     async def lesson_report(lid: UUID):
         value = lesson_load(lid)

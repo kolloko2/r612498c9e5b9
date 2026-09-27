@@ -1,14 +1,14 @@
 const assert=require('node:assert/strict');
 const {nextAction}=require('./assets/dds-coach.js');
 const s={exercise_mode:'actions',status:'В работе',owner_service:'Служба 104',events:[],service_states:{},crew_options:[{id:'17'}]};
-assert.equal(nextAction(s).target,'responseStatus');
+assert.equal(nextAction(s).target,'responseStatus');assert.ok(nextAction(s).sample.startsWith('Принято в работу'));
 s.service_states['Служба 104']={status:'Получена службой'};
-assert.equal(nextAction(s).target,'responseStatus');
+assert.equal(nextAction(s).target,'responseStatus');assert.ok(nextAction(s).sample.startsWith('Принято в работу'));
 s.service_states['Служба 104']={status:'Принята'};
 assert.equal(nextAction(s).target,'crewSelect');s.assigned_crew={id:'17'};
 assert.equal(nextAction(s).target,'openBriefing');
 s.events.push({seq:1,type:'notification.recorded',detail:{source:'briefing',counterpart:'crew',crew_id:'17'}});
-assert.equal(nextAction(s).target,'openBriefing');assert.match(nextAction(s).title,/вышестоящему/);
+assert.equal(nextAction(s).target,'openBriefing');assert.match(nextAction(s).title,/начальнику дежурной смены/);assert.ok(nextAction(s).sample.includes('Докладываю'));
 s.events.push({seq:1,type:'notification.recorded',detail:{source:'briefing',counterpart:'superior'}});
 assert.equal(nextAction(s).target,'requestProgress');
 s.pending_phone_reports=[{id:'arrived'}];assert.equal(nextAction(s).target,'situationFeed');

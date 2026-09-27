@@ -194,6 +194,8 @@ async function loadSessions(){
 
 async function loadLessons(){
  const values=await api('/api/v1/instructor/lessons');el('lessons').replaceChildren();
+ // Идущие занятия сверху; завершённые свёрнуты, чтобы не теряться в длинном списке.
+ const finishedCount=values.filter(v=>v.state==='finished').length,done=node('details',undefined,'lessons-done');done.append(node('summary',`Завершённые занятия (${finishedCount})`));
  const labels={planned:'Подготовлено',running:'Идёт',stopping:'Завершается — повторите завершение',finished:'Завершено'};
  for(const value of values){const card=node('article',undefined,'card'),meta=[value.difficulty&&curriculumTitle('difficulties',value.difficulty),value.dds_profile&&curriculumTitle('profiles',value.dds_profile)].filter(Boolean).join(' · ');card.append(node('h3',value.title),node('p',`${labels[value.state]} · ${value.cards_per_student===null?'До остановки преподавателем':value.cards_per_student+' карточек каждому'}${meta?' · '+meta:''} · завершено ${value.cards.filter(c=>c.status==='Завершена').length} из ${value.cards.length} выданных`));
  if(value.state==='planned')card.append(button('Начать',()=>act(async()=>{await api(`/api/v1/instructor/lessons/${value.id}/start`,'POST');await loadLessons();})));
@@ -213,7 +215,10 @@ async function loadLessons(){
   card.append(guided);
  }
  if(['planned','running','stopping'].includes(value.state))card.append(button('Завершить всем',()=>openLessonStop(value)));
- card.append(button('Участники в реальном времени',()=>openLiveLesson(value.id,value.title)),button('Отчёт и участники',()=>act(()=>showLessonReport(value.id))));el('lessons').append(card);}
+ // Пройти то же занятие с нуля: прежние результаты остаются в отчётах.
+ card.append(button('Начать заново',()=>{if(!confirm(`Начать «${value.title}» заново? Текущие карточки будут завершены, группа получит новые с нуля. Прежние результаты сохранятся в отчётах.`))return;act(async()=>{await api(`/api/v1/instructor/lessons/${value.id}/restart`,'POST');await loadLessons();await loadSessions();},'Занятие начато заново');}));
+ card.append(button('Участники в реальном времени',()=>openLiveLesson(value.id,value.title)),button('Отчёт и участники',()=>act(()=>showLessonReport(value.id))));(value.state==='finished'?done:el('lessons')).append(card);}
+ if(finishedCount)el('lessons').append(done);
 }
 el('lessonMode').onchange=()=>{refreshLessonChoices();const mixed=el('lessonMode').value==='mixed';el('lessonModeSwitch').disabled=!mixed;if(!mixed)el('lessonModeSwitch').checked=false;};el('lessonModeSwitch').disabled=el('lessonMode').value!=='mixed';
 el('lessonForm').onsubmit=event=>{event.preventDefault();const submit=event.submitter;submit.disabled=true;act(async()=>{const transport=el('lessonTransport').value,sip_extensions=transport==='sip'?lessonSipExtensions():{};await api('/api/v1/instructor/lessons','POST',{title:el('lessonTitle').value,group_id:el('lessonGroup').value,mode:el('lessonMode').value,allow_mode_switch:el('lessonModeSwitch').checked,transport,sip_extensions,difficulty:el('lessonDifficulty').value||null,dds_profile:el('lessonProfile').value||null,category_ids:[...el('lessonCategories').selectedOptions].map(o=>o.value),prefilled_scenario_ids:el('lessonMode').value==='fill'?[]:[...el('lessonGenerated').selectedOptions].map(o=>o.value),scenario_ids:el('lessonMode').value==='actions'?[]:[...el('lessonScenarios').selectedOptions].map(o=>o.value),source_session_ids:el('lessonMode').value==='fill'?[]:[...el('lessonSources').selectedOptions].map(o=>o.value),cards_per_student:el('lessonUnlimited').checked?null:Number(el('lessonCount').value),parallel_cards:Number(el('lessonParallel').value)||1,adaptive_difficulty:el('lessonAdaptive').checked,workstations:lessonWorkstations(),student_scenarios:lessonStudentScenarios()});await loadLessons();},'Занятие подготовлено. Нажмите «Начать».').finally(()=>submit.disabled=false);};
@@ -314,7 +319,32 @@ async function refreshOpenSession(){
 }
 
 async function loadTeacher(){await loadGroups();const scenarios=await api('/api/scenarios');el('scenarioId').replaceChildren();for(const scenario of scenarios.filter(s=>s.enabled))el('scenarioId').add(new Option(`${scenario.title} · ${curriculumTitle('difficulties',scenario.difficulty||'basic')} · ${curriculumTitle('profiles',scenario.dds_profile||'general')}`,scenario.id));el('lessonScenarios').replaceChildren();scenarioPool=scenarios;try{curriculum=await api('/api/v1/instructor/curriculum');}catch{curriculum=fallbackCurriculum;}addLessonCurriculumControls();addLessonTransportControls();try{routingServices=(await api('/api/v1/instructor/routing/catalog')).services||[];}catch{routingServices=[];}const categories=await api('/api/v1/instructor/categories');for(const c of categories)el('lessonCategories').add(new Option(c.title,c.id));refreshLessonChoices();await Promise.all([loadAssignments(),loadSessions(),loadLessons()]);teacherReady=true;}
-async function loadStudent(){const values=await api('/api/v1/student/assignments'),container=el('studentAssignments');const lessons=await api('/api/v1/student/lessons');try{curriculum=await api('/api/v1/student/curriculum');}catch{curriculum=fallbackCurriculum;}values.push(...lessons.map(l=>({...l,scenario_title:`Серия · ${({planned:'ожидание старта',running:'идёт',stopping:'завершается',finished:'завершено'})[l.state]} · выполнено ${l.completed}/${l.cards_per_student??'∞'}`})));container.replaceChildren();if(!values.length){empty(container,'Активных заданий пока нет');return;}for(const item of values){const card=node('article',undefined,'card'),meta=[curriculumTitle('difficulties',item.difficulty||'basic'),curriculumTitle('profiles',item.dds_profile||'general')].join(' · ');card.append(node('h3',item.title),node('p',item.scenario_title||item.scenario_id),node('p',meta),item.learning_objectives?node('p','Учебные цели: '+item.learning_objectives):node('span'),node('span',item.state?({planned:'Ожидание старта',running:'Идёт',stopping:'Завершается',finished:'Завершено'})[item.state]:'Доступно','badge'));container.append(card);}}
+// Кабинет ученика: сначала то, что можно делать сейчас, затем свободная
+// тренировка; завершённые занятия свёрнуты, чтобы не теряться в длинном списке.
+async function loadStudent(){
+ const assignments=await api('/api/v1/student/assignments'),lessons=await api('/api/v1/student/lessons');
+ try{curriculum=await api('/api/v1/student/curriculum');}catch{curriculum=fallbackCurriculum;}
+ const states={planned:'Ожидание старта',running:'Идёт',stopping:'Завершается',finished:'Завершено'};
+ const meta=item=>[curriculumTitle('difficulties',item.difficulty||'basic'),curriculumTitle('profiles',item.dds_profile||'general')].join(' · ');
+ const training=l=>/обучение|подсказк/i.test(l.title);
+ const active=lessons.filter(l=>l.state!=='finished').sort((a,b)=>training(b)-training(a)),done=lessons.filter(l=>l.state==='finished');
+ const lessonCard=(l,open)=>{const card=node('article',undefined,'card'+(training(l)&&open?' card-featured':''));
+  card.append(node('h3',l.title),node('p',`${states[l.state]||l.state} · выполнено ${l.completed} из ${l.cards_per_student??'∞'}`),node('p',meta(l),'muted'));
+  if(training(l)&&open)card.append(node('p','Пошаговое обучение: наставник на экране подскажет, что выбрать и какой текст написать на каждом шаге.'));
+  if(open&&l.state==='running'){const go=node('a','Начать работу','button primary');go.href='/?lesson='+encodeURIComponent(l.id);card.append(go);}
+  else card.append(node('span',states[l.state]||l.state,'badge'));
+  return card;};
+ const section=(title,hint,items)=>{const box=node('section',undefined,'student-section');box.append(node('h2',title));if(hint)box.append(node('p',hint,'muted'));const grid=node('div',undefined,'cards student-grid');items.forEach(i=>grid.append(i));box.append(grid);return box;};
+ const container=el('studentAssignments');container.replaceChildren();
+ if(!assignments.length&&!lessons.length){empty(container,'Активных заданий пока нет');return;}
+ if(active.length)container.append(section('Идут сейчас','Занятия группы, которые ведёт преподаватель.',active.map(l=>lessonCard(l,true))));
+ else container.append(section('Идут сейчас','Сейчас нет запущенных занятий. Преподаватель запустит занятие, и оно появится здесь.',[]));
+ if(assignments.length)container.append(section('Свободная тренировка','Задания для самостоятельной практики в рабочем месте.',assignments.map(item=>{const card=node('article',undefined,'card');
+  card.append(node('h3',item.title),node('p',item.scenario_title||item.scenario_id),node('p',meta(item),'muted'));
+  if(item.learning_objectives)card.append(node('p','Учебные цели: '+item.learning_objectives,'objectives'));
+  card.append(node('span','Доступно','badge'));return card;})));
+ if(done.length){const more=node('details',undefined,'student-section student-done');more.append(node('summary',`Завершённые занятия (${done.length})`));const grid=node('div',undefined,'cards student-grid');done.forEach(l=>grid.append(lessonCard(l,false)));more.append(grid);container.append(more);}
+}
 
 el('logout').addEventListener('click',()=>act(async()=>{await api('/api/v1/auth/logout','POST');sessionStorage.removeItem('studentSession');localStorage.removeItem('studentSession');location.replace('/login');}));
 el('userForm').addEventListener('submit',event=>{event.preventDefault();act(async()=>{await api('/api/v1/admin/users','POST',{username:el('newUsername').value,display_name:el('newDisplayName').value,role:el('newRole').value,password:el('newPassword').value});event.target.reset();await loadAdmin();},'Пользователь создан');});
