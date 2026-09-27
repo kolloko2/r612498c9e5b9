@@ -1295,7 +1295,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         crew = value.get('assigned_crew') or {}
         source = f"{crew['leader']}, {crew['id']}" if crew else item['source']
         store.save(report_sid, {'step': 0, 'seq': 0, 'messages': [], 'replies': {}, 'ended': False,
-                                'field_report': report_context(value, source, item['text'])})
+                                'field_report': report_context(value, source, item['text'], crew.get('id', ''))})
         result = await voice('calls', 'POST', {'session_id': report_sid,
                                               'extension': value['sip_extension'], 'mode': 'auto'})
         calls[update_id] = {'session_id': report_sid, 'call_id': result['call_id'], 'started_at': now()}

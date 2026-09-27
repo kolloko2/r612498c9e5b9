@@ -144,6 +144,10 @@ allow=g722,ulaw,alaw
 {media_address}auth=auth-{extension}
 aors={extension}
 direct_media=no
+; Трубка положена, а BYE потерян: без звука 15 с вызов завершается сам,
+; иначе учебный номер остаётся «занятым».
+rtp_timeout=15
+rtp_timeout_hold=120
 rtp_symmetric=yes
 force_rport=yes
 rewrite_contact=yes

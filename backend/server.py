@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 import llm
 from llm import complete, configuration, reply as speak
 from briefing import check as briefing_check, duty_reply as briefing_duty_reply, SUPERIOR_TITLE
-from field_dialogue import answer as field_answer, crew_speech
+from field_dialogue import answer as field_answer, crew_speech, report_speech
 from categories import CategoryId
 from curriculum import Difficulty, DdsProfile
 from database import connect_database
@@ -364,7 +364,7 @@ class Engine:
                              if m['role'] == 'assistant'), '')
                 text = 'Связь восстановлена. ' + (last or 'Продолжайте, пожалуйста.')
             elif field_report:
-                text = crew_speech(f"{field_report['source']}. {field_report['text']}")
+                text = report_speech(field_report)
             elif duty:
                 # Доклад из ДДС в службу: собеседник принимает информацию, а не просит помощи.
                 text = f"{duty.get('greeting') or SUPERIOR_TITLE + ', ' + duty['service']}. Слушаю вас."

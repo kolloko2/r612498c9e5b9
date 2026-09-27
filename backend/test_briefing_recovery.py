@@ -33,9 +33,6 @@ def test_sip_recovery_keeps_report_and_checks_owner(classroom):
     c['store'].save(bid, state)
     url = base(card) + '/' + bid + '/recover?expected_call_id=' + old
     assert c['client'].post(url, headers=c['headers']['student2']).status_code == 404
-    reason[0] = 'remote_hangup'
-    assert c['client'].post(url, headers=headers).json()['call_id'] == old
-    assert len(attempts) == 1
     reason[0] = 'service_restart'
     result = c['client'].post(url, headers=headers)
     assert result.status_code == 200, result.text
@@ -57,3 +54,39 @@ def test_sip_recovery_keeps_report_and_checks_owner(classroom):
     with c['store'].db:
         c['store'].db.execute('UPDATE workspace SET body=? WHERE id=?', (json.dumps(card), card['id']))
     assert c['client'].post(url, headers=headers).status_code == 409
+
+
+def test_hanging_up_the_phone_ends_the_briefing(classroom):
+    """Сброс трубки освобождает доклад: полный принимается, неполный закрывается."""
+    c = classroom
+    calls = []
+
+    async def voice(path, method='GET', body=None):
+        if path == 'calls':
+            calls.append(str(uuid4()))
+            return {'call_id': calls[-1]}
+        return {'status': 'ended', 'reason': 'remote_hangup'}
+
+    c['client'].app.include_router(router(c['store'], Accounts(c['store']), lambda: None, voice=voice))
+    card = saved_card(c)
+    card['sip_extension'] = '201'
+    with c['store'].db:
+        c['store'].db.execute('UPDATE workspace SET body=? WHERE id=?', (json.dumps(card), card['id']))
+    headers = c['headers']['student1']
+
+    def call_with(text):
+        started = c['client'].post(base(card), headers=headers, json={
+            'message_id': str(uuid4()), 'service': 'Служба 101', 'transport': 'sip'}).json()
+        state = c['store'].load(started['id'])
+        state['messages'] = [{'role': 'user', 'content': text}]
+        c['store'].save(started['id'], state)
+        url = base(card) + '/' + started['id'] + '/recover?expected_call_id=' + started['call_id']
+        return c['client'].post(url, headers=headers).json()
+
+    partial = call_with('улица лесная дом двенадцать')
+    assert partial['state'] == 'hung_up'
+    full = call_with('улица лесная дом двенадцать пожар в квартире пострадавших нет')
+    assert full['state'] == 'accepted'
+    notifications = c['client'].get('/api/v1/student/sessions/' + card['id'], headers=headers).json()['notifications']
+    assert any('лесная' in item['comment'] for item in notifications)
+    assert len(calls) == 2  # сброс не перезванивает

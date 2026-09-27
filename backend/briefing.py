@@ -346,6 +346,19 @@ def router(store, accounts, authorize, learning=None, voice=None):
             snapshot = await voice('calls/' + item['call_id'])
             if snapshot.get('status') not in ('ended', 'failed'):
                 return merged(item, reference_card(value))
+            if snapshot.get('reason') in ('remote_hangup', 'not_answered'):
+                # Трубку положили на телефоне: разговор окончен, линия свободна.
+                # Полный доклад принимается так же, как кнопкой «Завершить доклад»;
+                # неполный закрывается, чтобы можно было позвонить заново.
+                current = merged(item, reference_card(value))
+                if current['report']['complete']:
+                    recipient = item.get('destination') or item['service']
+                    return await finish(sid, bid, FinishBriefing(message_id=uuid4(), recipient=recipient), user)
+                item.update(state='hung_up', finished_at=now(),
+                            result='Звонок завершён до передачи всех сведений')
+                with store.db:
+                    save(item)
+                return merged(item, reference_card(value))
             if snapshot.get('reason') not in ('service_restart', 'ari_disconnected', 'media_disconnected', 'asterisk_media_ended', 'backend_unavailable'):
                 return merged(item, reference_card(value))
             recovery = item.setdefault('recovery', {'started_at': now(), 'attempts': 0})

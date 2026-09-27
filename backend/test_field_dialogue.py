@@ -134,3 +134,11 @@ async def test_engine_saves_answer_and_deduplicates(monkeypatch):
     assert 'выполняем' in result['payload']['text']
     assert await engine.handle(sid, question) == result
     assert calls == ['Что сейчас делаете?']
+
+
+def test_report_names_the_crew_once():
+    from field_dialogue import report_speech
+    assert report_speech({'source': 'Старший бригады, Бригада 17', 'crew': 'Бригада 17',
+                          'text': 'Бригада выехала на улицу Учебную, дом 12.'}) == 'Бригада 17 выехала на улицу Учебную, дом 12.'
+    assert report_speech({'source': 'Старший бригады, Бригада 17', 'crew': 'Бригада 17',
+                          'text': 'Прибыли по адресу.'}) == 'Бригада 17. Прибыли по адресу.'

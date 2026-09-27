@@ -1049,7 +1049,7 @@ function renderBriefing(){
  $('briefingForm').hidden=!open||voice;
  $('briefingFinishForm').hidden=!open||!report.complete;
  $('briefingMissing').className='briefing-missing'+(report.complete?' ready':'');
- $('briefingMissing').textContent=!open?'Доклад принят.'
+ $('briefingMissing').textContent=briefing.state==='hung_up'?'Звонок завершён до передачи всех сведений. Нажмите «Позвонить» ещё раз.':!open?'Доклад принят.'
   :briefing.recovery?.state==='exhausted'?'Автовосстановление исчерпано. Проверьте телефон и создайте новый доклад; предыдущие реплики сохранены.'
   :voice&&!briefing.messages.length?'Ожидание ответа по телефону…'
   :report.complete?'Сведения названы полностью. Можно завершать доклад.'

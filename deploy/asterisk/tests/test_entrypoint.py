@@ -28,6 +28,11 @@ def valid_env():
 
 
 class EntrypointTests(unittest.TestCase):
+    def test_silent_call_is_released(self):
+        """Lost BYE must not keep the training extension busy."""
+        config = entrypoint.pjsip_accounts([("201", "x" * 32)], use_tls=True)
+        self.assertIn("rtp_timeout=15", config)
+
     def test_renders_all_templates_with_private_permissions(self):
         source = Path(__file__).resolve().parents[1] / "config"
         with tempfile.TemporaryDirectory() as directory:

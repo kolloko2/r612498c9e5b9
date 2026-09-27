@@ -11,14 +11,25 @@ def crew_speech(text):
     return re.sub(r'(\bбригад[аы])\s*(?:№\s*)?\d+(?:[-–]\d+)*\b', r'\1', text, flags=re.I)
 
 
-def report_context(value, source, text):
+def report_speech(report):
+    """Доклад бригады вслух: позывной один раз, затем суть («Бригада 17 выехала…»)."""
+    text = (report.get('text') or '').strip()
+    crew = (report.get('crew') or '').strip()
+    if not crew:
+        return crew_speech(f"{report['source']}. {text}")
+    if re.match(r'бригада(?!\w)', text, flags=re.I):
+        return re.sub(r'^бригада(?:\s*№?\s*[0-9]+)?\s*', crew + ' ', text, count=1, flags=re.I)
+    return f'{crew}. {text}'
+
+
+def report_context(value, source, text, crew=''):
     # Бригада находится на месте и знает фактические сведения, даже если в
     # карточке 112 ошибка: из её звонка ДДС и узнаёт правильные данные
     # (ответ заказчика 27.09.2026). Проверенные преподавателем исправления
     # накладываются на исходную карточку.
     corrections = (value.get('dds_expectation') or {}).get('expected_corrections') or {}
     card = {**(value.get('initial_card') or value.get('card') or {}), **corrections}
-    return {'source': source, 'text': text,
+    return {'source': source, 'text': text, 'crew': crew,
             'card': {key: card[key] for key in
                      ('street', 'house', 'building', 'apartment', 'address_note', 'incident_type', 'injured')
                      if card.get(key) not in (None, '')},
