@@ -1,7 +1,7 @@
 """Deterministic, rubric-driven evaluation of a completed training card.
 
 This module intentionally contains no domain rules.  A rubric is configurable
-training data, not an official emergency-service regulation.
+training data supplied by the teacher.
 """
 
 from __future__ import annotations
@@ -149,9 +149,9 @@ class Rubric(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=3, max_length=120)
-    # Заказчик на Q&A назвал два разных норматива: 30 секунд на реакцию
-    # (открыть карточку) и 3 минуты на её обработку. Это разные отрезки времени,
-    # поэтому они хранятся и проверяются отдельно.
+    # Два разных норматива: 30 секунд на реакцию (открыть карточку) и 3 минуты
+    # на первую запись. Это разные отрезки времени, поэтому они хранятся и
+    # проверяются отдельно.
     time_limit_seconds: int = Field(default=DEFAULT_TIME_LIMIT_SECONDS, ge=1, le=86400)
     response_limit_seconds: int = Field(default=DEFAULT_RESPONSE_LIMIT_SECONDS, ge=1, le=86400)
     criteria: list[Criterion] = Field(min_length=1, max_length=30)

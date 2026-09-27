@@ -325,7 +325,7 @@ def test_prefilled_lesson_copies_only_card_and_keeps_source_immutable(classroom)
     assert result['action_report']['service_actions']==1
     assert result['evaluation']['score_percent'] is None
     # Балла у готовой карточки нет, но нормативы времени измеряются: реакция и
-    # обработка — это то, что заказчик спрашивает именно в режиме ДДС.
+    # первая запись — ключевые нормативы режима ДДС.
     timing=result['evaluation']['timing']
     assert timing['response_limit_seconds']==30 and timing['limit_seconds']==180
     assert timing['response_within_limit'] is True and timing['within_limit'] is True

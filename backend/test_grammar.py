@@ -40,7 +40,7 @@ def test_clean_card_has_no_errors():
 
 
 def test_street_typo_is_critical():
-    """Случай заказчика: Дубнинская против Дубининской."""
+    """Дубнинская вместо Дубининской — критическая опечатка."""
     result = analyze(card(street='Дубининская'), RUBRIC)
     assert result['errors'] == 1 and result['critical_errors'] == 1
     assert result['critical_fields'] == ['street']

@@ -117,7 +117,7 @@ body.alt-hints .options button{outline:1px dotted var(--blue)}
 .dds-critical{color:#a32b22;font-weight:bold}
 .dds-warning{color:#8a5a1a}
 
-/* Аудит интерфейса 27.09: читаемость на тёмном и сером фоне, текст в границах кнопок. */
+/* Читаемость на тёмном и сером фоне, текст в границах кнопок. */
 .training-strip a{color:#d6dfe4;text-decoration:underline}
 .training-strip a:hover,.training-strip a:focus-visible{color:#fff}
 .incidents th{color:#f4f7f9}

@@ -55,8 +55,7 @@ def rules():
 
 def recipients(card):
     found = []
-    # Explicit author-supplied recipients cover any territory or owning department
-    # without claiming an invented geographic/official directory.
+    # Explicit author-supplied recipients cover any territory or owning department.
     for scope, service in (card.get('recipient_affiliations') or {}).items():
         if scope not in ('area', 'district', 'department') or not isinstance(service, str) or not 1 <= len(service.strip()) <= 160:
             raise ValueError('Некорректная территориальная принадлежность')

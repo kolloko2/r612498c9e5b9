@@ -1,4 +1,4 @@
-"""Pedagogical metadata, deliberately independent of official routing rules."""
+"""Pedagogical metadata, kept independent of routing rules."""
 from typing import Literal
 
 Difficulty = Literal['basic', 'standard', 'advanced']

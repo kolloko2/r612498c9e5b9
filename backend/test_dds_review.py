@@ -169,7 +169,7 @@ def test_teacher_verified_correction_is_used_for_card_and_briefing():
                                       'comment': 'Берзарина, дом 22, пожар в квартире'}])
     expectation = {'should_accept': True, 'brief_service': SERVICE,
                    'expected_corrections': {'house': '22'}}
-    # ДДС не правит карточку 112, а сообщает об ошибке в 112 (ответ 27.09.2026).
+    # ДДС не правит карточку 112, а сообщает об ошибке в 112.
     assert 'Ошибка не передана' in verdict(review(value, expectation), 'correction:house')['detail']
     value['error_reports'] = [{'field': 'house', 'correct_value': '15', 'source': 'Старший бригады'}]
     assert verdict(review(value, expectation), 'correction:house')['passed'] is False
@@ -216,7 +216,7 @@ def test_review_is_skipped_without_expectation_or_service():
 
 
 def test_card_is_worked_out_only_when_every_cycle_status_is_set():
-    """Ответ заказчика 27.09: отработана, когда все статусы активированы."""
+    """Карточка отработана, когда все статусы активированы."""
     from dds_review import unfinished
     at = '2026-09-18T10:00:00+00:00'
     partial = card([event(1, 'service.updated', at, service=SERVICE, status='Принята', comment='Принято'),

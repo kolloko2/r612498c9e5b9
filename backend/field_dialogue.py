@@ -25,7 +25,7 @@ def report_speech(report):
 def report_context(value, source, text, crew=''):
     # Бригада находится на месте и знает фактические сведения, даже если в
     # карточке 112 ошибка: из её звонка ДДС и узнаёт правильные данные
-    # (ответ заказчика 27.09.2026). Проверенные преподавателем исправления
+    # Проверенные преподавателем исправления
     # накладываются на исходную карточку.
     corrections = (value.get('dds_expectation') or {}).get('expected_corrections') or {}
     card = {**(value.get('initial_card') or value.get('card') or {}), **corrections}

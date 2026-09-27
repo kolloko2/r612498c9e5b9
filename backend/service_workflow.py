@@ -1,7 +1,7 @@
 """Pure service-response and incident-status rules for the ARM training UI.
 
-These rules reproduce the supplied training source.  They are not a statement of
-current official 112 regulations and do not contact any emergency service.
+These rules reproduce the ARM 112 training source and never contact any
+emergency service.
 """
 
 from __future__ import annotations

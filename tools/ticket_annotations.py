@@ -1,8 +1,7 @@
 """Explicit classifier choices and authored field reports for every booklet call.
 
-Codes reference backend/data/classifier.json; reports are simulation additions,
-not claims about how the source incident actually ended. No medical treatment
-protocol, legal decision or official response time is prescribed here.
+Codes reference backend/data/classifier.json; reports are authored simulation
+additions for each training call.
 """
 
 # key | classifier id | work report | final report | mandatory final fact

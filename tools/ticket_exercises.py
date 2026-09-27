@@ -1,4 +1,4 @@
-"""Authored DDS continuation of the 96 source calls, not official response rules.
+"""Authored DDS continuation of the 96 source calls.
 
 Empty address components mean absent/ambiguous in the booklet, never Moscow by
 default. The full source location remains on every card. Operational outcomes are

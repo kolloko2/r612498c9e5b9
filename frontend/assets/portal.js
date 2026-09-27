@@ -46,8 +46,8 @@ function lessonSipExtensions(){
  for(const input of inputs){const value=input.value.trim();if(!/^[0-9]{1,8}$/.test(value))throw Error('Укажите для каждого студента SIP-номер из 1–8 цифр');if(used.has(value))throw Error('SIP-номера студентов должны быть уникальны');used.add(value);result[input.dataset.studentId]=value;}
  return result;
 }
-// Рабочие места и адресные задания задаются поштучно: заказчик называет
-// обучающегося номером места и выдаёт конкретное задание на место.
+// Рабочие места и адресные задания задаются поштучно: обучающийся определяется
+// номером места и получает конкретное задание на место.
 const lessonPlaces=new Map(),lessonTargets=new Map();
 function lessonScenarioOptions(){
  const mode=el('lessonMode').value,result=[];

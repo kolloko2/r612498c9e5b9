@@ -234,7 +234,7 @@ function renderCard() {
  $('cardView').disabled=readonly||!current.revision;
  $('cardView').classList.toggle('active',readonly);
  $('cardSupplement').hidden=finished||current.card_locked||current.exercise_mode==='actions';
- // Поля карточки 112 ДДС не правит: об ошибке сообщает в 112 (ответ заказчика 27.09.2026).
+ // Поля карточки 112 ДДС не правит: об ошибке сообщает в 112.
  if(current.exercise_mode==='actions')$('edit').hidden=true;
  $('cardSupplement').disabled=!readonly;
  $('cardSupplement').classList.toggle('active',!readonly);

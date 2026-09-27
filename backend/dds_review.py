@@ -168,8 +168,8 @@ def unfinished(value: dict, expectation: dict | None) -> list[str]:
         missing.append('назначение реагирующей бригады')
     if not any(status in (WORKS_DONE, WORK_REFUSED) for status in statuses):
         missing.append('итоговый статус своей службы')
-    # Карточка отработана, когда активированы все статусы цикла (ответ
-    # заказчика 27.09.2026). Мотивированный отказ от работ завершает цикл раньше.
+    # Карточка отработана, когда активированы все статусы цикла.
+    # Мотивированный отказ от работ завершает цикл раньше.
     if WORK_REFUSED not in statuses:
         skipped = [status for status in CYCLE if status not in statuses]
         if skipped:
@@ -234,8 +234,8 @@ def _card_corrections(value: dict, expectation: dict) -> list[dict]:
     allowed = {'city', 'district', 'area', 'object', 'street', 'house', 'building',
                'structure', 'apartment', 'entrance', 'address_note', 'description',
                'incident_type'}
-    # ДДС не правит карточку 112, а сообщает об ошибке в 112 по телефону
-    # (ответ заказчика 27.09.2026). Засчитывается сообщение с правильным значением.
+    # ДДС не правит карточку 112, а сообщает об ошибке в 112 по телефону.
+    # Засчитывается сообщение с правильным значением.
     expected = expectation.get('expected_corrections') or {}
     reports = value.get('error_reports') or []
     checks = []
@@ -285,7 +285,7 @@ def review(value: dict, expectation: dict | None) -> dict | None:
     checks: list[dict] = []
     timing = (value.get('evaluation') or {}).get('timing') or {}
     if value.get('status') == 'Завершена':
-        # Нормативы по ответу заказчика 27.09.2026; остальные сроки не нормируются.
+        # Нормируются открытие карточки и первая запись; остальные сроки — нет.
         checks.append(_check('receipt_time',
                              f"Карточка открыта за {timing.get('response_limit_seconds') or 30} секунд",
                              timing.get('response_within_limit') is True,

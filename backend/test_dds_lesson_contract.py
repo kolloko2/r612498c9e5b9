@@ -110,7 +110,7 @@ def test_opening_clock_and_early_finish_guard(classroom):
 
 
 def test_receipt_norm_ends_at_opening_and_first_record_has_own_norm(classroom):
-    """Ответ заказчика 27.09: 30 с — до открытия, 3 мин — до первой записи."""
+    """30 с — до открытия карточки, 3 мин — до первой записи."""
     _, card = prepared(classroom)
     c, h, store = classroom['client'], classroom['headers'], classroom['store']
     sid = card['id']
@@ -247,7 +247,7 @@ def test_teacher_stop_hangs_up_field_report_and_briefing(classroom, monkeypatch)
 
 
 def test_dds_reports_card_error_to_112_instead_of_editing(classroom):
-    """Ответ заказчика 27.09 (П.3): правит только свои поля, об ошибке звонит в 112."""
+    """ДДС правит только свои поля, об ошибке сообщает в 112."""
     _, card = prepared(classroom)
     c, h = classroom['client'], classroom['headers']['student1']
     path = f"/api/v1/student/sessions/{card['id']}"

@@ -1,4 +1,4 @@
-"""Pedagogical event categories; not an official dispatch classifier."""
+"""Pedagogical event categories used to group training scenarios."""
 from typing import Literal
 
 CategoryId = Literal['fire', 'traffic', 'medical', 'utilities', 'public', 'other']
