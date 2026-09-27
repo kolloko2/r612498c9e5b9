@@ -11,7 +11,7 @@ dialog button{white-space:normal;overflow-wrap:anywhere}
 #finishChecklist{padding:10px 12px;border-left:3px solid #c4782b;background:#fff4e7;color:#343b40}
 #finishChecklist:empty{display:none}
 #finishError{color:#a32b22;white-space:pre-wrap;line-height:1.5}
-#ddsCoach{position:fixed;right:18px;top:150px;width:320px;max-width:calc(100vw - 36px);max-height:70vh;overflow:auto;z-index:15;background:#fff;color:#26343d;border:2px solid #1884b6;box-shadow:0 6px 24px #0003;padding:14px;box-sizing:border-box}
+#ddsCoach{position:fixed;right:18px;top:150px;width:420px;max-width:calc(100vw - 36px);max-height:70vh;overflow:auto;z-index:15;background:#fff;color:#26343d;border:2px solid #1884b6;box-shadow:0 6px 24px #0003;padding:14px;box-sizing:border-box}
 #ddsCoach h3{font-size:16px;margin:0 0 8px}#ddsCoach p{font-size:13px;line-height:1.5;margin:0 0 12px}
 #ddsCoach button{color:#26343d;border:1px solid #859198;padding:7px;margin:3px;background:#f0f4f6;font-size:12px}
 #ddsCoach .dds-coach-sample{margin:0 0 8px;padding:8px 10px;background:#eef7fc;border-left:3px solid #1884b6;font-size:13px;line-height:1.45;color:#1d2a33;overflow-wrap:anywhere}
