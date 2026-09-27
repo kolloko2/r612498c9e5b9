@@ -33,13 +33,19 @@ def main() -> None:
         teacher.context = ssl._create_unverified_context()
     teacher.call("POST", "/auth/login", {"username": args.teacher, "password": args.password})
     guided = json.loads((Path(__file__).parent / "data" / "dds_guided_practice.json").read_text(encoding="utf-8"))
-    if guided["id"] not in {item["id"] for item in teacher.catalog()}:
-        saved = teacher.base_path
-        teacher.base_path = "/api"
-        try:
+    published = guided["id"] in {item["id"] for item in teacher.catalog()}
+    saved = teacher.base_path
+    teacher.base_path = "/api"
+    try:
+        if not published:
             teacher.call("POST", "/scenarios", guided, expect=(200, 201, 409))
-        finally:
-            teacher.base_path = saved
+        else:
+            # Опубликованный сценарий обновляется из файла: адрес, доклады и эталон.
+            current = teacher.call("GET", f"/scenarios/{guided['id']}")[1]
+            teacher.call("PUT", f"/scenarios/{guided['id']}",
+                         {**guided, "enabled": True, "version": current["version"]})
+    finally:
+        teacher.base_path = saved
     by_login = {item["username"]: item["id"] for item in teacher.call("GET", "/instructor/students")[1]}
     phones = {by_login[login]: number for login, number in
               (pair.split("=", 1) for pair in args.phones.split(",") if "=" in pair) if login in by_login}
