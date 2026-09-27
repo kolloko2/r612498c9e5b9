@@ -41,7 +41,9 @@ async function openCard(id){
 async function init(){
  try{
   const me=await api('auth/me');if(me.role!=='teacher')throw Error('Журнал ДДС доступен преподавателю');
-  const profiles=await api('instructor/dds/profiles');profiles.forEach(profile=>$('profile').add(new Option(`${profile.title} · ${profile.incoming_count}`,profile.id)));await load();await loadRecipients();
+  const profiles=await api('instructor/dds/profiles');profiles.forEach(profile=>$('profile').add(new Option(`${profile.title} · ${profile.incoming_count}`,profile.id)));
+  // Открыть профиль, в который карточки действительно поступали.
+  const busiest=profiles.reduce((best,p)=>p.incoming_count>(best?.incoming_count||0)?p:best,null);if(busiest)$('profile').value=busiest.id;await load();await loadRecipients();
  }catch(error){toast(error.message)}
 }
 $('profile').onchange=()=>{load();loadRecipients();};$('refresh').onclick=load;init();

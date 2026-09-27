@@ -31,7 +31,8 @@ async function api(path,method='GET',body){const options={method,headers:{'X-Voi
 async function run(fn,success){try{status('');await fn();if(success)status(success);}catch(e){status(e.message,true);}}
 function empty(container,text){container.replaceChildren(node('p',text,'empty'));}
 function metric(label,value){const box=node('div',undefined,'metric');box.append(node('span',label),node('strong',value));return box;}
-function summaryInto(container,s={}){container.replaceChildren(metric('Попыток',n(s.attempts??0)),metric('Завершено',n(s.completed??0)),metric('Оценено',n(s.graded??0)),metric('Зачтено',n(s.passed??0)),metric('Не зачтено',n(s.failed??0)),metric('Без решения',n(s.unassessed??0)),metric('Средний балл',pct(s.average_score)),metric('Среднее время',s.average_seconds==null?'—':`${s.average_seconds} сек.`));}
+function duration(seconds){const total=Math.round(Number(seconds)||0),h=Math.floor(total/3600),m=Math.floor(total%3600/60),sec=total%60;return h?`${h} ч ${m} мин`:m?`${m} мин ${sec} с`:`${sec} с`;}
+function summaryInto(container,s={}){container.replaceChildren(metric('Попыток',n(s.attempts??0)),metric('Завершено',n(s.completed??0)),metric('Оценено',n(s.graded??0)),metric('Зачтено',n(s.passed??0)),metric('Не зачтено',n(s.failed??0)),metric('Без решения',n(s.unassessed??0)),metric('Средний балл',pct(s.average_score)),metric('Среднее время',s.average_seconds==null?'—':duration(s.average_seconds)));}
 function optionalNumber(id){const value=el(id).value;return value===''?null:Number(value);}
 function markPolicyDirty(){policyDirty=true;status('Есть несохранённые изменения');}
 function updatePolicyEnabled(){el('policyFields').disabled=!el('policyEnabled').checked;markPolicyDirty();}

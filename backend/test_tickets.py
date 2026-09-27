@@ -30,7 +30,7 @@ def test_imported_catalog_matches_the_supplied_booklet():
         Scenario.model_validate(item['scenario'])
         Rubric.model_validate(item['rubric'])
         assert item['scenario']['enabled'] is False
-        assert item['rubric']['time_limit_seconds'] == 30
+        assert item['rubric']['time_limit_seconds'] == 300
 
 
 def test_synthetic_phones_replace_every_booklet_number():

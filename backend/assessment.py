@@ -278,6 +278,9 @@ def router(store, accounts, learning, authorize, coordinator=None):
         # типичных ошибок: тепловая карта не вводит отдельного способа счёта.
         heat = {}
         def record(key, label, passed, scenario_id=None, title=None):
+            # Одна и та же проверка в разных сценариях и версиях эталона — одна
+            # строка списка: иначе ученик видит одну ошибку пятью строками.
+            key = key.split(':', 1)[0] + ':' + ' '.join(str(label).casefold().split())
             entry = errors.setdefault(key, {'key': key, 'label': label, 'count': 0, 'attempts': 0})
             entry['attempts'] += 1
             entry['count'] += not passed
@@ -293,7 +296,10 @@ def router(store, accounts, learning, authorize, coordinator=None):
                     record('dds:'+v.get('teacher_id', '')+':'+v['scenario_id']+':'
                            +(v.get('dds_review') or {}).get('version', 'v1')+':'+check['id'],
                            check['label'], check['passed'], v['scenario_id'], v['title'])
-            for c in (v.get('evaluation') or {}).get('criteria', []):
+            # В режиме ДДС карточка выдана заполненной: проверки полей не относятся
+            # к действиям ученика и в ошибки не попадают.
+            field_criteria = [] if v.get('dds_review') else (v.get('evaluation') or {}).get('criteria', [])
+            for c in field_criteria:
                 record('field:'+v.get('teacher_id', '')+':'+v['scenario_id']+':'+str(v['evaluation'].get('rubric_revision', 0))+':'+c['id'],
                        c['label'], c['passed'], v['scenario_id'], v['title'])
             for s in (v.get('policy_result') or {}).get('steps', []):

@@ -341,7 +341,7 @@ def _rubric(ticket: int, call: int, caller: str, known: list[str], situation: st
         criteria.append({"id": "summary", "label": "Описание заполнено", "field": "description",
                          "mode": "contains_all", "expected": fallback or [situation[:60].strip()], "weight": 1})
     return {"title": f"Эталон билета {ticket}, вызов {call}",
-            "time_limit_seconds": 30, "criteria": criteria}
+            "time_limit_seconds": 300, "criteria": criteria}
 
 
 def _curated_dds_card(draft_id: str, location: str, phones: list[str], overlay: dict) -> tuple[dict, str]:

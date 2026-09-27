@@ -204,3 +204,27 @@ def test_statistics_workbook_export(grading):
     # Роли не пересекаются.
     assert client.get('/api/v1/instructor/statistics-workbook', headers=h['student1']).status_code == 403
     assert client.get('/api/v1/student/statistics-workbook', headers=h['teacher1']).status_code == 403
+
+
+def test_same_check_in_different_scenarios_is_one_typical_error(grading):
+    c = grading; client = c['client']; h = c['headers']
+    student = c['users']['student1']['id']; teacher = c['users']['teacher1']['id']
+    rows = []
+    for index, scenario in enumerate(('scenario-a', 'scenario-b')):
+        rows.append({'id': f'dds-{index}', 'status': 'Завершена', 'student_id': student, 'teacher_id': teacher,
+                     'scenario_id': scenario, 'title': scenario, 'exercise_mode': 'actions',
+                     'created_at': '2026-09-28T10:00:00+00:00', 'finished_at': '2026-09-28T10:05:00+00:00',
+                     'card': {}, 'events': [],
+                     'dds_review': {'version': f'v{index}', 'score_percent': 50, 'passed': False, 'checks': [
+                         {'id': 'briefing', 'label': 'Доклад вышестоящему начальнику', 'passed': False}]},
+                     # Поля готовой карточки ДДС ученик не заполнял: это не его ошибка.
+                     'evaluation': {'status': 'evaluated', 'rubric_revision': 1, 'criteria': [
+                         {'id': 'name', 'label': 'ФИО заявителя', 'passed': False}]}})
+    with c['store'].db:
+        for row in rows:
+            c['store'].db.execute('INSERT INTO workspace VALUES (?,?)', (row['id'], json.dumps(row, ensure_ascii=False)))
+    stats = client.get('/api/v1/student/statistics', headers=h['student1']).json()
+    labels = [item['label'] for item in stats['typical_errors']]
+    assert labels.count('Доклад вышестоящему начальнику') == 1
+    assert next(i for i in stats['typical_errors'] if i['label'] == 'Доклад вышестоящему начальнику')['count'] == 2
+    assert 'ФИО заявителя' not in labels

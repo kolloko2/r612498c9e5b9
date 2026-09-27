@@ -11,7 +11,7 @@
   "transcribed_at": "2026-09-15"
  },
  "phones": "synthetic",
- "catalog_sha256": "5d295c9dfa5736dd94ce9827b8e8186e765240a1be906a3e2bd4cd2175a6029a",
+ "catalog_sha256": "de1c38b236f1063f0caa6437c54ce061b73d7f3780f3725f0bf5eb9ea9999f89",
  "metadata": {
   "tickets": 32,
   "drafts": 96,
@@ -161,7 +161,7 @@
    },
    "rubric": {
     "title": "Эталон билета 1, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -350,7 +350,7 @@
    },
    "rubric": {
     "title": "Эталон билета 1, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -557,7 +557,7 @@
    },
    "rubric": {
     "title": "Эталон билета 1, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -749,7 +749,7 @@
    },
    "rubric": {
     "title": "Эталон билета 2, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -955,7 +955,7 @@
    },
    "rubric": {
     "title": "Эталон билета 2, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -1156,7 +1156,7 @@
    },
    "rubric": {
     "title": "Эталон билета 2, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -1341,7 +1341,7 @@
    },
    "rubric": {
     "title": "Эталон билета 3, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -1533,7 +1533,7 @@
    },
    "rubric": {
     "title": "Эталон билета 3, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -1722,7 +1722,7 @@
    },
    "rubric": {
     "title": "Эталон билета 3, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -1913,7 +1913,7 @@
    },
    "rubric": {
     "title": "Эталон билета 4, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -2107,7 +2107,7 @@
    },
    "rubric": {
     "title": "Эталон билета 4, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -2310,7 +2310,7 @@
    },
    "rubric": {
     "title": "Эталон билета 4, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -2525,7 +2525,7 @@
    },
    "rubric": {
     "title": "Эталон билета 5, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -2743,7 +2743,7 @@
    },
    "rubric": {
     "title": "Эталон билета 5, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -2944,7 +2944,7 @@
    },
    "rubric": {
     "title": "Эталон билета 5, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -3127,7 +3127,7 @@
    },
    "rubric": {
     "title": "Эталон билета 6, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -3313,7 +3313,7 @@
    },
    "rubric": {
     "title": "Эталон билета 6, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -3498,7 +3498,7 @@
    },
    "rubric": {
     "title": "Эталон билета 6, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -3684,7 +3684,7 @@
    },
    "rubric": {
     "title": "Эталон билета 7, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -3871,7 +3871,7 @@
    },
    "rubric": {
     "title": "Эталон билета 7, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -4073,7 +4073,7 @@
    },
    "rubric": {
     "title": "Эталон билета 7, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -4281,7 +4281,7 @@
    },
    "rubric": {
     "title": "Эталон билета 8, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -4477,7 +4477,7 @@
    },
    "rubric": {
     "title": "Эталон билета 8, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -4648,7 +4648,7 @@
    },
    "rubric": {
     "title": "Эталон билета 8, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -4848,7 +4848,7 @@
    },
    "rubric": {
     "title": "Эталон билета 9, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -5022,7 +5022,7 @@
    },
    "rubric": {
     "title": "Эталон билета 9, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -5182,7 +5182,7 @@
    },
    "rubric": {
     "title": "Эталон билета 9, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -5375,7 +5375,7 @@
    },
    "rubric": {
     "title": "Эталон билета 10, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -5554,7 +5554,7 @@
    },
    "rubric": {
     "title": "Эталон билета 10, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -5737,7 +5737,7 @@
    },
    "rubric": {
     "title": "Эталон билета 10, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -5969,7 +5969,7 @@
    },
    "rubric": {
     "title": "Эталон билета 11, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -6169,7 +6169,7 @@
    },
    "rubric": {
     "title": "Эталон билета 11, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -6370,7 +6370,7 @@
    },
    "rubric": {
     "title": "Эталон билета 11, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -6558,7 +6558,7 @@
    },
    "rubric": {
     "title": "Эталон билета 12, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -6751,7 +6751,7 @@
    },
    "rubric": {
     "title": "Эталон билета 12, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -6909,7 +6909,7 @@
    },
    "rubric": {
     "title": "Эталон билета 12, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -7092,7 +7092,7 @@
    },
    "rubric": {
     "title": "Эталон билета 13, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -7268,7 +7268,7 @@
    },
    "rubric": {
     "title": "Эталон билета 13, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -7437,7 +7437,7 @@
    },
    "rubric": {
     "title": "Эталон билета 13, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -7617,7 +7617,7 @@
    },
    "rubric": {
     "title": "Эталон билета 14, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -7801,7 +7801,7 @@
    },
    "rubric": {
     "title": "Эталон билета 14, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -8017,7 +8017,7 @@
    },
    "rubric": {
     "title": "Эталон билета 14, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -8219,7 +8219,7 @@
    },
    "rubric": {
     "title": "Эталон билета 15, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -8398,7 +8398,7 @@
    },
    "rubric": {
     "title": "Эталон билета 15, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -8603,7 +8603,7 @@
    },
    "rubric": {
     "title": "Эталон билета 15, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -8818,7 +8818,7 @@
    },
    "rubric": {
     "title": "Эталон билета 16, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -8985,7 +8985,7 @@
    },
    "rubric": {
     "title": "Эталон билета 16, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -9175,7 +9175,7 @@
    },
    "rubric": {
     "title": "Эталон билета 16, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -9391,7 +9391,7 @@
    },
    "rubric": {
     "title": "Эталон билета 17, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -9597,7 +9597,7 @@
    },
    "rubric": {
     "title": "Эталон билета 17, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -9804,7 +9804,7 @@
    },
    "rubric": {
     "title": "Эталон билета 17, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -10021,7 +10021,7 @@
    },
    "rubric": {
     "title": "Эталон билета 18, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -10192,7 +10192,7 @@
    },
    "rubric": {
     "title": "Эталон билета 18, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -10408,7 +10408,7 @@
    },
    "rubric": {
     "title": "Эталон билета 18, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -10605,7 +10605,7 @@
    },
    "rubric": {
     "title": "Эталон билета 19, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -10769,7 +10769,7 @@
    },
    "rubric": {
     "title": "Эталон билета 19, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -10938,7 +10938,7 @@
    },
    "rubric": {
     "title": "Эталон билета 19, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -11115,7 +11115,7 @@
    },
    "rubric": {
     "title": "Эталон билета 20, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -11310,7 +11310,7 @@
    },
    "rubric": {
     "title": "Эталон билета 20, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -11490,7 +11490,7 @@
    },
    "rubric": {
     "title": "Эталон билета 20, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -11706,7 +11706,7 @@
    },
    "rubric": {
     "title": "Эталон билета 21, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -11902,7 +11902,7 @@
    },
    "rubric": {
     "title": "Эталон билета 21, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -12055,7 +12055,7 @@
    },
    "rubric": {
     "title": "Эталон билета 21, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -12236,7 +12236,7 @@
    },
    "rubric": {
     "title": "Эталон билета 22, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -12452,7 +12452,7 @@
    },
    "rubric": {
     "title": "Эталон билета 22, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -12628,7 +12628,7 @@
    },
    "rubric": {
     "title": "Эталон билета 22, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -12847,7 +12847,7 @@
    },
    "rubric": {
     "title": "Эталон билета 23, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -13066,7 +13066,7 @@
    },
    "rubric": {
     "title": "Эталон билета 23, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -13266,7 +13266,7 @@
    },
    "rubric": {
     "title": "Эталон билета 23, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -13469,7 +13469,7 @@
    },
    "rubric": {
     "title": "Эталон билета 24, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -13672,7 +13672,7 @@
    },
    "rubric": {
     "title": "Эталон билета 24, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -13868,7 +13868,7 @@
    },
    "rubric": {
     "title": "Эталон билета 24, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -14056,7 +14056,7 @@
    },
    "rubric": {
     "title": "Эталон билета 25, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -14250,7 +14250,7 @@
    },
    "rubric": {
     "title": "Эталон билета 25, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -14443,7 +14443,7 @@
    },
    "rubric": {
     "title": "Эталон билета 25, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -14656,7 +14656,7 @@
    },
    "rubric": {
     "title": "Эталон билета 26, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -14851,7 +14851,7 @@
    },
    "rubric": {
     "title": "Эталон билета 26, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -15032,7 +15032,7 @@
    },
    "rubric": {
     "title": "Эталон билета 26, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -15245,7 +15245,7 @@
    },
    "rubric": {
     "title": "Эталон билета 27, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -15453,7 +15453,7 @@
    },
    "rubric": {
     "title": "Эталон билета 27, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -15650,7 +15650,7 @@
    },
    "rubric": {
     "title": "Эталон билета 27, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -15868,7 +15868,7 @@
    },
    "rubric": {
     "title": "Эталон билета 28, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -16073,7 +16073,7 @@
    },
    "rubric": {
     "title": "Эталон билета 28, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -16256,7 +16256,7 @@
    },
    "rubric": {
     "title": "Эталон билета 28, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -16463,7 +16463,7 @@
    },
    "rubric": {
     "title": "Эталон билета 29, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -16642,7 +16642,7 @@
    },
    "rubric": {
     "title": "Эталон билета 29, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -16822,7 +16822,7 @@
    },
    "rubric": {
     "title": "Эталон билета 29, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -17042,7 +17042,7 @@
    },
    "rubric": {
     "title": "Эталон билета 30, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -17254,7 +17254,7 @@
    },
    "rubric": {
     "title": "Эталон билета 30, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -17450,7 +17450,7 @@
    },
    "rubric": {
     "title": "Эталон билета 30, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -17637,7 +17637,7 @@
    },
    "rubric": {
     "title": "Эталон билета 31, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "summary",
@@ -17821,7 +17821,7 @@
    },
    "rubric": {
     "title": "Эталон билета 31, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -18024,7 +18024,7 @@
    },
    "rubric": {
     "title": "Эталон билета 31, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -18245,7 +18245,7 @@
    },
    "rubric": {
     "title": "Эталон билета 32, вызов 1",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -18441,7 +18441,7 @@
    },
    "rubric": {
     "title": "Эталон билета 32, вызов 2",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
@@ -18610,7 +18610,7 @@
    },
    "rubric": {
     "title": "Эталон билета 32, вызов 3",
-    "time_limit_seconds": 30,
+    "time_limit_seconds": 300,
     "criteria": [
      {
       "id": "caller",
