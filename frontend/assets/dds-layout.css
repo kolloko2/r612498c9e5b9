@@ -210,8 +210,17 @@ body:has(.dds-mode:not([hidden])) .console-meta #clock{font-size:28px}
 }
 
 /* Иконки телефона по центру своего поля; компактная полоса статуса без таблиц. */
-.dds-mode .phone-field::before{align-items:center;padding-top:0}
+.dds-mode .phone-field::before{align-items:flex-end;padding:0 0 9px}
 .dds-mode .connection .phone-icon{font-size:24px;line-height:1;color:#4a555b}
 .dds-mode.response-compact #responseSection>table,.dds-mode.response-compact #latestReport,
 .dds-mode.response-compact #responseSection>h2~h2{display:none}
 body.card-open .lesson-control,body.card-open .workspace-head,body.card-open #journalPanel{visibility:hidden}
+/* Ряд «Заявитель | Пострадавшие | ЧС» и колонки «Адрес | Происшествие» делят
+   ширину одинаково: одни и те же 45 % и один отступ, поэтому границы совпадают. */
+@media(min-width:1151px){
+ .dds-mode #cardForm{column-gap:8px}
+ .dds-mode .identity{margin-right:0}
+ .dds-mode .arm-extra-flags{margin-left:0}
+ .dds-mode .card-columns{grid-template-columns:calc((100% - 16px) * .45) minmax(0,1fr);column-gap:8px}
+}
+.dds-mode #openMap{margin-right:6px;white-space:nowrap}
