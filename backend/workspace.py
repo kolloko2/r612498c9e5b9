@@ -22,6 +22,7 @@ from semantic_grading import review as semantic_review, review_dds as semantic_r
 from dds_review import review as dds_decision_review, unfinished as unfinished_dds
 from voice_client import request as voice_request
 from adaptive import attempt_view, recommend
+from briefing import correction_reveal
 from ai_review import review as review_card, review_dds as review_dds_actions
 from llm import configuration
 from field_dialogue import report_context
@@ -315,8 +316,7 @@ def correction_evidence_visible(value: dict) -> bool:
     if value.get('exercise_mode') != 'actions':
         return True
     events = value.get('events', [])
-    if any(event.get('type') == 'situation.update' and event.get('detail', {}).get('unlocks_status')
-           for event in events):
+    if correction_reveal(value) is not None:
         return True
     if value.get('planned_unlocks'):
         return False
@@ -1329,7 +1329,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         crew = value.get('assigned_crew') or {}
         source = f"{crew['leader']}, {crew['id']}" if crew else item['source']
         store.save(report_sid, {'step': 0, 'seq': 0, 'messages': [], 'replies': {}, 'ended': False,
-                                'field_report': report_context(value, source, item['text'], crew.get('id', ''))})
+                                'field_report': report_context(value, source, item['text'], crew.get('id', ''), update_id)})
         result = await voice('calls', 'POST', {'session_id': report_sid,
                                               'extension': value['sip_extension'], 'mode': 'auto'})
         calls[update_id] = {'session_id': report_sid, 'call_id': result['call_id'], 'started_at': now()}

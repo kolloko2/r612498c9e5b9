@@ -243,3 +243,40 @@ def test_briefing_before_correction_accepts_card_value():
     assert check('Берзарина, дом 20', card)['complete']
     assert check('Берзарина, дом 22', card)['complete']
     assert not check('Берзарина, дом 21', card)['complete']
+
+
+def test_correction_opens_only_with_its_report_and_then_card_value_stops_counting():
+    from briefing import check, reference_card
+    from field_dialogue import report_context
+    from workspace import correction_evidence_visible
+    expectation = {'expected_corrections': {'house': '22'}, 'correction_update_id': 'arrived',
+                   'brief_required_fields': ['street', 'house']}
+    value = {'exercise_mode': 'actions', 'planned_unlocks': {'dispatched': 'Начало реагирования', 'arrived': 'Прибытие'},
+             'card': {'street': 'Берзарина', 'house': '20'}, 'dds_expectation': expectation, 'events': [
+                 {'type': 'situation.update', 'at': '2026-09-18T10:01:00+00:00',
+                  'detail': {'id': 'dispatched', 'unlocks_status': 'Начало реагирования'}}]}
+    # Доклад о выезде не открывает исправление, которое прозвучит только при прибытии.
+    assert correction_evidence_visible(value) is False
+    assert report_context(value, 'Бригада', 'Выехали', update_id='dispatched')['card']['house'] == '20'
+    assert report_context(value, 'Бригада', 'Прибыли', update_id='arrived')['card']['house'] == '22'
+    assert check('Берзарина, дом 20', reference_card(value))['complete']
+    value['events'].append({'type': 'situation.update', 'at': '2026-09-18T10:03:00+00:00',
+                            'detail': {'id': 'arrived', 'unlocks_status': 'Прибытие'}})
+    assert correction_evidence_visible(value) is True
+    # После уточнения неверный дом из карточки больше не засчитывается,
+    # а доклад, сделанный до прибытия, оценивается по тому, что было известно.
+    assert not check('Берзарина, дом 20', reference_card(value))['complete']
+    assert check('Берзарина, дом 22', reference_card(value))['complete']
+    assert check('Берзарина, дом 20', reference_card(value, at='2026-09-18T10:02:00+00:00'))['complete']
+
+
+def test_negated_correct_value_is_not_a_correction():
+    sent = [event(1, 'notification.recorded', '2026-09-18T10:00:00+00:00',
+                  service=SERVICE, source='briefing', message_id='report-3')]
+    value = card(sent, notifications=[{'service': SERVICE, 'message_id': 'report-3',
+                                      'comment': 'Берзарина, дом 22, пожар в квартире'}])
+    expectation = {'should_accept': True, 'brief_service': SERVICE, 'expected_corrections': {'house': '22'}}
+    value['error_reports'] = [{'field': 'house', 'correct_value': 'не 22, а 23', 'source': 'Старший бригады'}]
+    assert verdict(review(value, expectation), 'correction:house')['passed'] is False
+    value['error_reports'] = [{'field': 'house', 'correct_value': 'дом 22', 'source': 'Старший бригады'}]
+    assert verdict(review(value, expectation), 'correction:house')['passed'] is True

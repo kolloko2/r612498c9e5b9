@@ -4,6 +4,7 @@ import json
 import re
 
 import llm
+from briefing import correction_reveal
 
 
 def crew_speech(text):
@@ -22,12 +23,18 @@ def report_speech(report):
     return f'{crew}. {text}'
 
 
-def report_context(value, source, text, crew=''):
+def report_context(value, source, text, crew='', update_id=''):
     # Бригада находится на месте и знает фактические сведения, даже если в
     # карточке 112 ошибка: из её звонка ДДС и узнаёт правильные данные
     # Проверенные преподавателем исправления
     # накладываются на исходную карточку.
-    corrections = (value.get('dds_expectation') or {}).get('expected_corrections') or {}
+    # До прибытия бригада знает только карточку 112: исправление она называет
+    # в том докладе, который его открывает, и позже.
+    expectation = value.get('dds_expectation') or {}
+    target = expectation.get('correction_update_id')
+    known = (correction_reveal(value) is not None
+             or (update_id and (not target or update_id == target)))
+    corrections = (expectation.get('expected_corrections') or {}) if known else {}
     card = {**(value.get('initial_card') or value.get('card') or {}), **corrections}
     return {'source': source, 'text': text, 'crew': crew,
             'card': {key: card[key] for key in

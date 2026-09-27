@@ -70,7 +70,9 @@ class AccessPolicy(BaseModel):
     session_hours: int = Field(SESSION_SECONDS // 3600, ge=1, le=24)
     failure_limit: int = Field(FAILURE_LIMIT, ge=3, le=10)
     lock_seconds: int = Field(LOCK_SECONDS, ge=30, le=3600)
-    audit_retention_days: int = Field(365, ge=7, le=3650)
+    # Журнал входов и учётных записей; не меньше 6 месяцев по ТЗ. Основной
+    # журнал безопасности хранится без автоматического удаления.
+    audit_retention_days: int = Field(365, ge=183, le=3650)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
 

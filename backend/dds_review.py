@@ -244,7 +244,7 @@ def _briefing(value: dict, expectation: dict) -> list[dict]:
         spoken = (source[-1].get("comment") or "")
         # A correction to a received card must not rewrite the source facts
         # against which the dispatcher is assessed.
-        card = reference_card(value, expectation)
+        card = reference_card(value, expectation, at=source[-1].get('at'))
         lost = [item['label'] for item in briefing_check(spoken, card)['checks']
                 if not item['passed']]
         lost.extend(word for word in expectation.get('brief_keywords', [])
@@ -271,6 +271,7 @@ def _card_corrections(value: dict, expectation: dict) -> list[dict]:
         # «10 или 11» при эталоне «10» — не исправление, а догадка.
         right = any(item.get('correct_value', '').strip().casefold() == answer.strip().casefold()
                     or (_contains(item.get('correct_value', ''), answer)
+                        and asserted(item.get('correct_value', ''), answer)
                         and not HEDGE.search(item.get('correct_value', '').casefold())) for item in told)
         name = FIELD_NAMES.get(field, field)
         checks.append(_check(f'correction:{field}', f'В 112 сообщено об ошибке в поле «{name}»', right,

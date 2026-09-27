@@ -7244,6 +7244,11 @@ components:
             maxLength: 1000
           type: object
           title: Correction Evidence
+        correction_update_id:
+          type: string
+          maxLength: 80
+          title: Correction Update Id
+          default: ''
         check_weights:
           additionalProperties:
             type: number
@@ -7422,7 +7427,7 @@ components:
         audit_retention_days:
           type: integer
           maximum: 3650.0
-          minimum: 7.0
+          minimum: 183.0
           title: Audit Retention Days
           default: 365
         log_level:

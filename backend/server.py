@@ -83,6 +83,8 @@ class DdsExpectation(BaseModel):
     brief_required_fields: list[Literal['city', 'street', 'house', 'building', 'structure',
         'apartment', 'entrance', 'floor', 'object', 'incident_type', 'injured']] = Field(default_factory=list, max_length=12)
     correction_evidence: dict[str, Annotated[str, StringConstraints(max_length=1000)]] = Field(default_factory=dict)
+    # Доклад, в котором бригада называет правильные сведения. Пусто — любой доклад.
+    correction_update_id: str = Field('', max_length=80)
     check_weights: dict[str, Annotated[float, Field(gt=0, le=100)]] = Field(default_factory=dict)
     pass_percent: float = Field(100, ge=0, le=100)
     expected_crew_id: str = Field('', max_length=80)

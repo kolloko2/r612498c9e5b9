@@ -107,7 +107,7 @@ def required_facts(card: dict) -> list[dict]:
             for key in selected if key in labels and card.get(key)]
 
 
-HEDGE_BEFORE = re.compile(r'(?:то\s+ли|примерно|около|где[\s-]*то|вроде|кажется|наверное|возможно)\s*(?:дом\s*)?$')
+HEDGE_BEFORE = re.compile(r'(?:\bне|то\s+ли|примерно|около|где[\s-]*то|вроде|кажется|наверное|возможно)\s*(?:дом\s*)?$')
 HEDGE_AFTER = re.compile(r'^\s*,?\s*(?:или|либо|то\s+ли|возможно|может\s+быть|наверное|/)\s*(?:же\s*)?(?:дом\s*|квартира\s*|корпус\s*)?[0-9]')
 
 
@@ -169,11 +169,41 @@ def check(transcript: str, card: dict) -> dict:
             'note':'Проверены обязательные факты и отрицания; неоднозначный доклад требует уточнения.'}
 
 
-def reference_card(value: dict, expectation: dict | None = None) -> dict:
-    """Freeze source facts while allowing teacher-verified corrections."""
+def correction_reveal(value: dict, expectation: dict | None = None) -> str | None:
+    """Момент, когда бригада назвала правильные сведения; None — ещё не называла.
+
+    Если в эталоне указан correction_update_id, сведения открывает только этот
+    доклад (например, о прибытии), а не любой предыдущий.
+    """
+    target = (expectation or value.get('dds_expectation') or {}).get('correction_update_id')
+    for event in value.get('events', []):
+        detail = event.get('detail') or {}
+        if (event.get('type') == 'situation.update' and detail.get('unlocks_status')
+                and (not target or detail.get('id') == target)):
+            return event.get('at') or '0'
+    return None
+
+
+def _before(moment: str | None, reveal: str) -> bool:
+    try:
+        return bool(moment) and datetime.fromisoformat(moment) < datetime.fromisoformat(reveal)
+    except (TypeError, ValueError):
+        return False
+
+
+def reference_card(value: dict, expectation: dict | None = None, at: str | None = None) -> dict:
+    """Freeze source facts while allowing teacher-verified corrections.
+
+    Значение из карточки 112 допустимо, пока диспетчер не мог знать исправления:
+    до доклада бригады с правильными сведениями. at — время проверяемого доклада,
+    без него проверка идёт на текущий момент.
+    """
     source = value.get('initial_card') or value['card']
     corrections = (expectation or value.get('dds_expectation') or {}).get('expected_corrections') or {}
-    return {**source, '_source_values': {key: source[key] for key in corrections if source.get(key)}, '_brief_required_fields': (expectation or value.get('dds_expectation') or {}).get('brief_required_fields', []), **{key: answer for key, answer in corrections.items()
+    reveal = correction_reveal(value, expectation)
+    unaware = reveal is None or _before(at, reveal)
+    return {**source, '_source_values': {key: source[key] for key in corrections
+                                         if source.get(key) and unaware}, '_brief_required_fields': (expectation or value.get('dds_expectation') or {}).get('brief_required_fields', []), **{key: answer for key, answer in corrections.items()
                        if key in {'city', 'district', 'area', 'object', 'street',
                                   'house', 'building', 'structure', 'address_note',
                                   'description', 'incident_type'} and isinstance(answer, str)}}

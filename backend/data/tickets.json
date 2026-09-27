@@ -11,7 +11,7 @@
   "transcribed_at": "2026-09-15"
  },
  "phones": "synthetic",
- "catalog_sha256": "b6a0a6f1a61f4da321fcd5a995933a0b1a453a150a00221d12c18c8b4ddabb02",
+ "catalog_sha256": "5d295c9dfa5736dd94ce9827b8e8186e765240a1be906a3e2bd4cd2175a6029a",
  "metadata": {
   "tickets": 32,
   "drafts": 96,
@@ -148,7 +148,8 @@
      ],
      "update_keywords": {
       "working": [
-       "контейнер"
+       "контейнер",
+       "площадка"
       ]
      },
      "brief_required_fields": [
@@ -333,7 +334,8 @@
      ],
      "update_keywords": {
       "working": [
-       "драка"
+       "драка",
+       "пострадавшие"
       ]
      },
      "brief_required_fields": [
@@ -541,7 +543,8 @@
      ],
      "update_keywords": {
       "working": [
-       "ребёнок"
+       "ребёнок",
+       "велосипед"
       ]
      },
      "brief_required_fields": [
@@ -730,7 +733,8 @@
      ],
      "update_keywords": {
       "working": [
-       "мусоропровод"
+       "мусоропровод",
+       "задымление"
       ]
      },
      "brief_required_fields": [
@@ -936,7 +940,8 @@
      ],
      "update_keywords": {
       "working": [
-       "конфликт"
+       "конфликт",
+       "продавец"
       ]
      },
      "brief_required_fields": [
@@ -1138,7 +1143,8 @@
      ],
      "update_keywords": {
       "working": [
-       "автомобиль"
+       "автомобиль",
+       "поиск"
       ]
      },
      "brief_required_fields": [
@@ -1321,7 +1327,8 @@
      ],
      "update_keywords": {
       "working": [
-       "крыша"
+       "крыша",
+       "помещения"
       ]
      },
      "brief_required_fields": [
@@ -1513,7 +1520,8 @@
      ],
      "update_keywords": {
       "working": [
-       "музыка"
+       "музыка",
+       "двор"
       ]
      },
      "brief_required_fields": [
@@ -1701,7 +1709,8 @@
      ],
      "update_keywords": {
       "working": [
-       "водитель"
+       "водитель",
+       "бревно"
       ]
      },
      "brief_required_fields": [
@@ -1890,7 +1899,8 @@
      ],
      "update_keywords": {
       "working": [
-       "балкон"
+       "балкон",
+       "помещения"
       ]
      },
      "brief_required_fields": [
@@ -2083,7 +2093,8 @@
      ],
      "update_keywords": {
       "working": [
-       "женщина"
+       "женщина",
+       "без сознания"
       ]
      },
      "brief_required_fields": [
@@ -2282,7 +2293,8 @@
      ],
      "update_keywords": {
       "working": [
-       "квартира"
+       "квартира",
+       "человек"
       ]
      },
      "brief_required_fields": [
@@ -2498,6 +2510,7 @@
      ],
      "update_keywords": {
       "working": [
+       "тушение",
        "балкон"
       ]
      },
@@ -2713,7 +2726,8 @@
      ],
      "update_keywords": {
       "working": [
-       "женщина"
+       "женщина",
+       "лекарства"
       ]
      },
      "brief_required_fields": [
@@ -2916,6 +2930,7 @@
      ],
      "update_keywords": {
       "working": [
+       "рабочий",
        "котлован"
       ]
      },
@@ -3098,7 +3113,8 @@
      ],
      "update_keywords": {
       "working": [
-       "Фольксваген"
+       "Фольксваген",
+       "МКАД"
       ]
      },
      "brief_required_fields": [
@@ -3283,7 +3299,8 @@
      ],
      "update_keywords": {
       "working": [
-       "водитель"
+       "водитель",
+       "Форд"
       ]
      },
      "brief_required_fields": [
@@ -3468,6 +3485,7 @@
      ],
      "update_keywords": {
       "working": [
+       "мужчины",
        "льдина"
       ]
      },
@@ -3652,7 +3670,8 @@
      ],
      "update_keywords": {
       "working": [
-       "Тойота"
+       "Тойота",
+       "ожоги"
       ]
      },
      "brief_required_fields": [
@@ -3838,7 +3857,8 @@
      ],
      "update_keywords": {
       "working": [
-       "заявитель"
+       "заявитель",
+       "боль"
       ]
      },
      "brief_required_fields": [
@@ -4029,6 +4049,7 @@
      ],
      "update_keywords": {
       "working": [
+       "маршрут",
        "приметы"
       ]
      },
@@ -4044,6 +4065,7 @@
      "expected_corrections": {
       "house": "1"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 07-3 прибыла. Место: Маршала Соколовского. Фактический номер дома 1, в карточке 112 указан дом 3. Приступаем к уточнению обстановки."
      }
@@ -4245,7 +4267,8 @@
      ],
      "update_keywords": {
       "working": [
-       "этаж"
+       "этаж",
+       "дым"
       ]
      },
      "brief_required_fields": [
@@ -4442,7 +4465,8 @@
      ],
      "update_keywords": {
       "working": [
-       "мужчина"
+       "мужчина",
+       "без сознания"
       ]
      },
      "brief_required_fields": [
@@ -4610,6 +4634,7 @@
      ],
      "update_keywords": {
       "working": [
+       "спасение",
        "мужчина"
       ]
      },
@@ -4810,7 +4835,8 @@
      ],
      "update_keywords": {
       "working": [
-       "платформа"
+       "платформа",
+       "дым"
       ]
      },
      "brief_required_fields": [
@@ -4984,7 +5010,8 @@
      ],
      "update_keywords": {
       "working": [
-       "беременная"
+       "беременная",
+       "роды"
       ]
      },
      "brief_required_fields": [
@@ -5142,7 +5169,8 @@
      ],
      "update_keywords": {
       "working": [
-       "мужчина"
+       "спасение",
+       "вода"
       ]
      },
      "brief_required_fields": [
@@ -5333,7 +5361,8 @@
      ],
      "update_keywords": {
       "working": [
-       "касса"
+       "касса",
+       "ожоги"
       ]
      },
      "brief_required_fields": [
@@ -5513,7 +5542,8 @@
      ],
      "update_keywords": {
       "working": [
-       "женщина"
+       "женщина",
+       "поля"
       ]
      },
      "brief_required_fields": [
@@ -5682,7 +5712,8 @@
      ],
      "update_keywords": {
       "working": [
-       "квартира"
+       "квартира",
+       "полиция"
       ]
      },
      "brief_required_fields": [
@@ -5698,6 +5729,7 @@
      "expected_corrections": {
       "house": "20"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 10-3 прибыла. Место: Проспект Маршала Жукова. Фактический номер дома 20, в карточке 112 указан дом 22. Приступаем к уточнению обстановки."
      }
@@ -5922,7 +5954,8 @@
      ],
      "update_keywords": {
       "working": [
-       "автобус"
+       "автобус",
+       "кабина"
       ]
      },
      "brief_required_fields": [
@@ -6121,7 +6154,8 @@
      ],
      "update_keywords": {
       "working": [
-       "ребёнок"
+       "ребёнок",
+       "головокружение"
       ]
      },
      "brief_required_fields": [
@@ -6323,7 +6357,8 @@
      ],
      "update_keywords": {
       "working": [
-       "поиск"
+       "поиск",
+       "лес"
       ]
      },
      "brief_required_fields": [
@@ -6509,7 +6544,8 @@
      ],
      "update_keywords": {
       "working": [
-       "ресторан"
+       "ресторан",
+       "дым"
       ]
      },
      "brief_required_fields": [
@@ -6703,7 +6739,8 @@
      ],
      "update_keywords": {
       "working": [
-       "женщина"
+       "женщина",
+       "сердце"
       ]
      },
      "brief_required_fields": [
@@ -6859,6 +6896,7 @@
      ],
      "update_keywords": {
       "working": [
+       "мужчины",
        "мост"
       ]
      },
@@ -7041,7 +7079,8 @@
      ],
      "update_keywords": {
       "working": [
-       "деревья"
+       "деревья",
+       "лесопарк"
       ]
      },
      "brief_required_fields": [
@@ -7217,7 +7256,8 @@
      ],
      "update_keywords": {
       "working": [
-       "роженица"
+       "роженица",
+       "Фольксваген"
       ]
      },
      "brief_required_fields": [
@@ -7384,7 +7424,8 @@
      ],
      "update_keywords": {
       "working": [
-       "мужчина"
+       "мужчина",
+       "кровь"
       ]
      },
      "brief_required_fields": [
@@ -7564,7 +7605,8 @@
      ],
      "update_keywords": {
       "working": [
-       "трава"
+       "трава",
+       "АЗС"
       ]
      },
      "brief_required_fields": [
@@ -7741,7 +7783,8 @@
      ],
      "update_keywords": {
       "working": [
-       "подросток"
+       "подросток",
+       "дыхание"
       ]
      },
      "brief_required_fields": [
@@ -7960,7 +8003,8 @@
      ],
      "update_keywords": {
       "working": [
-       "иномарка"
+       "иномарка",
+       "приметы"
       ]
      },
      "brief_required_fields": [
@@ -8162,7 +8206,8 @@
      ],
      "update_keywords": {
       "working": [
-       "участок"
+       "тушение",
+       "деревня"
       ]
      },
      "brief_required_fields": [
@@ -8338,7 +8383,8 @@
      ],
      "update_keywords": {
       "working": [
-       "мужчина"
+       "мужчина",
+       "голова"
       ]
      },
      "brief_required_fields": [
@@ -8532,7 +8578,8 @@
      ],
      "update_keywords": {
       "working": [
-       "ранение"
+       "ранение",
+       "медицинская бригада"
       ]
      },
      "brief_required_fields": [
@@ -8548,6 +8595,7 @@
      "expected_corrections": {
       "house": "22"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 15-3 прибыла. Место: Зверенецкая. Фактический номер дома 22, в карточке 112 указан дом 24. Приступаем к уточнению обстановки."
      }
@@ -8758,7 +8806,8 @@
      ],
      "update_keywords": {
       "working": [
-       "Быково"
+       "Быково",
+       "дым"
       ]
      },
      "brief_required_fields": [
@@ -8922,7 +8971,8 @@
      ],
      "update_keywords": {
       "working": [
-       "ребёнок"
+       "ребёнок",
+       "велосипед"
       ]
      },
      "brief_required_fields": [
@@ -9100,7 +9150,8 @@
      ],
      "update_keywords": {
       "working": [
-       "женщина"
+       "женщина",
+       "снотворное"
       ]
      },
      "brief_required_fields": [
@@ -9116,6 +9167,7 @@
      "expected_corrections": {
       "house": "7"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 16-3 прибыла. Место: Знаменские Садки. Фактический номер дома 7, в карточке 112 указан дом 9. Приступаем к уточнению обстановки."
      }
@@ -9323,6 +9375,7 @@
      ],
      "update_keywords": {
       "working": [
+       "помещения",
        "сигнализация"
       ]
      },
@@ -9530,7 +9583,8 @@
      ],
      "update_keywords": {
       "working": [
-       "покупатель"
+       "покупатель",
+       "судороги"
       ]
      },
      "brief_required_fields": [
@@ -9727,6 +9781,7 @@
      ],
      "update_keywords": {
       "working": [
+       "избиение",
        "женщина"
       ]
      },
@@ -9741,6 +9796,7 @@
      "expected_corrections": {
       "house": "155"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 17-3 прибыла. Место: Дмитровское шоссе. Фактический номер дома 155, в карточке 112 указан дом 157. Приступаем к уточнению обстановки."
      }
@@ -9953,7 +10009,8 @@
      ],
      "update_keywords": {
       "working": [
-       "пожар"
+       "пожар",
+       "пруд"
       ]
      },
      "brief_required_fields": [
@@ -10118,7 +10175,8 @@
      ],
      "update_keywords": {
       "working": [
-       "мужчина"
+       "мужчина",
+       "квартира"
       ]
      },
      "brief_required_fields": [
@@ -10329,7 +10387,8 @@
      ],
      "update_keywords": {
       "working": [
-       "двор"
+       "двор",
+       "крики"
       ]
      },
      "brief_required_fields": [
@@ -10341,6 +10400,7 @@
      "expected_corrections": {
       "house": "12"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 18-3 прибыла. Место: Огородный проезд. Фактический номер дома 12, в карточке 112 указан дом 14. Приступаем к уточнению обстановки."
      }
@@ -10533,7 +10593,8 @@
      ],
      "update_keywords": {
       "working": [
-       "поле"
+       "поле",
+       "пути"
       ]
      },
      "brief_required_fields": [
@@ -10696,6 +10757,7 @@
      ],
      "update_keywords": {
       "working": [
+       "мужчина",
        "змея"
       ]
      },
@@ -10863,7 +10925,8 @@
      ],
      "update_keywords": {
       "working": [
-       "пострадавший"
+       "пострадавший",
+       "переход"
       ]
      },
      "brief_required_fields": [
@@ -11038,7 +11101,8 @@
      ],
      "update_keywords": {
       "working": [
-       "драка"
+       "драка",
+       "участники"
       ]
      },
      "brief_required_fields": [
@@ -11234,7 +11298,8 @@
      ],
      "update_keywords": {
       "working": [
-       "женщина"
+       "женщина",
+       "речь"
       ]
      },
      "brief_required_fields": [
@@ -11402,7 +11467,8 @@
      ],
      "update_keywords": {
       "working": [
-       "пострадавшая"
+       "пострадавшая",
+       "двор"
       ]
      },
      "brief_required_fields": [
@@ -11416,6 +11482,7 @@
      "expected_corrections": {
       "house": "42"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 20-3 прибыла. Место: Кастанаевская. Фактический номер дома 42, в карточке 112 указан дом 44. Приступаем к уточнению обстановки."
      }
@@ -11624,7 +11691,8 @@
      ],
      "update_keywords": {
       "working": [
-       "драка"
+       "драка",
+       "травмированные"
       ]
      },
      "brief_required_fields": [
@@ -11821,7 +11889,8 @@
      ],
      "update_keywords": {
       "working": [
-       "рука"
+       "рука",
+       "топор"
       ]
      },
      "brief_required_fields": [
@@ -11974,7 +12043,8 @@
      ],
      "update_keywords": {
       "working": [
-       "ребёнок"
+       "ребёнок",
+       "автомобиль"
       ]
      },
      "brief_required_fields": [
@@ -12148,7 +12218,8 @@
      ],
      "update_keywords": {
       "working": [
-       "конфликт"
+       "конфликт",
+       "мужчины"
       ]
      },
      "brief_required_fields": [
@@ -12369,7 +12440,8 @@
      ],
      "update_keywords": {
       "working": [
-       "ребёнок"
+       "ребёнок",
+       "рвота"
       ]
      },
      "brief_required_fields": [
@@ -12539,7 +12611,8 @@
      ],
      "update_keywords": {
       "working": [
-       "квартира"
+       "квартира",
+       "суицид"
       ]
      },
      "brief_required_fields": [
@@ -12755,7 +12828,8 @@
      ],
      "update_keywords": {
       "working": [
-       "конфликт"
+       "конфликт",
+       "травма"
       ]
      },
      "brief_required_fields": [
@@ -12977,7 +13051,8 @@
      ],
      "update_keywords": {
       "working": [
-       "ухо"
+       "ухо",
+       "адрес"
       ]
      },
      "brief_required_fields": [
@@ -13169,7 +13244,8 @@
      ],
      "update_keywords": {
       "working": [
-       "приметы"
+       "приметы",
+       "ребёнок"
       ]
      },
      "brief_required_fields": [
@@ -13182,6 +13258,7 @@
      "expected_corrections": {
       "house": "34"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 23-3 прибыла. Место: Домодедовская. Фактический номер дома 34, в карточке 112 указан дом 36. Приступаем к уточнению обстановки."
      }
@@ -13378,7 +13455,8 @@
      ],
      "update_keywords": {
       "working": [
-       "парковка"
+       "парковка",
+       "спор"
       ]
      },
      "brief_required_fields": [
@@ -13578,7 +13656,8 @@
      ],
      "update_keywords": {
       "working": [
-       "ребёнок"
+       "ребёнок",
+       "горка"
       ]
      },
      "brief_required_fields": [
@@ -13775,7 +13854,8 @@
      ],
      "update_keywords": {
       "working": [
-       "младенец"
+       "младенец",
+       "женщина"
       ]
      },
      "brief_required_fields": [
@@ -13962,7 +14042,8 @@
      ],
      "update_keywords": {
       "working": [
-       "мужчина"
+       "мужчина",
+       "очевидцы"
       ]
      },
      "brief_required_fields": [
@@ -14156,7 +14237,8 @@
      ],
      "update_keywords": {
       "working": [
-       "столкновение"
+       "столкновение",
+       "МКАД"
       ]
      },
      "brief_required_fields": [
@@ -14338,7 +14420,8 @@
      ],
      "update_keywords": {
       "working": [
-       "квартира"
+       "квартира",
+       "погибшая"
       ]
      },
      "brief_required_fields": [
@@ -14352,6 +14435,7 @@
      "expected_corrections": {
       "house": "31"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 25-3 прибыла. Место: Текстильщиков. Фактический номер дома 31, в карточке 112 указан дом 33. Приступаем к уточнению обстановки."
      }
@@ -14558,7 +14642,8 @@
      ],
      "update_keywords": {
       "working": [
-       "тумба"
+       "тумба",
+       "участники"
       ]
      },
      "brief_required_fields": [
@@ -14753,7 +14838,8 @@
      ],
      "update_keywords": {
       "working": [
-       "столкновение"
+       "столкновение",
+       "МКАД"
       ]
      },
      "brief_required_fields": [
@@ -14931,7 +15017,8 @@
      ],
      "update_keywords": {
       "working": [
-       "смерть"
+       "смерть",
+       "администратор"
       ]
      },
      "brief_required_fields": [
@@ -15143,7 +15230,8 @@
      ],
      "update_keywords": {
       "working": [
-       "коробка"
+       "коробка",
+       "провода"
       ]
      },
      "brief_required_fields": [
@@ -15352,7 +15440,8 @@
      ],
      "update_keywords": {
       "working": [
-       "столкновение"
+       "столкновение",
+       "тоннель"
       ]
      },
      "brief_required_fields": [
@@ -15537,7 +15626,8 @@
      ],
      "update_keywords": {
       "working": [
-       "ванная"
+       "ванная",
+       "трещина"
       ]
      },
      "brief_required_fields": [
@@ -15552,6 +15642,7 @@
      "expected_corrections": {
       "house": "57"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 27-3 прибыла. Место: Ленинский проспект. Фактический номер дома 57, в карточке 112 указан дом 59. Приступаем к уточнению обстановки."
      }
@@ -15761,7 +15852,8 @@
      ],
      "update_keywords": {
       "working": [
-       "мужчина"
+       "мужчина",
+       "подъезд"
       ]
      },
      "brief_required_fields": [
@@ -15968,7 +16060,8 @@
      ],
      "update_keywords": {
       "working": [
-       "столкновение"
+       "столкновение",
+       "МИД"
       ]
      },
      "brief_required_fields": [
@@ -16142,7 +16235,8 @@
      ],
      "update_keywords": {
       "working": [
-       "табло"
+       "табло",
+       "платформа"
       ]
      },
      "brief_required_fields": [
@@ -16154,6 +16248,7 @@
      "expected_corrections": {
       "house": "5"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 28-3 прибыла. Место: Комсомольская площадь. Фактический номер дома 5, в карточке 112 указан дом 7. Приступаем к уточнению обстановки."
      }
@@ -16355,7 +16450,8 @@
      ],
      "update_keywords": {
       "working": [
-       "коробка"
+       "коробка",
+       "специалисты"
       ]
      },
      "brief_required_fields": [
@@ -16534,7 +16630,8 @@
      ],
      "update_keywords": {
       "working": [
-       "водители"
+       "водители",
+       "драка"
       ]
      },
      "brief_required_fields": [
@@ -16700,7 +16797,8 @@
      ],
      "update_keywords": {
       "working": [
-       "квартира"
+       "квартира",
+       "взрыв"
       ]
      },
      "brief_required_fields": [
@@ -16716,6 +16814,7 @@
      "expected_corrections": {
       "house": "67"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 29-3 прибыла. Место: проезд Шокальского. Фактический номер дома 67, в карточке 112 указан дом 69. Приступаем к уточнению обстановки."
      }
@@ -16928,7 +17027,8 @@
      ],
      "update_keywords": {
       "working": [
-       "приметы"
+       "приметы",
+       "Тойота"
       ]
      },
      "brief_required_fields": [
@@ -17140,7 +17240,8 @@
      ],
      "update_keywords": {
       "working": [
-       "наезд"
+       "наезд",
+       "пешеход"
       ]
      },
      "brief_required_fields": [
@@ -17328,7 +17429,8 @@
      ],
      "update_keywords": {
       "working": [
-       "газопровод"
+       "газопровод",
+       "дом"
       ]
      },
      "brief_required_fields": [
@@ -17340,6 +17442,7 @@
      "expected_corrections": {
       "house": "20"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 30-3 прибыла. Место: Микрорайон Солнечный. Фактический номер дома 20, в карточке 112 указан дом 22. Приступаем к уточнению обстановки."
      }
@@ -17521,7 +17624,8 @@
      ],
      "update_keywords": {
       "working": [
-       "Мерседес"
+       "Мерседес",
+       "направление"
       ]
      },
      "brief_required_fields": [
@@ -17703,7 +17807,8 @@
      ],
      "update_keywords": {
       "working": [
-       "наезд"
+       "наезд",
+       "номер"
       ]
      },
      "brief_required_fields": [
@@ -17894,7 +17999,8 @@
      ],
      "update_keywords": {
       "working": [
-       "труба"
+       "труба",
+       "свист"
       ]
      },
      "brief_required_fields": [
@@ -17910,6 +18016,7 @@
      "expected_corrections": {
       "house": "81"
      },
+     "correction_update_id": "arrived",
      "correction_evidence": {
       "house": "Бригада 31-3 прибыла. Место: Вавилова. Фактический номер дома 81, в карточке 112 указан дом 83. Приступаем к уточнению обстановки."
      }
@@ -18125,7 +18232,8 @@
      ],
      "update_keywords": {
       "working": [
-       "Мерседес"
+       "Мерседес",
+       "ВАЗ"
       ]
      },
      "brief_required_fields": [
@@ -18319,7 +18427,8 @@
      ],
      "update_keywords": {
       "working": [
-       "топливо"
+       "топливо",
+       "пострадавшие"
       ]
      },
      "brief_required_fields": [
@@ -18489,7 +18598,8 @@
      ],
      "update_keywords": {
       "working": [
-       "освещение"
+       "освещение",
+       "МКАД"
       ]
      },
      "brief_required_fields": [

@@ -295,7 +295,7 @@ def test_brigade_names_actual_address_when_card_is_wrong():
     from field_dialogue import report_context, fallback
     value = {'initial_card': {'street': 'Берзарина', 'house': '21'},
              'dds_expectation': {'expected_corrections': {'house': '22'}}, 'events': []}
-    report = report_context(value, 'Старший наряда', 'Прибыли на место')
+    report = report_context(value, 'Старший наряда', 'Прибыли на место', update_id='arrived')
     assert report['card']['house'] == '22'
     assert '22' in fallback(report, 'Уточните адрес')
 

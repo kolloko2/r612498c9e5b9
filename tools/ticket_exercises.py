@@ -255,7 +255,7 @@ def complete(draft, call, phones):
                      ['dispatched', 'arrived', 'working', 'done'], schedule, texts, statuses)],
         dds_expectation=dict(should_accept=True, brief_service=owner, expected_crew_id=crew,
                              update_response_limit_seconds=90, result_keywords=[result_fact],
-                             update_keywords={'working': [WORKING_FACTS[key]]},
+                             update_keywords={'working': list(WORKING_FACTS[key])},
                              brief_required_fields=[key for key in ('city', 'street', 'house', 'building',
                                                                     'structure', 'apartment', 'entrance', 'floor',
                                                                     'object', 'incident_type', 'injured')
@@ -287,5 +287,5 @@ def complete(draft, call, phones):
         arrived = scenario['updates'][1]
         arrived['text'] = (f'{crew} прибыла. Место: {landmark}. Фактический номер дома {actual}, '
                            f'в карточке 112 указан дом {card["house"]}. Приступаем к уточнению обстановки.')
-        scenario['dds_expectation'].update(expected_corrections={'house': actual},
+        scenario['dds_expectation'].update(expected_corrections={'house': actual}, correction_update_id='arrived',
                                            correction_evidence={'house': arrived['text']})
