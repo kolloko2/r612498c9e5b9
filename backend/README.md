@@ -35,13 +35,13 @@ Synthetic comparison: `python tools/benchmark_phone_cpu.py --models qwen3:4b-ins
 26 September: `recipient_affiliations` on prepared cards supplies explicit area,
 district and departmental recipients with routing provenance. Grammar v3 adds
 local syntax suggestions without automatic penalties. Owned open SIP briefings
-support bounded recovery; see API_CONTRACT and DEADLINE_HARDENING_2026-09-26.
+support bounded recovery; see API_CONTRACT.
 
-Customer audit fixes: `material_text.py` extracts full bounded documents, local OCR
+Materials: `material_text.py` extracts full bounded documents, local OCR
 and task-relevant passages; install updated requirements and local Tesseract rus/eng.
 Materials allow25 MiB PDF/TXT/DOCX/XLSX and expose extraction status. `text_facts.py`
 adds local Russian word forms/polarity; DDS rubrics support required report fields,
-weights and student-visible correction evidence. See `docs/CUSTOMER_FIXES_2026-09-23.md`.
+weights and student-visible correction evidence.
 
 `territories.py` resolves only approved exact-match local recipient rules from ENV
 `TERRITORIAL_ROUTES_FILE`. New DDS cards freeze those recipients with classifier
@@ -65,7 +65,7 @@ terminal path. Historical completed assessments are unchanged.
 `python sync_curated_cards.py` внутри контейнера для сухого прогона и
 `python sync_curated_cards.py --apply` для добавления карточек в ранее
 опубликованные неизменённые сценарии. Изменения преподавателя не затираются.
-Нормативы ДДС (ответ заказчика 27.09.2026): 30 секунд от выдачи до открытия
+Нормативы ДДС: 30 секунд от выдачи до открытия
 карточки, 3 минуты до первой записи со статусом и текстом, без общего лимита. Генератор поддерживает `mode=dds` с
 готовой карточкой, докладами с места и эталоном решений. Преподаватель может
 сохранять и отключать исправления для следующих вызовов ИИ через

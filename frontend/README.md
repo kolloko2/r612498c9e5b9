@@ -24,19 +24,18 @@ and is not claimed for browser chrome or training-only controls.
 26 September: own-service pencil opens the compact reference status/order/comment
 strip; footer actions keep crew assignment, telephone briefing and other tools.
 Live card/history/status/tools checks passed at 1920x1080 and 1280x720; synthetic
-layout checks also cover 760px. See DEPLOYMENT_CHECK_2026-09-26 for visual limits.
+layout checks also cover 760px.
 
-Customer fixes: material editor displays extraction completeness and preview,
+Materials: the editor displays extraction completeness and preview,
 accepts25 MiB PDF/TXT/DOCX/XLSX. DDS editor exposes report fields, check weights,
 pass threshold and correction sources. The student sees those source statements;
-the receipt/handling indicator uses the server handling budget. See customer-fix docs.
+the timer shows the opening and first-record norms.
 
 `xml-exchange.js` adds bounded XML form import/export for material text/metadata
 and group workstation labels. It never submits forms or imports permissions.
 The card response panel and scenario editor expose manual text checks. DDS layout
 keeps response tools reachable with the own-service pencil or footer action button;
-Escape closes those tools before closing the card. Live visual checks are recorded
-in DEPLOYMENT_CHECK_2026-09-26; exact whole-product pixel parity is not claimed.
+Escape closes those tools before closing the card.
 
 DDS-only layout overrides live in `assets/dds-layout.css`. Saved DDS cards place
 description below address; service history opens above the footer, and the own

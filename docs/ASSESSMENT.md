@@ -2,8 +2,9 @@
 
 ## Three distinct results
 
-For prepared DDS cards the 30-second check is issuance-to-open, as clarified in
-the Q&A; acceptance/refusal is a separate decision check. The DDS reviewer can
+For prepared DDS cards the 30-second check is issuance-to-open and the
+3-minute check is issuance-to-first-record; acceptance/refusal is a separate
+decision check. The DDS reviewer can
 also check teacher-authored `brief_keywords` and `result_keywords` against the
 accepted duty briefing and closing comment. A manual notification is not evidence
 of that briefing. These literal checks remain deterministic; a teacher may override

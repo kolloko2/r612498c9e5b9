@@ -12,7 +12,7 @@ Records are committed in groups: one writer thread appends the queued records to
 already open file and issues a single fsync per group. `append` still returns only
 after the fsync that included the caller's own record, and every writer in a failed
 group receives the error, so the fail-closed guarantee is unchanged while concurrent
-requests no longer serialize behind one fsync each (see docs/ACCEPTANCE_LOAD.md).
+requests no longer serialize behind one fsync each.
 Admin `/audit` shows bounded daily records. Existing account/business audits remain.
 Voice records HTTP/WS metadata in a separate journal, selectable in the same
 admin cabinet. OS/firewall actions, media contents and unsaved UI clicks are not

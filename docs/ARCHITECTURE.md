@@ -107,7 +107,6 @@ metadata/text and opaque file BLOBs in the same SQLite process, with group-scope
 publication, revision checks and bounded uploads. Frontend uses the existing
 authenticated JSON proxy; attachment downloads are binary Blobs. Bounded extraction,
 OCR and source-linked retrieval run inside Backend on save; no new service is used.
-See CUSTOMER_FIXES_2026-09-23.md for current limits.
 
 `service_workflow.py` separates incident/response states from training lifecycle.
 Card saves preserve notified services and append resolved routing selections.

@@ -9,7 +9,7 @@ two independent TLS/SRTP phones through the actual deployed pipeline.
 synthetic audio. `--speech --hybrid` enables installed Vosk/GigaAM/Silero models;
 phone transport and backend replies remain mock and are labelled as such in JSON.
 This does not measure RTP delay. Workers force UTF-8 and support Cyrillic Windows
-installation paths. See `docs/VOICE_CHECK_2026-09-23.md` in the repository root.
+installation paths.
 
 Новый корневой Docker Compose собирает Voice вместе с Backend/PostgreSQL и
 локальным Asterisk: см. `docs/DOCKER_DEPLOYMENT.md`. Секреты берутся из приватного
@@ -35,8 +35,6 @@ Vosk/Silero в `PIPELINE_MODE=conversation`, но при `TOPOLOGY_VERIFIED=fals
 разрешает звонки только на явно заданный `TOPOLOGY_PROBE_EXTENSION=220`.
 Переключение пользовательских звонков в разговорный режим требует
 `TOPOLOGY_VERIFIED=true` после проверки ниже.
-Историческая проверка Windows/WSL описана в `docs/Установленный-стенд.md`, но это не
-заменяет повторную проверку текущего Docker-стенда.
 
 ## Быстрый запуск без Asterisk
 

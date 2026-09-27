@@ -864,7 +864,7 @@ per participant and `response_seconds`, `timing`, `grammar`, `workstation` per c
 `POST /api/v1/student/sessions/{sid}/open` идемпотентно фиксирует `opened_at`
 и событие `card.opened` при открытии входящей строки. Первый статус «Принята» или «Не принята» собственной ДДС фиксирует
 `receipt_decided_at`; для «Принята» также фиксируется `accepted_at`. Для
-готовой карточки с `owner_service` нормативы заданы ответом заказчика 27.09.2026:
+готовой карточки с `owner_service` нормативы такие:
 
 - `response_seconds` = `opening_seconds` — от `created_at` (появление в строке сообщений)
   до `opened_at`; норматив `response_limit_seconds` = 30 с (`dds_review` проверка `receipt_time`);
@@ -893,7 +893,7 @@ per participant and `response_seconds`, `timing`, `grammar`, `workstation` per c
 входящей карточке. Полнота телефонного доклада проверяется по снимку
 `initial_card` с наложенными исправлениями преподавателя.
 
-Ошибки входящей карточки (ответ заказчика 27.09.2026, П.3). ДДС правит только
+Ошибки входящей карточки. ДДС правит только
 свои поля: в режиме ДДС `PUT /card` возвращает 403 при изменении любого поля,
 кроме `dds_editable_fields` (сейчас `bookmarked`). Правильные сведения ДДС
 узнаёт из звонка бригады: `correction_evidence` в ответе рабочего места пуст,
