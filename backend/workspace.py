@@ -1571,6 +1571,24 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                 raise HTTPException(422, 'Найдено более 20 сценариев. Уточните фильтры или выберите сценарии явно.')
         if body.mode in ('fill', 'mixed') and not ids:
             raise HTTPException(422, 'Выберите сценарии для заполнения')
+        prefilled_ids = list(dict.fromkeys(body.prefilled_scenario_ids))
+        if (body.mode in ('actions', 'mixed') and not prefilled_ids and not body.source_session_ids
+                and (categories or body.difficulty or body.dds_profile)):
+            # Ролевая модель: в ленту ДДС попадают только события её профиля.
+            for s in store.list_scenarios():
+                owner = store.db.execute('SELECT teacher_id FROM scenario_owners WHERE scenario_id=?', (s['id'],)).fetchone()
+                if (s['enabled'] and s.get('prefilled_card') and s.get('owner_service')
+                        and (not categories or s.get('category_id', 'other') in categories)
+                        and matches(s, selection) and (not owner or owner[0] == user['id'])):
+                    prefilled_ids.append(s['id'])
+            if len(prefilled_ids) > 20:
+                raise HTTPException(422, 'Найдено более 20 готовых карточек. Уточните фильтры или выберите карточки явно.')
+            body = body.model_copy(update={'prefilled_scenario_ids': prefilled_ids})
+        if body.dds_profile:
+            for scenario_id in prefilled_ids:
+                scenario = store.scenario(scenario_id)
+                if scenario and not matches(scenario, selection):
+                    raise HTTPException(422, 'Готовая карточка не относится к выбранному профилю ДДС')
         if body.mode in ('actions', 'mixed') and not (body.source_session_ids or body.prefilled_scenario_ids):
             raise HTTPException(422, 'Выберите завершённые карточки для действий')
         if body.mode == 'fill' and (body.source_session_ids or body.prefilled_scenario_ids) or body.mode == 'actions' and ids:

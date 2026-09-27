@@ -295,3 +295,24 @@ def test_brigade_names_actual_address_when_card_is_wrong():
     report = report_context(value, 'Старший наряда', 'Прибыли на место')
     assert report['card']['house'] == '22'
     assert '22' in fallback(report, 'Уточните адрес')
+
+
+def test_dds_profile_limits_the_feed_to_its_service(classroom):
+    """Ролевая модель: профиль ДДС отбирает только карточки своей службы."""
+    store = classroom['store']
+    base_scenario = store.scenario(classroom['scenario_id'])
+    card = {'street': 'Учебная', 'house': '12', 'incident_type': 'Прорыв трубы',
+            'services': ['Деп. ЖКХ']}
+    utilities = {**base_scenario, 'id': 'profile-utilities', 'dds_profile': 'utilities',
+                 'owner_service': 'Деп. ЖКХ', 'prefilled_card': card}
+    fire = {**base_scenario, 'id': 'profile-fire', 'dds_profile': 'fire',
+            'owner_service': 'Служба 101', 'prefilled_card': {**card, 'services': ['Служба 101']}}
+    for item in (utilities, fire):
+        store.put_scenario(Scenario.model_validate(item))
+    lesson = create_lesson(classroom, mode='actions', scenario_ids=[], dds_profile='utilities')
+    assert lesson.status_code in (200, 201), lesson.text
+    chosen = lesson.json()['prefilled_scenario_ids']
+    assert 'profile-utilities' in chosen and 'profile-fire' not in chosen
+    wrong = create_lesson(classroom, mode='actions', scenario_ids=[], dds_profile='utilities',
+                          prefilled_scenario_ids=['profile-fire'])
+    assert wrong.status_code == 422
