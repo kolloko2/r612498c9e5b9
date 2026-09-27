@@ -57,7 +57,7 @@ async function serve(page){
    }
    return route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
   }
-  const file=p==='/'?'student.html':p.slice(1);if(file.includes('..'))throw Error('Unsafe test asset');
+  const file=p==='/'?'student.html':p==='/map'?'map.html':p.slice(1);if(file.includes('..'))throw Error('Unsafe test asset');
   const body=await fs.readFile(path.join(root,file));
   await route.fulfill({body,contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});
  });
@@ -78,9 +78,11 @@ async function serve(page){
   await page.locator('#save').click();await expect(page.locator('#saveState')).toHaveText('Сохранено');
   await expect(page.locator('[data-field="latitude"]')).toHaveValue('0');await expect(page.locator('[data-field="longitude"]')).toHaveValue('0');
   if(cards[0].card.latitude!==0||cards[0].card.longitude!==0)throw Error('Coordinates not saved as numbers');
-  await page.evaluate(()=>{window.__mapOpens=[];window.open=(...args)=>{window.__mapOpens.push(args);return null;};});
   await page.locator('#openMap').click();
-  const mapOpens=await page.evaluate(()=>window.__mapOpens);if(mapOpens.length!==1||mapOpens[0][0]!=='/map?sid=arm-card-1'||!mapOpens[0][2].includes('noopener'))throw Error('Map window must use the saved owned session and isolate opener');
+  await expect(page.locator('#mapDialog')).toBeVisible();
+  await expect(page.locator('#mapDialog iframe')).toHaveAttribute('src','/map?sid=arm-card-1');
+  await page.locator('#mapDialog button').first().click();
+  await expect(page.locator('#mapDialog')).toBeHidden();
 
   await expect(page.locator('#responseStatus option')).toHaveText(['Принята','Не принята']);
   await page.locator('#responseStatus').selectOption('Принята');await page.locator('#responseComment').fill('Принял учебное сообщение');await page.locator('#addResponse').click();

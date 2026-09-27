@@ -9,11 +9,12 @@ async function loadRuntime(){
  catch(error){el('runtimeStatus').textContent=error.message;}
 }
 async function applyRuntime(configuration){
+ if(!controlsAllowed()){el('runtimeStatus').textContent='Обслуживание недоступно: требуется актуальное состояние сервисов.';return;}
  if(!confirm('Подтверждаете обслуживание? PostgreSQL, Backend и голосовые службы будут перезапущены. Активные занятия могут прерваться.'))return;
  try{const job=await api('/api/v1/admin/operations/jobs','POST',{action:'configure',configuration});el('runtimeStatus').textContent='Настройки поставлены в очередь: '+job.id;importedConfiguration=null;el('applyRuntimeXml').hidden=true;}
  catch(error){el('runtimeStatus').textContent=error.message;}
 }
-el('runtimeForm').onsubmit=event=>{event.preventDefault();const values={};for(const input of el('runtimeFields').querySelectorAll('input'))values[input.name]=input.type==='number'?Number(input.value):input.value;applyRuntime(values);};
+el('runtimeForm').onsubmit=event=>{event.preventDefault();const values={};for(const input of el('runtimeFields').querySelectorAll('input,select'))values[input.name]=input.type==='number'?Number(input.value):input.value;applyRuntime(values);};
 el('downloadRuntimeXml').onclick=()=>{if(!runtimeXml)return;const url=URL.createObjectURL(new Blob([runtimeXml],{type:'application/xml'})),link=node('a');link.href=url;link.download='trainer112-settings.xml';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 el('runtimeXml').onchange=async()=>{
  importedConfiguration=null;el('applyRuntimeXml').hidden=true;const file=el('runtimeXml').files[0];if(!file)return;
@@ -23,4 +24,10 @@ el('runtimeXml').onchange=async()=>{
 el('applyRuntimeXml').onclick=()=>{if(importedConfiguration)applyRuntime(importedConfiguration);};
 el('loadServiceLogs').onclick=async()=>{try{const data=await api('/api/v1/admin/operations/logs');el('serviceLogs').textContent=data.available?data.lines.join('\n'):'Снимок журналов недоступен';}catch(error){el('serviceLogs').textContent=error.message;}};
 el('installUpdate').onclick=()=>{if(confirm('Установить одобренное обновление из deploy/updates? Службы будут перезапущены.'))queueJob('update',null,el('installUpdate'));};
-loadRuntime();
+function syncRuntimeAvailability(){
+ const disabled=!controlsAllowed();
+ for(const control of el('runtimeForm').elements)control.disabled=disabled;
+ el('installUpdate').disabled=disabled;el('applyRuntimeXml').disabled=disabled;
+}
+addEventListener('operations-rendered',syncRuntimeAvailability);
+loadRuntime().finally(syncRuntimeAvailability);

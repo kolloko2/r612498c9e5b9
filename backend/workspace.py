@@ -19,15 +19,18 @@ from evaluation import (DEFAULT_RESPONSE_LIMIT_SECONDS, DEFAULT_TIME_LIMIT_SECON
                         Rubric, evaluate)
 from grammar import analyze as grammar_report
 from semantic_grading import review as semantic_review
-from dds_review import review as dds_decision_review
+from dds_review import review as dds_decision_review, unfinished as unfinished_dds
 from voice_client import request as voice_request
 from adaptive import attempt_view, recommend
 from ai_review import review as review_card
 from llm import configuration
+from field_dialogue import report_context
+from teacher_guidance import examples as guidance_examples, initialize as initialize_guidance
+from materials import material_context
 from categories import CATEGORIES, CategoryId
 from curriculum import Difficulty, DdsProfile, metadata, matches
 from assessment import initialize as initialize_assessment, policy_for, evaluate_policy
-from service_workflow import allowed_statuses, validate_transition, incident_status
+from service_workflow import allowed_statuses, validate_transition, incident_status, STATUS_ALIASES, no_brigade_completion, NO_BRIGADE_COMMENT
 from cluster import Coordinator, ClusterUnavailable, LockUnavailable
 
 
@@ -96,12 +99,41 @@ class Card(BaseModel):
     no_contact: bool = False
     interrupted: bool = False
     services: list[Annotated[str, StringConstraints(min_length=1, max_length=160)]] = Field(default_factory=list, max_length=100)
+    service_phones: dict[str, Annotated[str, StringConstraints(max_length=40)]] = Field(default_factory=dict)
+    recipient_affiliations: dict[Literal['area', 'district', 'department'], Annotated[str, StringConstraints(min_length=1, max_length=160)]] = Field(default_factory=dict)
 
     @model_validator(mode='after')
     def coordinate_pair(self):
         if (self.latitude is None) != (self.longitude is None):
             raise ValueError('Укажите обе координаты или очистите обе')
+        for scope in ('area', 'district'):
+            if self.recipient_affiliations.get(scope) and not getattr(self, scope):
+                raise ValueError('Для получателя территории заполните поле ' + scope)
         return self
+
+
+def prefilled_from_scenario(scenario: dict) -> dict:
+    """Build a DDS card from explicit teacher data and safe scenario facts."""
+    supplied = scenario.get('prefilled_card') or {}
+    card = Card.model_validate({
+        'caller_name': scenario['victim_name'],
+        'address_note': scenario['location'],
+        'description': scenario['incident'],
+        'incident_type': scenario['title'],
+        **supplied,
+    }).model_dump()
+    owner = (scenario.get('owner_service') or '').strip()
+    if owner and owner not in card['services']:
+        card['services'].append(owner)
+    routing = preview(card)
+    card['services'] = list(dict.fromkeys([*card['services'],
+        *(item['service'] for item in routing['suggestions'])]))
+    unknown_phones = set(card['service_phones']) - set(card['services'])
+    if unknown_phones:
+        raise ValueError('Номера связи допустимы только для служб из входящей карточки: '
+                         + ', '.join(sorted(unknown_phones)))
+    result = Card.model_validate(card).model_dump()
+    return Card.model_validate(result).model_dump()
 
 
 class CreateLesson(BaseModel):
@@ -235,6 +267,14 @@ class ServiceAction(BaseModel):
     message_id: UUID | None = None
 
 
+class AssignCrew(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    message_id: UUID
+    crew_id: str = Field(min_length=1, max_length=80)
+    decision_by: Literal['dispatcher', 'leadership']
+    decision_note: str = Field('', max_length=500)
+
+
 class NotificationAction(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
     message_id: UUID
@@ -293,6 +333,13 @@ class RoutingPreview(BaseModel):
     unresolved: list[RoutingUnresolved] = Field(default_factory=list)
 
 
+class GrammarPreview(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    card: Card
+    comment: str = Field(default='', max_length=1000)
+    text: str | None = Field(default=None, max_length=100000)
+
+
 # Статусы хода работ: их открывают оперативные вводные от реагирующей стороны.
 PROGRESS_STATUSES = ('Начало реагирования', 'Прибытие', 'Проведение работ', 'Работы завершены')
 
@@ -314,7 +361,10 @@ def visible_statuses(value: dict) -> dict[str, list[str]]:
         allowed = allowed_statuses(service, value['service_states'].get(service, {}).get('status'))
         if gated is not None:
             allowed = [status for status in allowed
-                       if status not in PROGRESS_STATUSES or status in gated]
+                       if status not in PROGRESS_STATUSES or status in gated
+                       or (not value.get('assigned_crew') and no_brigade_completion(
+                           service, value['service_states'].get(service, {}).get('status'),
+                           status, NO_BRIGADE_COMMENT))]
         result[service] = allowed
     return result
 
@@ -333,30 +383,40 @@ def unlocked_statuses(value: dict) -> set[str] | None:
     return {status for update_id, status in planned.items() if update_id in delivered}
 
 
+def update_elapsed(value: dict, item: dict) -> float:
+    """New crew reports start at dispatch; legacy attempts retain their clock."""
+    anchor = value['created_at']
+    if value.get('updates_anchor') == 'crew_assigned' and item.get('unlocks_status'):
+        anchor = (value.get('assigned_crew') or {}).get('at')
+        if not anchor:
+            return -1
+    return (datetime.now(timezone.utc) - datetime.fromisoformat(anchor)).total_seconds()
+
+
 def apply_default_norms(value: dict) -> None:
     """Нормативы времени для готовой карточки ДДС, у которой нет эталона.
 
-    В основном режиме поля карточки уже заполнены, эталон к ней не применяется и
-    балл не выставляется — оценивают действия. Но нормативы заказчика (реакция
-    30 секунд, обработка 3 минуты) относятся именно к этому режиму, поэтому без
-    эталона они берутся из значений по умолчанию, а не остаются неизмеренными.
-    Реакция берётся из карточки: преподаватель задаёт её при выдаче.
+    В основном режиме оцениваются действия, а не уже заполненные поля.
+    Подтверждение получения (30 секунд) и учебный бюджет обработки относятся
+    именно к этому режиму и не зависят от наличия эталона по полям.
     """
     if value.get('exercise_mode') != 'actions':
         return
     timing = value.get('evaluation', {}).get('timing')
-    if not timing or timing.get('limit_seconds') is not None:
+    if not timing:
         return
     response_limit = value.get('time_limit_seconds') or DEFAULT_RESPONSE_LIMIT_SECONDS
     response_seconds = timing.get('response_seconds')
     timing['response_limit_seconds'] = response_limit
     timing['response_within_limit'] = (None if response_seconds is None
                                        else response_seconds <= response_limit)
-    timing['limit_seconds'] = DEFAULT_TIME_LIMIT_SECONDS
-    timing['within_limit'] = timing['elapsed_seconds'] <= DEFAULT_TIME_LIMIT_SECONDS
+    limit = value.get('handling_limit_seconds') or DEFAULT_TIME_LIMIT_SECONDS
+    timing['limit_seconds'] = limit
+    timing['within_limit'] = timing['elapsed_seconds'] <= limit
 
 
 def router(store, engine, authorize, accounts=None, learning=None, coordinator=None):
+    initialize_guidance(store)
     coordinator = coordinator or Coordinator.from_database(store.db)
     store.db.execute('CREATE TABLE IF NOT EXISTS lessons (id TEXT PRIMARY KEY, body TEXT NOT NULL)')
     store.db.commit()
@@ -450,9 +510,9 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             raise HTTPException(404, "Занятие не найдено")
         return value
 
-    # Норматив реакции отсчитывается до первого действия обучающегося по
-    # карточке. Системные события выдачи и звонка реакцией не считаются: иначе
-    # норматив закрывался бы сам, без участия человека.
+    # В полном цикле 112 сохраняется время первого действия обучающегося.
+    # Для готовой карточки ДДС 30 секунд считаются отдельно — до открытия
+    # входящей строки, а решение службы оценивается другим критерием.
     STUDENT_ACTIONS = {'card.saved', 'service.updated', 'notification.recorded',
                        'card.processed', 'card.linked', 'card.forwarded', 'operator.utterance',
                        # Закрытие нерезультативного вызова — тоже действие
@@ -466,11 +526,34 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         with store.db:
             store.db.execute("INSERT INTO workspace VALUES (?,?) ON CONFLICT (id) DO UPDATE SET body=excluded.body", (value["id"], json.dumps(value, ensure_ascii=False)))
 
+    def student_view(value):
+        result = dict(value)
+        if not actor.get() or actor.get()['role'] != 'teacher':
+            for key in ('dds_expectation', 'planned_unlocks'):
+                result.pop(key, None)
+        result['correction_evidence'] = list((value.get('dds_expectation') or {}).get('correction_evidence', {}).values())
+        owner_state = value.get('service_states', {}).get(value.get('owner_service'), {})
+        result['card_locked'] = (value.get('status') == 'Завершена' or
+                                value.get('exercise_mode') == 'actions' and
+                                owner_state.get('status') in ('Работы завершены', 'Отказ от выполнения работ'))
+        result['dds_assessment_enabled'] = bool(value.get('dds_expectation'))
+        return result
+
     def public(value):
         state = store.load(value["id"])
-        return {**value, 'incident_status': incident_status(value),
+        pending_reports = []
+        if (value.get('exercise_mode') == 'actions' and value.get('sip_extension')
+                and value['status'] != 'Завершена'):
+            delivered = {event['detail'].get('id') for event in value['events']
+                         if event['type'] == 'situation.update'}
+            pending_reports = [{'id': item['id'], 'source': item['source'],
+                                'call_id': (value.get('field_report_calls') or {}).get(item['id'], {}).get('call_id')}
+                               for item in (state.get('scenario') or {}).get('updates', [])
+                               if item['id'] not in delivered and update_elapsed(value, item) >= item['after_seconds']]
+        return {**student_view(value), 'incident_status': incident_status(value),
                 'allowed_service_statuses': visible_statuses(value),
                 'owner_service': value.get('owner_service', ''),
+                'pending_phone_reports': pending_reports,
                 "messages": state["messages"], "provider_error": state.get("provider_error")}
 
     @instructor.post('/sessions/{sid}/feedback', dependencies=[Depends(serialize_mutation)])
@@ -571,13 +654,22 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         except ValueError:
             raise HTTPException(422, "Выберите актуальную запись классификатора и соответствующие ей признаки")
 
+    @api.post('/grammar/preview')
+    @instructor.post('/grammar/preview')
+    async def grammar_preview(body: GrammarPreview):
+        # No hidden rubric or expected answer is exposed to the student.
+        card = body.card.model_dump()
+        if body.text is not None:
+            card['description'] = body.text
+        return grammar_report(card, comments=[body.comment])
+
     @api.get("/sessions")
     async def sessions(limit: int = Query(default=100, ge=1, le=200), offset: int = Query(default=0, ge=0)):
         if actor.get():
             rows = store.db.execute("SELECT body FROM workspace WHERE json_text(body,'student_id')=? ORDER BY json_text(body,'created_at') DESC,id DESC LIMIT ? OFFSET ?", (actor.get()['id'], limit, offset))
         else:
             rows = store.db.execute("SELECT body FROM workspace ORDER BY json_text(body,'created_at') DESC,id DESC LIMIT ? OFFSET ?", (limit, offset))
-        return [{**v, 'incident_status': incident_status(v)} for v in (json.loads(row[0]) for row in rows)]
+        return [{**student_view(v), 'incident_status': incident_status(v)} for v in (json.loads(row[0]) for row in rows)]
 
     @api.post("/sessions", status_code=201)
     async def create(body: CreateSession):
@@ -634,9 +726,22 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         value["time_limit_seconds"] = assessment["rubric"]["time_limit_seconds"] if assessment["rubric"] else None
         if template:
             value.update(card=template['card'], revision=1, status='В работе', exercise_mode='actions',
-                         initial_card=template['card'], routing=preview(template['card']))
+                         initial_card=template['card'], routing=preview(template['card']),
+                         saved_at=now())
+            if template['card'].get('classifier_id'):
+                record = resolve(template['card']['classifier_id'], template['card']['classifier_version'])
+                value['classification'] = {'id': record['id'],
+                                           'version': template['card']['classifier_version'],
+                                           'source_row': record['source_row'],
+                                           'main_service': record['main_service']}
+            value['service_states'] = {service: {'status': 'Добавлена',
+                                                'comment': '', 'at': value['created_at']}
+                                       for service in template['card']['services']}
             value['source_kind'] = template.get('source_kind', 'student_card')
             value['time_limit_seconds'] = 30
+            value['crew_options'] = scenario.get('crew_options') or []
+            if value['crew_options']:
+                value['updates_anchor'] = 'crew_assigned'
         # Своя ДДС и план разблокировок фиксируются вместе с карточкой: снимок
         # сценария заморожен, и правка сценария не меняет уже выданную карточку.
         owner = (scenario.get('owner_service') or '').strip()
@@ -644,14 +749,22 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             value['owner_service'] = owner
             if owner not in value['card']['services']:
                 value['card']['services'] = [*value['card']['services'], owner]
-                value['service_states'][owner] = {'status': 'Добавлена', 'comment': '',
-                                                  'at': now(), 'added_at': now()}
+            value['service_states'].setdefault(owner, {'status': 'Добавлена',
+                                                       'comment': '', 'at': now(), 'added_at': now()})
         unlocks = {item['id']: item['unlocks_status'] for item in (scenario.get('updates') or [])
                    if item.get('unlocks_status')}
         if unlocks:
             value['planned_unlocks'] = unlocks
+        if template:
+            last_report = max((item['after_seconds'] for item in scenario.get('updates', [])
+                               if item.get('unlocks_status')), default=0)
+            margin = (scenario.get('dds_expectation') or {}).get('update_response_limit_seconds', 90)
+            value['handling_limit_seconds'] = max(DEFAULT_TIME_LIMIT_SECONDS, last_report + margin + 30)
         if scenario.get('dds_expectation'):
             value['dds_expectation'] = scenario['dds_expectation']
+        elif template and owner:
+            value['dds_expectation'] = {'should_accept': True, 'brief_service': owner,
+                                        'update_response_limit_seconds': 90}
         store.save(sid, state)
         persist(value, "session.created")
         if body.transport == "text" and not template:
@@ -662,6 +775,20 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
     async def get(sid: UUID):
         return public(load(sid))
 
+    @api.post('/sessions/{sid}/open', dependencies=[Depends(serialize_mutation)])
+    async def open_card(sid: UUID):
+        """Record opening the incoming DDS row; receipt is confirmed by a primary status."""
+        value = load(sid)
+        if value.get('exercise_mode') != 'actions' or value['status'] == 'Завершена':
+            return public(value)
+        if not value.get('opened_at'):
+            value['opened_at'] = now()
+            owner = value.get('owner_service')
+            if owner and value.get('service_states', {}).get(owner, {}).get('status') == 'Добавлена':
+                value['service_states'][owner].update(status='Получена службой', at=value['opened_at'])
+            persist(value, 'card.opened')
+        return public(value)
+
     @api.put("/sessions/{sid}/card", dependencies=[Depends(serialize_mutation)])
     async def save(sid: UUID, body: SaveCard):
         value = load(sid)
@@ -669,6 +796,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         if value["revision"] != body.revision:
             raise HTTPException(409, "Карточка изменена в другом окне. Откройте её заново.")
         previous = value["card"]
+        if student_view(value)['card_locked']:
+            raise HTTPException(409, 'Работы завершены; карточка доступна только для просмотра')
         card = body.card.model_dump()
         if card["classifier_id"]:
             try:
@@ -685,10 +814,17 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             value.pop("classification", None)
         else:
             value.pop("classification", None)
-        value["routing"] = preview(card)
-        # Source ARM memo p14: append notified services, never remove them.
-        card['services'] = list(dict.fromkeys([*previous.get('services', []), *card['services'],
-                                             *(s['service'] for s in value['routing']['suggestions'])]))
+        if value.get('exercise_mode') == 'actions':
+            # A DDS receives a registered card. Only the originating 112/VIS side
+            # controls its recipients and their contact directory.
+            if (card['services'] != previous['services'] or card['service_phones'] != previous.get('service_phones', {})
+                    or card['recipient_affiliations'] != previous.get('recipient_affiliations', {})):
+                raise HTTPException(403, 'Список получателей и их телефоны в ДДС доступны только для просмотра')
+            value['routing'] = preview(previous)
+        else:
+            value["routing"] = preview(card)
+            card['services'] = list(dict.fromkeys([*previous.get('services', []), *card['services'],
+                                                 *(s['service'] for s in value['routing']['suggestions'])]))
         if len(card['services']) > 100:
             raise HTTPException(422, 'В карточке допускается не более 100 служб')
         for service_name in card['services']:
@@ -720,21 +856,29 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
 
     @api.post("/sessions/{sid}/services", dependencies=[Depends(serialize_mutation)])
     async def service(sid: UUID, body: ServiceAction):
+        """Update own DDS; the first accepted/refused decision closes the 30-second receipt clock."""
         value = load(sid)
         editable(value)
         if body.service not in value["card"]["services"]:
             raise HTTPException(422, "Служба отсутствует в сохранённой карточке")
+        body = body.model_copy(update={'status': STATUS_ALIASES.get(body.status, body.status)})
         # Диспетчер ведёт статусы только своей ДДС. Остальные назначенные службы
         # он видит, но их состояние приходит от них самих — так в реальном АРМ.
         owner = value.get('owner_service')
         if owner and body.service != owner:
             raise HTTPException(403, f'Вы ведёте только свою службу: {owner}. '
                                      'Состояние остальных служб приходит от них.')
+        without_brigade = (not value.get('assigned_crew') and no_brigade_completion(
+            body.service, value['service_states'].get(body.service, {}).get('status'),
+            body.status, body.comment))
+        if (not without_brigade and value.get('exercise_mode') == 'actions' and body.status in PROGRESS_STATUSES
+                and value.get('crew_options') and not value.get('assigned_crew')):
+            raise HTTPException(409, 'Сначала выберите реагирующую бригаду')
         # Статусы хода работ отражают доклад с места, а не желание обучающегося
         # прокликать цепочку. Каждый такой статус открывает соответствующая
         # оперативная вводная.
         gated = unlocked_statuses(value)
-        if gated is not None and body.status in PROGRESS_STATUSES and body.status not in gated:
+        if not without_brigade and gated is not None and body.status in PROGRESS_STATUSES and body.status not in gated:
             raise HTTPException(409, f'Статус «{body.status}» ещё не подтверждён с места. '
                                      'Дождитесь сообщения от службы.')
         # Перед закрытием работ в карточку вносится результат: после этого
@@ -755,12 +899,18 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
         order_number = body.order_number.strip()
+        action_at = now()
+        if (value.get('exercise_mode') == 'actions' and body.service == owner
+                and (status in ('Принята', 'Не принята') or without_brigade) and not value.get('receipt_decided_at')):
+            value['receipt_decided_at'] = action_at
+            if status == 'Принята':
+                value['accepted_at'] = action_at
         value['service_states'][body.service] = {
             **old,
             'status': status,
             'order_number': order_number,
             'comment': body.comment.strip(),
-            'at': now(),
+            'at': action_at,
         }
         persist(value, "service.updated", {
             **payload,
@@ -770,12 +920,42 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         })
         return public(value)
 
+    @api.post('/sessions/{sid}/crew', dependencies=[Depends(serialize_mutation)])
+    async def assign_crew(sid: UUID, body: AssignCrew):
+        value = load(sid)
+        editable(value)
+        if value.get('exercise_mode') != 'actions' or not value.get('owner_service'):
+            raise HTTPException(409, 'Назначение бригады доступно в режиме ДДС')
+        for event in value['events']:
+            if event['type'] == 'crew.assigned' and event['detail'].get('message_id') == str(body.message_id):
+                if event['detail'].get('request') != body.model_dump(mode='json'):
+                    raise HTTPException(409, 'Идентификатор назначения уже использован')
+                return public(value)
+        if value.get('assigned_crew'):
+            raise HTTPException(409, 'Бригада уже назначена для этой карточки')
+        if value['service_states'].get(value['owner_service'], {}).get('status') != 'Принята':
+            raise HTTPException(409, 'Сначала примите карточку своей ДДС')
+        selected = next((option for option in value.get('crew_options', [])
+                         if option['id'] == body.crew_id), None)
+        if not selected:
+            raise HTTPException(422, 'Выберите бригаду из списка занятия')
+        if body.decision_by == 'leadership' and not body.decision_note:
+            raise HTTPException(422, 'Укажите, кто из руководства принял решение')
+        value['assigned_crew'] = {**selected, 'decision_by': body.decision_by,
+                                  'decision_note': body.decision_note, 'at': now()}
+        persist(value, 'crew.assigned', {**value['assigned_crew'],
+                                         'message_id': str(body.message_id),
+                                         'request': body.model_dump(mode='json')})
+        return public(value)
+
     @api.post('/sessions/{sid}/notifications', dependencies=[Depends(serialize_mutation)])
     async def notification(sid: UUID, body: NotificationAction):
         value = load(sid)
         editable(value)
         if body.service not in value['card']['services']:
             raise HTTPException(422, 'Сначала сохраните службу в карточке')
+        if value.get('exercise_mode') == 'actions' and not value['card'].get('service_phones', {}).get(body.service):
+            raise HTTPException(409, 'У службы нет номера телефона для связи')
         payload = body.model_dump(mode='json')
         for item in value.setdefault('notifications', []):
             if item['message_id'] == str(body.message_id):
@@ -799,6 +979,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         """
         value = load(sid)
         editable(value)
+        if value.get('exercise_mode') == 'actions':
+            raise HTTPException(403, 'Диспетчер ДДС не изменяет список получателей карточки')
         if not value.get('saved_at'):
             raise HTTPException(409, 'Сначала сохраните карточку')
         payload = body.model_dump(mode='json')
@@ -875,16 +1057,164 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             return public(value)
         delivered = {event['detail'].get('id') for event in value['events']
                      if event['type'] == 'situation.update'}
-        elapsed = (datetime.now(timezone.utc)
-                   - datetime.fromisoformat(value['created_at'])).total_seconds()
         fresh = [item for item in planned
-                 if item['id'] not in delivered and elapsed >= item['after_seconds']]
+                 if item['id'] not in delivered and update_elapsed(value, item) >= item['after_seconds']]
+        if value.get('exercise_mode') == 'actions' and value.get('sip_extension'):
+            # The progress fact remains locked until the student hears and
+            # acknowledges the separate SIP report from the response team.
+            return public(value)
         if not fresh:
             return public(value)
         for item in fresh:
             value.setdefault('situation_updates', []).append({**item, 'at': now()})
             persist(value, 'situation.update', item)
         return public(load(sid))
+
+    @api.post('/inbox/poll')
+    async def poll_inbox():
+        user = actor.get()
+        if not user:
+            raise HTTPException(403, 'Требуется обучающийся')
+        rows = store.db.execute("SELECT body FROM workspace WHERE json_text(body,'student_id')=? "
+                                "ORDER BY json_text(body,'created_at') DESC LIMIT 100", (user['id'],)).fetchall()
+        result = []
+        phone_started = False
+        for (encoded,) in rows:
+            value = json.loads(encoded)
+            if value['status'] == 'Завершена':
+                continue
+            if value.get('lesson_id') and lesson_load(value['lesson_id'])['state'] != 'running':
+                continue
+            async with coordinated('workspace-session', value['id']):
+                refreshed = await situation_updates(UUID(value['id']))
+                pending = refreshed.get('pending_phone_reports') or []
+                ready = not value.get('crew_options') or bool(value.get('assigned_crew'))
+                if pending and ready and not phone_started and not pending[0].get('call_id'):
+                    try:
+                        refreshed = await call_field_report(UUID(value['id']), pending[0]['id'])
+                        phone_started = True
+                    except HTTPException as error:
+                        if error.status_code not in (409, 503):
+                            raise
+                        refreshed['phone_error'] = error.detail
+                result.append(refreshed)
+        return result
+
+    @api.post('/sessions/{sid}/progress', dependencies=[Depends(serialize_mutation)])
+    async def request_progress(sid: UUID):
+        value = load(sid)
+        editable(value)
+        if value.get('exercise_mode') != 'actions' or not value.get('owner_service'):
+            raise HTTPException(409, 'Запрос обстановки доступен в карточке ДДС')
+        crew = value.get('assigned_crew')
+        if not crew:
+            raise HTTPException(409, 'Сначала назначьте реагирующую бригаду')
+        planned = (store.load(str(sid)).get('scenario') or {}).get('updates') or []
+        delivered = {event['detail'].get('id') for event in value['events'] if event['type'] == 'situation.update'}
+        # Only crew progress, never applicant messages or future facts.
+        due = sorted((item for item in planned if item.get('unlocks_status')
+                      and item['after_seconds'] <= update_elapsed(value, item)), key=lambda item: item['after_seconds'])
+        pending = next((item for item in due if item['id'] not in delivered), None)
+        if pending and value.get('sip_extension'):
+            result = await call_field_report(sid, pending['id'])
+            value = load(sid)
+            persist(value, 'progress.requested', {'update_id': pending['id'], 'transport': 'sip'})
+            return {**result, 'progress_message': 'Примите соединение на IP-телефоне и подтвердите прослушанный доклад.'}
+        message = (pending or (due[-1] if due else {})).get('text', 'Бригада назначена. Новых сведений о ходе работ пока нет.')
+        if not value.get('sip_extension'):
+            if pending:
+                value.setdefault('situation_updates', []).append({**pending, 'at': now(), 'transport': 'text'})
+                persist(value, 'situation.update', {**pending, 'transport': 'text', 'direction': 'outgoing'})
+            persist(value, 'progress.requested', {'transport': 'text', 'message': message})
+            return {**public(value), 'progress_message': message}
+        previous = value.get('progress_call')
+        if previous:
+            try:
+                snapshot = await voice('calls/' + previous['call_id'])
+                if snapshot.get('status') not in ('ended', 'failed'):
+                    return {**public(value), 'progress_message': 'Разговор о ходе работ уже открыт на IP-телефоне.'}
+            except HTTPException as error:
+                if error.status_code != 404:
+                    raise
+        report_sid = str(uuid4())
+        store.save(report_sid, {'step': 0, 'seq': 0, 'messages': [], 'replies': {}, 'ended': False,
+                               'field_report': report_context(value, crew['leader'], message)})
+        result = await voice('calls', 'POST', {'session_id': report_sid,
+                                              'extension': value['sip_extension'], 'mode': 'auto'})
+        value['progress_call'] = {'session_id': report_sid, 'call_id': result['call_id']}
+        persist(value, 'progress.requested', {'transport': 'sip', 'call_id': result['call_id']})
+        return {**public(value), 'progress_message': 'Примите соединение на IP-телефоне. Новых вводных этот ответ не открывает.'}
+
+    @api.post('/sessions/{sid}/updates/{update_id}/call', dependencies=[Depends(serialize_mutation)])
+    async def call_field_report(sid: UUID, update_id: str):
+        value = load(sid)
+        editable(value)
+        if value.get('exercise_mode') != 'actions' or not value.get('sip_extension'):
+            raise HTTPException(409, 'Телефонный доклад доступен только в SIP-занятии ДДС')
+        if value.get('crew_options') and not value.get('assigned_crew'):
+            raise HTTPException(409, 'Сначала назначьте бригаду')
+        planned = (store.load(str(sid)).get('scenario') or {}).get('updates') or []
+        item = next((entry for entry in planned if entry['id'] == update_id), None)
+        if not item:
+            raise HTTPException(404, 'Доклад не найден')
+        if any(event['type'] == 'situation.update' and event['detail'].get('id') == update_id
+               for event in value['events']):
+            return public(value)
+        if update_elapsed(value, item) < item['after_seconds']:
+            raise HTTPException(409, 'Доклад ещё не поступил')
+        calls = value.setdefault('field_report_calls', {})
+        if update_id in calls:
+            previous = calls[update_id]
+            report_state = store.load(previous['session_id'])
+            opening = next((reply for reply in report_state.get('replies', {}).values()
+                            if reply and reply.get('type') == 'caller.reply'), None)
+            if opening and report_state.get('playback', {}).get(opening['payload']['reply_id']) == 'played':
+                return public(value)
+            try:
+                snapshot = await voice('calls/' + previous['call_id'])
+            except HTTPException as error:
+                if error.status_code != 404:
+                    raise
+                snapshot = {'status': 'failed'}  # Voice restarted; the call no longer exists.
+            if snapshot.get('status') not in ('ended', 'failed'):
+                return public(value)
+            calls.pop(update_id)
+        report_sid = str(uuid4())
+        crew = value.get('assigned_crew') or {}
+        source = f"{crew['leader']}, {crew['id']}" if crew else item['source']
+        store.save(report_sid, {'step': 0, 'seq': 0, 'messages': [], 'replies': {}, 'ended': False,
+                                'field_report': report_context(value, source, item['text'])})
+        result = await voice('calls', 'POST', {'session_id': report_sid,
+                                              'extension': value['sip_extension'], 'mode': 'auto'})
+        calls[update_id] = {'session_id': report_sid, 'call_id': result['call_id'], 'started_at': now()}
+        persist(value, 'field_report.call_started', {'id': update_id, 'call_id': result['call_id']})
+        return public(value)
+
+    @api.post('/sessions/{sid}/updates/{update_id}/confirm', dependencies=[Depends(serialize_mutation)])
+    async def confirm_field_report(sid: UUID, update_id: str):
+        value = load(sid)
+        editable(value)
+        if any(event['type'] == 'situation.update' and event['detail'].get('id') == update_id
+               for event in value['events']):
+            return public(value)
+        item = next((entry for entry in (store.load(str(sid)).get('scenario') or {}).get('updates', [])
+                     if entry['id'] == update_id), None)
+        call = (value.get('field_report_calls') or {}).get(update_id)
+        if not item or not call:
+            raise HTTPException(409, 'Сначала примите телефонный доклад')
+        report_state = store.load(call['session_id'])
+        opening = next((reply for reply in report_state.get('replies', {}).values()
+                        if reply and reply.get('type') == 'caller.reply'), None)
+        if not opening or report_state.get('playback', {}).get(opening['payload']['reply_id']) != 'played':
+            raise HTTPException(409, 'Дождитесь окончания телефонного доклада')
+        try:
+            await voice('calls/' + call['call_id'] + '/hangup', 'POST', {})
+        except HTTPException as error:
+            if error.status_code != 404:
+                raise
+        value.setdefault('situation_updates', []).append({**item, 'at': now(), 'transport': 'sip'})
+        persist(value, 'situation.update', {**item, 'transport': 'sip', 'call_id': call['call_id']})
+        return public(value)
 
     @api.post('/sessions/{sid}/reminders', dependencies=[Depends(serialize_mutation)])
     async def reminder(sid: UUID, body: Reminder):
@@ -918,7 +1248,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         return public(value)
 
     # Клиент голосового модуля общий с докладом дежурному: см. voice_client.py.
-    voice = voice_request
+    async def voice(path, method='GET', body=None):
+        return await voice_request(path, method, body)
 
     @api.post("/sessions/{sid}/call", dependencies=[Depends(serialize_mutation)])
     async def call(sid: UUID):
@@ -946,7 +1277,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         result=await voice("calls/" + value["call_id"])
         ended=store.load(str(sid)).get('last_call_end',{})
         if ended.get('call_id')==value['call_id']:result.setdefault('reason',ended.get('reason'))
-        result['recovery_allowed']=result.get('status') in ('ended','failed') and result.get('reason') in ('ari_disconnected','media_disconnected','asterisk_media_ended','backend_unavailable')
+        result['recovery_allowed']=value['status'] != 'Завершена' and result.get('status') in ('ended','failed') and result.get('reason') in ('ari_disconnected','media_disconnected','asterisk_media_ended','backend_unavailable','service_restart')
         result['recovery']=value.get('call_recovery')
         return result
 
@@ -994,8 +1325,27 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         value = load(sid)
         if value["status"] == "Завершена":
             return public(value)
+        if completed_by['role'] == 'student' and value.get('exercise_mode') == 'actions':
+            missing = unfinished_dds(value, value.get('dds_expectation'))
+            if missing:
+                raise HTTPException(409, 'Завершите работу по карточке: ' + ', '.join(missing))
         if value["call_id"]:
             await voice("calls/" + value["call_id"] + "/hangup", "POST", {})
+        extra_calls = {item['call_id'] for item in value.get('field_report_calls', {}).values()
+                       if item.get('call_id')}
+        if getattr(store, 'briefings_available', False):
+            for (encoded,) in store.db.execute('SELECT body FROM briefings WHERE session_id=?', (str(sid),)).fetchall():
+                briefing = json.loads(encoded)
+                if briefing.get('state') == 'open' and briefing.get('call_id'):
+                    extra_calls.add(briefing['call_id'])
+        if value.get('progress_call'):
+            extra_calls.add(value['progress_call']['call_id'])
+        for call_id in extra_calls:
+            try:
+                await voice('calls/' + call_id + '/hangup', 'POST', {})
+            except HTTPException as error:
+                if error.status_code != 404:
+                    raise
         await engine.handle(str(sid), event(sid, "call.ended"))
         value = load(sid)
         value["status"] = "Завершена"
@@ -1003,9 +1353,14 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         value["finished_at"] = now()
         value["elapsed_seconds"] = round((datetime.now(timezone.utc) - datetime.fromisoformat(value["created_at"])).total_seconds())
         value["checks"] = [{"field": key, "passed": bool(value["card"][key])} for key in ("caller_name", "street", "house", "description", "incident_type", "services")]
-        if value.get('first_action_at'):
+        reaction_at = (value.get('receipt_decided_at') if value.get('exercise_mode') == 'actions'
+                       and value.get('owner_service') else value.get('first_action_at'))
+        if value.get('exercise_mode') == 'actions' and value.get('opened_at'):
+            value['opening_seconds'] = max(0, round((datetime.fromisoformat(value['opened_at'])
+                - datetime.fromisoformat(value['created_at'])).total_seconds()))
+        if reaction_at:
             value['response_seconds'] = max(0, round(
-                (datetime.fromisoformat(value['first_action_at'])
+                (datetime.fromisoformat(reaction_at)
                  - datetime.fromisoformat(value['created_at'])).total_seconds()))
         assessment = store.load(str(sid)).get("evaluation_rubric", {"revision": 0, "rubric": None})
         value["evaluation"] = evaluate(assessment["rubric"], value["card"], value["elapsed_seconds"],
@@ -1016,7 +1371,10 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         await semantic_review(value["evaluation"])
         # Ошибки ручного ввода считаются отдельным числом: преподаватель просил
         # видеть их количество в отчёте, а опечатки в адресе — критическими.
-        value['grammar'] = grammar_report(value['card'], assessment['rubric'])
+        comments = [event['detail'].get('comment', '') for event in value['events']
+                    if event['type'] == 'service.updated'
+                    and (not value.get('owner_service') or event['detail'].get('service') == value['owner_service'])]
+        value['grammar'] = grammar_report(value['card'], assessment['rubric'], comments)
         # Разбор решений диспетчера: отдельно от эталона по полям, потому что в
         # основном режиме поля приходят заполненными и ничего не измеряют.
         decisions = dds_decision_review(value, value.get('dds_expectation'))
@@ -1024,7 +1382,10 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             value['dds_review'] = decisions
         value["evaluation"]["rubric_revision"] = assessment["revision"]
         finish_event = {'seq': len(value['events']) + 1, 'type': 'session.finished', 'at': value['finished_at'], 'detail': completed_by}
-        value['policy_result'] = evaluate_policy(store.load(str(sid)).get('assessment_policy'), value['evaluation'], [*value['events'], finish_event])
+        policy_evaluation = dict(value['evaluation'])
+        if value.get('exercise_mode') == 'actions' and decisions:
+            policy_evaluation['score_percent'] = decisions['score_percent']
+        value['policy_result'] = evaluate_policy(store.load(str(sid)).get('assessment_policy'), policy_evaluation, [*value['events'], finish_event])
         if value.get('exercise_mode') == 'actions':
             value['action_report'] = {'changed_fields': [key for key in value['card'] if value['card'][key] != value['initial_card'].get(key)],
                                       'service_actions': sum(e['type'] == 'service.updated' for e in value['events']),
@@ -1116,7 +1477,10 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                 raise HTTPException(422, 'Сценарий готовой карточки недоступен в выбранных категориях')
             if not matches(scenario, selection):
                 raise HTTPException(422, 'Готовая карточка не соответствует сложности или профилю ДДС')
-            card = Card(caller_name=scenario['victim_name'], address_note=scenario['location'], description=scenario['incident']).model_dump()
+            try:
+                card = prefilled_from_scenario(scenario)
+            except ValueError as exc:
+                raise HTTPException(422, f'Проверьте готовую карточку сценария: {exc}') from None
             templates.append({'card': card, 'scenario': scenario, 'source_kind': 'scenario', 'assessment_policy': policy_for(store, scenario_id, user['id'])})
         for source_id in dict.fromkeys(body.source_session_ids):
             source = load(source_id)
@@ -1266,6 +1630,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                     advice = {**advice, 'changed': False,
                               'reason': 'В занятии нет сценариев рекомендованного уровня'}
             scenario_id, template, frozen = random.choice(pool)
+            # Готовая карточка приходит данными, а SIP используется для
+            # отдельного исходящего доклада. Не звоним от имени заявителя.
             created = await create_card(CreateSession(scenario_id=scenario_id,
                                                   transport='text' if template else value.get('transport', 'text'),
                                                   workstation=(body.workstation if body else '')), value, template,
@@ -1332,7 +1698,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                            'workstation': (c.get('registration') or {}).get('workstation'),
                            'timing': (c.get('evaluation') or {}).get('timing'),
                            'grammar': c.get('grammar'),
-                           'score_percent': (c.get('evaluation') or {}).get('score_percent'),
+                           'score_percent': (c.get('dds_review') or c.get('evaluation') or {}).get('score_percent'),
+                           'dds_review': c.get('dds_review'),
                            'action_report': c.get('action_report'), 'completed_by': c.get('completed_by')} for c in own]})
         return {'id': value['id'], 'title': value['title'], 'state': value['state'],
                 'started_at': value.get('started_at'), 'finished_at': value.get('finished_at'), 'reason': value.get('reason'),
@@ -1361,7 +1728,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             latest = completed[-1] if completed else None
             participants.append({'student_id': uid, 'display_name': (accounts.get_user(uid) or {}).get('display_name', 'Пользователь'),
                 'completed': len(completed), 'active_card': current,
-                'latest_result': {'score_percent': (latest.get('evaluation') or {}).get('score_percent'),
+                'latest_result': {'score_percent': (latest.get('dds_review') or latest.get('evaluation') or {}).get('score_percent'),
+                                  'dds_review': latest.get('dds_review'),
                                   'policy_result': latest.get('policy_result')} if latest else None})
         return {'id': value['id'], 'title': value['title'], 'state': value['state'],
                 'observed_at': observed.isoformat(), 'participants': participants}
@@ -1383,7 +1751,10 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             config = configuration()
             try:
                 result = await asyncio.wait_for(review_card(value["card"], state.get("scenario", {}),
-                    state.get("evaluation_rubric", {}).get("rubric")), timeout=45)
+                    state.get("evaluation_rubric", {}).get("rubric"),
+                    guidance_examples(store, value.get('teacher_id'), value.get('dds_profile', 'general')),
+                    material_context(store, value.get('teacher_id'), value.get('dds_profile', 'general'),
+                                     value.get('group_id'), query=value['card'].get('description', '') + ' ' + value['card'].get('incident_type', ''))), timeout=45)
             except (httpx.HTTPError, ValueError, KeyError, TypeError, asyncio.TimeoutError):
                 result = {"status": "failed", "provider": config["provider"], "model": config["model"],
                           "error": "Не удалось получить проверяемый ИИ-разбор. Можно повторить запрос. Балл и карточка сохранены."}

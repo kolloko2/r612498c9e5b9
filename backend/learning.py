@@ -258,7 +258,7 @@ class Learning:
                 if not self.owns_session(user, value):
                     continue
                 scenario = self.store.scenario(value.get("scenario_id"))
-                evaluation = value.get("evaluation") or {}
+                evaluation = value.get("dds_review") or value.get("evaluation") or {}
                 result.append({
                     "id": value.get("id"), "number": value.get("number"),
                     "student_id": value.get("student_id"), "assignment_id": value.get("assignment_id"),

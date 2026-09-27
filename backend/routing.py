@@ -6,6 +6,7 @@ import copy
 from typing import Any, Callable
 
 from classifier import resolve
+from territories import recipients as territorial_recipients, rules as territorial_rules
 
 
 RULES_VERSION = "full-v2"
@@ -175,7 +176,9 @@ TERRITORIAL_WARNING = (
 
 def service_catalog() -> dict[str, Any]:
     """Return UI metadata without exposing mutable module-level structures."""
-    return {"services": [service for service, _ in SERVICE_COLUMNS], "flags": copy.deepcopy(list(FLAGS))}
+    services = [service for service, _ in SERVICE_COLUMNS]
+    services.extend(s for rule in territorial_rules() for s in rule['services'])
+    return {"services": list(dict.fromkeys(services)), "flags": copy.deepcopy(list(FLAGS))}
 
 
 def _flags(card: dict[str, Any]) -> dict[str, bool]:
@@ -218,13 +221,13 @@ def preview(card: dict[str, Any]) -> dict[str, Any]:
         "source_row": None,
         "flags": flags,
         "primary_services": [],
-        "suggestions": [],
+        "suggestions": territorial_recipients(card),
         "excluded": [],
         "unresolved": [],
         "warnings": [TERRITORIAL_WARNING],
     }
     if classifier_id == "":
-        result["warnings"].insert(0, "Классификация не выбрана; рекомендации не сформированы.")
+        result["warnings"].insert(0, "Классификация не выбрана; сформированы только совпавшие территориальные правила.")
         return result
     if not isinstance(classifier_id, str) or not isinstance(classifier_version, str):
         raise ValueError("classifier id and version must be strings")

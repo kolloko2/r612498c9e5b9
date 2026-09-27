@@ -2,7 +2,7 @@ asyncapi: 2.6.0
 info:
   title: 112 AI Trainer Control Events
   version: 0.2.0
-  description: Backend emits backend.ack after durable handling, with payload.event_id referencing the original Voice event UUID. Caller reply precedes its ACK. Replays use the same event UUID and cached reply_id.
+  description: Backend emits backend.ack after durable handling, with payload.event_id referencing the original Voice event UUID. Caller reply precedes its ACK. Replays use the same event UUID and cached reply_id. Voice emits caller.playback with payload.reply_id and payload.status (played, interrupted, error); Backend persists known reply receipts before ACK. DDS report confirmation requires played for the opening report. Live telephone model inference waits up to 15 seconds per turn including 112 role repair before a deterministic fallback response; STT, synthesis and playback are outside this budget. Local phone inference uses a separate CPU-only model and a bounded context.
 channels:
   /ws/v1/voice/sessions/{session_id}:
     publish:

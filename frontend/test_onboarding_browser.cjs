@@ -15,6 +15,7 @@ async function serve(page){
    else if(p==='/api/v1/health')data={status:'ok',provider:'mock'};
    else if(p==='/api/v1/student/classifier')data={version:'v1',groups:[],records:[]};
    else if(p==='/api/v1/student/routing/catalog')data={rules_version:'v1',services:[],flags:[]};
+   else if(p==='/api/v1/student/inbox/poll')data=[];
    else if(p.endsWith('/sessions'))data=[];
    else if(p.endsWith('/assignments')||p.endsWith('/lessons'))data=[];
    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
@@ -37,16 +38,16 @@ async function serve(page){
   // Первый вход: тур запускается сам.
   const box=page.locator('.onboarding-box');
   await expect(box).toBeVisible({timeout:5000});
-  await expect(box.locator('.onboarding-step')).toHaveText('Шаг 1 из 11');
+  await expect(box.locator('.onboarding-step')).toHaveText('Шаг 1 из 13');
   await expect(box.locator('h3')).toHaveText('Список происшествий');
   await expect(box.locator('[data-onboarding="back"]')).toBeDisabled();
   await page.screenshot({path:path.join(shots,'onboarding.png')});
 
   await box.locator('[data-onboarding="next"]').click();
-  await expect(box.locator('.onboarding-step')).toHaveText('Шаг 2 из 11');
+  await expect(box.locator('.onboarding-step')).toHaveText('Шаг 2 из 13');
   await expect(box.locator('[data-onboarding="back"]')).toBeEnabled();
   // Шаг про адрес обязан предупреждать об ошибке в названии улицы.
-  for(let i=2;i<4;i++)await box.locator('[data-onboarding="next"]').click();
+  for(let i=2;i<5;i++)await box.locator('[data-onboarding="next"]').click();
   await expect(box.locator('h3')).toContainText('Адрес');
   await expect(box.locator('p')).toContainText('Дубнинская');
 
@@ -61,7 +62,7 @@ async function serve(page){
   await expect(page.locator('.onboarding-box')).toBeVisible();
 
   // Последний шаг закрывает тур.
-  for(let i=0;i<11;i++)await page.locator('[data-onboarding="next"]').click();
+  for(let i=0;i<13;i++)await page.locator('[data-onboarding="next"]').click();
   await expect(page.locator('.onboarding-box')).toHaveCount(0);
 
   if(errors.length)throw Error(errors.join('\n'));

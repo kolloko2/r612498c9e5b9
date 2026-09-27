@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Настройка эталонов · Тренажёр 112</title><link rel="stylesheet" href="/assets/instructor.css"><script src="/assets/instructor.js" defer></script></head>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Настройка эталонов · Тренажёр 112</title><link rel="stylesheet" href="/assets/instructor.css"><script src="/assets/instructor.js" defer></script><link rel="stylesheet" href="/assets/cabinet.css"></head>
 <body><header><strong>СИСТЕМА-112 · Учебные эталоны</strong><span><a href="/assessment">Оценка и статистика</a> · <a href="/portal">Кабинет преподавателя</a></span></header>
 <main><h1>Настройка оценки задания</h1><p class="notice">Эталоны применяются к вашим назначениям и не видны другим преподавателям.</p>
 <label>Сценарий<select id="scenario"></select></label><p id="scenarioContext"></p>
 <p id="status" role="status"></p>
-<form id="rubricForm"><fieldset id="editor"><div class="settings"><label>Название эталона<input id="title" required minlength="3" maxlength="120"></label><label>Лимит занятия, секунд<input id="limit" type="number" min="1" max="86400" value="30" required></label></div>
-<p>Эталон применяется только к новым занятиям. Время считается от создания карточки до завершения занятия и показывается отдельно от балла за поля.</p>
+<form id="rubricForm"><fieldset id="editor"><div class="settings"><label>Название эталона<input id="title" required minlength="3" maxlength="120"></label><label>Лимит занятия, секунд<input id="limit" type="number" min="1" max="86400" value="180" required></label><label>Поступление → принятие / отказ, секунд<input id="responseLimit" type="number" min="1" max="86400" value="30" required></label></div>
+<p>Эталон применяется только к новым занятиям. Время обработки считается от поступления карточки до завершения занятия. В режиме ДДС отдельный норматив приёма считается от поступления до статуса «Принята» или «Не принята»; открытие карточки этот таймер не останавливает.</p>
 <h2>Критерии</h2><div id="criteria"></div><button type="button" id="add">Добавить критерий</button>
 <p class="hint">«Совпадение»: достаточно одного допустимого ответа. «Все фрагменты»: текст должен содержать каждый фрагмент. «Точный набор»: список служб должен совпасть без учёта порядка. Регистр, ё/е и лишние пробелы не влияют на сравнение.</p>
 <footer><button type="submit" id="save">Сохранить эталон</button><button type="button" id="reload">Перечитать сохранённый</button><span id="revision"></span></footer></fieldset></form>

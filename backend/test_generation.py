@@ -6,6 +6,7 @@ import pytest
 
 from accounts import Accounts
 from generation import router
+from teacher_guidance import router as guidance_router, examples as guidance_examples
 from server import Scenario
 from test_rbac_integration import classroom
 
@@ -33,7 +34,72 @@ def drafts(classroom, monkeypatch):
     monkeypatch.setenv('LLM_PROVIDER', 'mock')
     c = classroom
     c['client'].app.include_router(router(c['store'], Accounts(c['store']), lambda: None, Scenario))
+    c['client'].app.include_router(guidance_router(c['store'], Accounts(c['store']), lambda: None))
     return c
+
+
+def test_dds_generation_has_ready_card_and_action_expectation(drafts):
+    c = drafts; h = c['headers']['teacher1']
+    response = c['client'].post(BASE, headers=h, json={
+        'request_id': str(uuid4()), 'brief': 'Учебное задымление в помещении',
+        'mode': 'dds', 'owner_service': 'Служба 101', 'dds_profile': 'fire'})
+    assert response.status_code == 201, response.text
+    draft = response.json()
+    assert draft['scenario']['owner_service'] == 'Служба 101'
+    assert draft['scenario']['prefilled_card']['house'] == '10'
+    assert draft['scenario']['dds_expectation']['brief_keywords']
+    assert draft['scenario']['updates'][-1]['unlocks_status'] == 'Работы завершены'
+    assert c['client'].post(BASE+'/'+draft['id']+'/approve', headers=h,
+                            json={'revision': 1}).status_code == 200
+
+
+def test_teacher_corrections_are_private_and_available_as_context(drafts):
+    c = drafts; client = c['client']; h = c['headers']
+    payload = {'request_id': str(uuid4()), 'profile': 'fire',
+               'situation': 'Доклад о задымлении', 'incorrect': 'Адрес не назван',
+               'correct': 'Назвать улицу и дом'}
+    saved = client.post('/api/v1/instructor/corrections', headers=h['teacher1'],
+                        json=payload)
+    assert saved.status_code == 201, saved.text
+    assert client.get('/api/v1/instructor/corrections', headers=h['teacher2']).json() == []
+    assert guidance_examples(c['store'], c['users']['teacher1']['id'], 'fire')[0]['correct'] == payload['correct']
+    assert guidance_examples(c['store'], c['users']['teacher1']['id'], 'medical') == []
+    assert client.post('/api/v1/instructor/corrections/'+payload['request_id']+'/disable',
+                       headers=h['teacher2']).status_code == 404
+    assert client.post('/api/v1/instructor/corrections/'+payload['request_id']+'/disable',
+                       headers=h['teacher1']).status_code == 200
+    assert guidance_examples(c['store'], c['users']['teacher1']['id'], 'fire') == []
+
+
+def test_dds_model_receives_teacher_correction_and_rejects_missing_reports(drafts, monkeypatch):
+    c = drafts; client = c['client']; h = c['headers']['teacher1']
+    correction = {'request_id': str(uuid4()), 'profile': 'fire',
+                  'situation': 'Доклад о задымлении', 'incorrect': 'Не назван адрес',
+                  'correct': 'Назвать улицу и номер дома'}
+    assert client.post('/api/v1/instructor/corrections', headers=h,
+                       json=correction).status_code == 201
+    monkeypatch.setenv('LLM_PROVIDER', 'openrouter')
+    seen = []
+    source = {'title': 'Задымление в доме', 'description': 'Отработать приём карточки',
+              'incident': 'Задымление в помещении', 'location': 'Учебная улица, дом 10',
+              'known_facts': ['Задымление в помещении'],
+              'prefilled_card': {'city': 'Учебный город', 'street': 'Учебная улица',
+                                 'house': '10', 'incident_type': 'Задымление',
+                                 'description': 'Задымление в помещении'},
+              'updates': [], 'dds_expectation': {'should_accept': True, 'refusal_kind': '',
+                  'refusal_keywords': [], 'brief_keywords': ['Задымление'],
+                  'result_keywords': ['устранено']}}
+
+    async def model(messages, **kwargs):
+        seen.append(json.loads(messages[1]['content']))
+        return json.dumps({'scenario': source}, ensure_ascii=False)
+
+    monkeypatch.setattr('generation.llm.complete', model)
+    response = client.post(BASE, headers=h, json={'request_id': str(uuid4()),
+        'brief': 'Учебное задымление в доме', 'mode': 'dds',
+        'owner_service': 'Служба 101', 'dds_profile': 'fire'})
+    assert response.status_code == 502
+    assert seen[0]['teacher_corrections'][0]['correct'] == correction['correct']
 
 
 def create(c):

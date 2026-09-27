@@ -6,7 +6,7 @@
   <title>Кабинет · Тренажёр 112</title>
   <link rel="stylesheet" href="/assets/portal.css">
   <script src="/assets/portal.js" defer></script>
-</head>
+<link rel="stylesheet" href="/assets/cabinet.css"></head>
 <body>
   <header>
     <div><strong>СИСТЕМА-112</strong><span>Личный кабинет</span></div>
@@ -45,7 +45,7 @@
           <div id="assignments" class="cards compact"></div>
         </section>
       </div>
-<section class="panel"><h2>Общее занятие · серия карточек</h2><form id="lessonForm" class="stack"><label>Название<input id="lessonTitle" required maxlength="160"></label><label>Группа<select id="lessonGroup" required></select></label><label>Категории событий (не выбрано — все)<select id="lessonCategories" multiple size="4"></select></label><label>Режим<select id="lessonMode"><option value="actions">Работа диспетчера ДДС · готовые карточки</option><option value="fill">Полный цикл 112 · приём вызова и заполнение</option><option value="mixed">Смешанное занятие</option></select></label><label class="check"><input type="checkbox" id="lessonModeSwitch"> Разрешить обучающемуся переключать режим (нужно смешанное занятие)</label><label>Готовые карточки, сформированные из сценариев<select id="lessonGenerated" multiple size="4" disabled></select></label><label>Карточки из завершённых работ<select id="lessonSources" multiple size="5" disabled></select></label><label>Сценарии (можно несколько)<select id="lessonScenarios" multiple required size="5"></select></label><label>Карточек каждому студенту<input id="lessonCount" type="number" min="1" max="200" value="3" required></label><label>Одновременно открытых карточек<input id="lessonParallel" type="number" min="1" max="10" value="1" required></label><label class="check"><input type="checkbox" id="lessonAdaptive"> Подбирать сложность по результатам обучающегося</label><div id="lessonPlaces" class="stack"></div><label><span><input id="lessonUnlimited" type="checkbox"> Выдавать карточки до остановки преподавателем</span></label><p>Готовые карточки копируются без оценок, переписки и данных автора; звонок для них не запускается. Выбор случайный, возможны повторения. После создания нажмите «Начать».</p><button>Подготовить занятие</button></form><div id="lessons" class="cards"></div></section>
+<section class="panel"><h2>Общее занятие · серия карточек</h2><form id="lessonForm" class="stack"><label>Название<input id="lessonTitle" required maxlength="160"></label><label>Группа<select id="lessonGroup" required></select></label><label>Категории событий (не выбрано — все)<select id="lessonCategories" multiple size="4"></select></label><label>Режим<select id="lessonMode"><option value="actions">Работа диспетчера ДДС · готовые карточки</option><option value="fill">Полный цикл 112 · приём вызова и заполнение</option><option value="mixed">Смешанное занятие</option></select></label><label class="check"><input type="checkbox" id="lessonModeSwitch"> Разрешить обучающемуся переключать режим (нужно смешанное занятие)</label><label>Готовые карточки, сформированные из сценариев<select id="lessonGenerated" multiple size="4" disabled></select></label><label>Карточки из завершённых работ<select id="lessonSources" multiple size="5" disabled></select></label><label>Сценарии (можно несколько)<select id="lessonScenarios" multiple required size="5"></select></label><label>Карточек каждому студенту<input id="lessonCount" type="number" min="1" max="200" value="3" required></label><label>Одновременно открытых карточек<input id="lessonParallel" type="number" min="1" max="10" value="1" required></label><label class="check"><input type="checkbox" id="lessonAdaptive"> Подбирать сложность по результатам обучающегося</label><div id="lessonPlaces" class="stack"></div><label><span><input id="lessonUnlimited" type="checkbox"> Выдавать карточки до остановки преподавателем</span></label><p>Готовая карточка поступает данными. При назначенном SIP-номере диспетчер может отдельно позвонить дежурному службы. Выбор карточек случайный, возможны повторения. После подготовки нажмите «Начать».</p><button>Подготовить занятие</button></form><div id="lessons" class="cards"></div></section>
       <section class="panel sessions"><h2>Занятия</h2><button id="refreshSessions" type="button">Обновить</button><div id="sessions" class="cards compact"></div></section>
       <dialog id="sessionDialog"><div class="dialog-head"><h2>Занятие</h2><button id="closeSession" type="button" aria-label="Закрыть">×</button></div><div id="sessionDetail"></div></dialog>
     </section>
@@ -59,5 +59,5 @@
     </section>
   </main>
   <dialog id="lessonReportDialog"><div class="dialog-head"><h2>Отчёт занятия группы</h2><button id="closeLessonReport" type="button">Закрыть</button></div><div id="lessonReportContent"></div><button id="exportLessonReport" type="button">Скачать JSON</button></dialog>
-</body>
+<script src="/assets/xml-exchange.js" defer></script></body>
 </html>

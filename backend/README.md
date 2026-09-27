@@ -1,5 +1,69 @@
 # Backend
 
+Целевой минимальный контур использует только CPU. `LLM_PROFILE=standard`
+выбирает локальную `qwen3:8b` Q4_K_M для авторинга; телефон использует отдельную
+`PHONE_LLM_MODEL` с контекстом 4096. На весь модельный ход даётся до 15 секунд,
+затем возвращается ответ по подтверждённым фактам. CPU-замеры и границы этого
+лимита описаны в `docs/LOCAL_MODEL.md`. Наличие GPU не учитывается в приёмке;
+полная вместимость 20 одновременных гибридных разговоров ещё не доказана.
+
+`field_dialogue.py` handles crew follow-up questions for incoming reports and
+outgoing progress calls. Context freezes the initial address, current report and
+previously delivered operational reports, excluding future updates and rubrics.
+The fifteen-second LLM budget applies; mock/timeout answers remain grounded.
+No endpoint or database schema changes. Tests: `test_field_dialogue.py`.
+
+Phone turns now have a fifteen-second model wait budget independent of long
+scenario generation. DDS falls back to deterministic missing-fact clarification;
+112 requests repetition on timeout. Ticket publication accepts `new_revision`
+to create a fresh catalog copy while preserving teacher edits and issued attempts.
+
+CPU phone tuning: `PHONE_LLM_MODEL` (default `qwen3:4b-instruct-2507-q4_K_M`), `PHONE_LLM_THREADS`
+(default6), at most120 generated tokens. `num_gpu=0` is sent for every local
+inference; warmup uses the actual Ollama host and matching phone options.
+All system messages survive role repair. A 112 retry shares the original deadline.
+Synthetic comparison: `python tools/benchmark_phone_cpu.py --models qwen3:4b-instruct-2507-q4_K_M
+--threads 6 --runtime --output artifacts/cpu-phone/result.json` from the project root.
+
+26 September: `recipient_affiliations` on prepared cards supplies explicit area,
+district and departmental recipients with routing provenance. Grammar v3 adds
+local syntax suggestions without automatic penalties. Owned open SIP briefings
+support bounded recovery; see API_CONTRACT and DEADLINE_HARDENING_2026-09-26.
+
+Customer audit fixes: `material_text.py` extracts full bounded documents, local OCR
+and task-relevant passages; install updated requirements and local Tesseract rus/eng.
+Materials allow25 MiB PDF/TXT/DOCX/XLSX and expose extraction status. `text_facts.py`
+adds local Russian word forms/polarity; DDS rubrics support required report fields,
+weights and student-visible correction evidence. See `docs/CUSTOMER_FIXES_2026-09-23.md`.
+
+`territories.py` resolves only approved exact-match local recipient rules from ENV
+`TERRITORIAL_ROUTES_FILE`. New DDS cards freeze those recipients with classifier
+routing. `POST student/grammar/preview` and its instructor counterpart check drafts
+without persistence or exposing rubric answers. Completed grammar reports include
+own-service comments. See `docs/TERRITORIES_XML_GRAMMAR.md`.
+
+Direct initial 103 completion with the explicit no-brigade comment counts as the
+receipt decision. It bypasses brigade/report prerequisites, not the teacher's
+expected brigade/result checks. Future report checks are not applied to that
+terminal path. Historical completed assessments are unchanged.
+
+Все 96 билетов содержат готовые карточки, бригаду, четыре оперативных доклада и
+эталоны действий; `tools/ticket_exercises.py` задаёт авторскую учебную постановку.
+Каталог обновляется командой `python tools/import_tickets.py` из корня проекта,
+без записи в БД. Для выдачи нужна публикация преподавателем в `/tickets`.
+Все 96 карточек имеют запись классификатора из `tools/ticket_annotations.py`
+и известные структурированные адресные поля. Десять прежних адресных уточнений
+сохранены в `tools/data/dds_prefilled_cards.json`. Старый инструмент синхронизации
+не заменяет публикацию обновлённого каталога. Для его ограниченного применения выполните
+`python sync_curated_cards.py` внутри контейнера для сухого прогона и
+`python sync_curated_cards.py --apply` для добавления карточек в ранее
+опубликованные неизменённые сценарии. Изменения преподавателя не затираются.
+Норматив 30 секунд для ДДС считается от выдачи до первого статуса «Принята»
+или «Не принята»; открытие строки фиксируется отдельно. Генератор поддерживает `mode=dds` с
+готовой карточкой, докладами с места и эталоном решений. Преподаватель может
+сохранять и отключать исправления для следующих вызовов ИИ через
+`/api/v1/instructor/corrections`; прежние оценки не меняются.
+
 The production image installs `websockets` explicitly: plain Uvicorn does not
 include a WebSocket protocol implementation, and without it Voice control upgrades
 are rejected as ordinary HTTP 404 requests.
@@ -55,8 +119,8 @@ in one PostgreSQL transaction, and verifies the total row count. Do not migrate 
 live SQLite database. Keep the original file and sidecars as a rollback backup until
 the PostgreSQL deployment has been verified.
 
-Group lessons accept text/SIP with per-student extension mappings; fill cards freeze
-their number, action cards stay text. Teacher `/lessons/{id}/live` exposes an
+Group lessons accept text/SIP with per-student extension mappings; both fill and
+DDS action cards freeze their workplace number. Teacher `/lessons/{id}/live` exposes an
 owner-scoped saved-activity snapshot without calling Voice or LLM. See the latest
 API_CONTRACT section. `test_lesson_voice.py` covers mapping validation, privacy,
 idempotent calls, next-card voice, mixed actions and stop/retry on Voice failure.
@@ -158,10 +222,13 @@ SIP hangup errors block completion; duplicate finish preserves the first report.
 
 Workspace also owns planned/running/stopping/finished group lessons. Lesson IDs link
 the separately graded cards. See API_CONTRACT for teacher start/stop and idempotent
-student next issuance. New lessons use text only. Existing assignments are unchanged.
+student next issuance. New lessons can use text or SIP with a provisioned
+extension per student. Existing assignments are unchanged.
 Action/mixed modes freeze completed teacher-owned card templates in the lesson.
 Copies exclude source feedback, transcript and evaluation. Action attempts disable
 dialogue and produce an action report without inheriting the original field score.
+When a DDS workplace has a SIP extension, timed field reports require a separate
+answered voice call and explicit acknowledgement before unlocking their status.
 
 Lessons support category selection, unlimited cards (null limit), deterministic
 scenario prefill and teacher-owned group reports. Fill snapshots freeze at start.
@@ -169,6 +236,11 @@ Next requests accept after_session_id for retry-safe automatic progression.
 Tests in test_lesson_lifecycle.py and test_rbac_integration.py cover the lifecycle,
 ownership, frozen pools, concurrent issuance and independent action copies.
 # Completion extensions
+
+DDS progress requests reuse field-report playback receipts. New prepared attempts
+anchor operational updates at crew assignment and freeze a reachable training time
+budget. Applicant messages retain receipt timing. Legacy attempts are unchanged.
+See `docs/API_CONTRACT.md` and `test_progress_requests.py`.
 
 Certificates, VIS/DDS, technical configuration preview and WS metadata audit are
 assembled in server.py. Optional Coordinator namespaces and the cluster-wide HTTP

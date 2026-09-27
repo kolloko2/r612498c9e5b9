@@ -1,5 +1,53 @@
 # Local web console
 
+27 September: DDS source-screen alignment refines the call row, incident actions,
+service tiles, per-service history and compact response strip without copying the
+browser chrome. Live ARM checks cover 1920×1080, 1280×720 and 760×900. The narrow
+journal toolbar has its own responsive layout. A card with an absent `card_locked`
+value no longer remains accidentally read-only. Teacher cabinet columns collapse
+before their forms overflow at 760 px; seven deployed pages were checked at
+1600, 1280 and 760 px. Exact visual parity still depends on the incident data
+and is not claimed for browser chrome or training-only controls.
+
+26 September: own-service pencil opens the compact reference status/order/comment
+strip; footer actions keep crew assignment, telephone briefing and other tools.
+Live card/history/status/tools checks passed at 1920x1080 and 1280x720; synthetic
+layout checks also cover 760px. See DEPLOYMENT_CHECK_2026-09-26 for visual limits.
+
+Customer fixes: material editor displays extraction completeness and preview,
+accepts25 MiB PDF/TXT/DOCX/XLSX. DDS editor exposes report fields, check weights,
+pass threshold and correction sources. The student sees those source statements;
+the receipt/handling indicator uses the server handling budget. See customer-fix docs.
+
+`xml-exchange.js` adds bounded XML form import/export for material text/metadata
+and group workstation labels. It never submits forms or imports permissions.
+The card response panel and scenario editor expose manual text checks. DDS layout
+keeps response tools reachable with the own-service pencil or footer action button;
+Escape closes those tools before closing the card. Live visual checks are recorded
+in DEPLOYMENT_CHECK_2026-09-26; exact whole-product pixel parity is not claimed.
+
+DDS-only layout overrides live in `assets/dds-layout.css`. Saved DDS cards place
+description below address; service history opens above the footer, and the own
+service pencil opens response tools. The 112 input form is not restyled by these
+selectors. Card/history/status/tools were checked in the deployed browser on 26 September.
+
+Cabinet pages load `assets/cabinet.css` last for a shared graphite visual system.
+Do not add it to student.html or dds.html: the source-matched ARM and service UI
+are deliberately excluded. Scenario structured inputs synchronize on input, not
+only blur. Generation approval uses the explicit review checkbox and publication
+button, without an additional native browser confirmation. Group stop uses an
+in-page reason form. Map requests have cancellation/timeouts and retain geometry
+on failure; all road labels render after geometry.
+
+На рабочем месте есть отдельная кнопка «Начать обучение интерфейсу»: она
+повторно запускает пошаговый тур после первого входа. В журнале ожидающая
+принятия карточка ДДС показывает оставшееся время до 30-секундного норматива;
+открытие строки не останавливает отсчёт: нужен статус приёма/отказа. В форме преподавателя SIP-номер для
+готовой карточки обозначает исходящий голосовой доклад дежурному службы.
+На странице ИИ-авторинга основной режим — готовая карточка ДДС; отдельно
+доступен полный цикл 112. Там же преподаватель сохраняет и отключает примеры
+исправленных ответов для последующих вызовов модели.
+
 The map now uses Backend regional viewport/search routes, supports dragging,
 arrow-key navigation and wheel zoom, and can search before coordinates have been
 saved. The former centre-only JSON and optional PNG tiles are no longer fetched.
@@ -9,7 +57,8 @@ Prepare/copy the full regional package as documented in `docs/MAPS.md`.
 only when configured; the admin portal explicitly links non-admin users. Statistics
 support safe CSV; operations support sanitized XML export (no import). Student
 sessionStorage drafts restore only on explicit choice and survive network recovery;
-SIP calls are not redialed automatically. See the security/deployment documentation.
+Confirmed interrupted SIP calls support bounded redial while the relevant workspace
+or briefing is open. Normal hangup never triggers redial. See the recovery documentation.
 
 `/operations` is the technical administrator panel, linked from the admin portal.
 It polls authenticated Backend snapshots; stale monitoring is not displayed as healthy.
@@ -25,15 +74,14 @@ tokens remain ENV-only server-side. See docs/DOCKER_DEPLOYMENT.md.
 ARM refinement: advanced search includes date/time, classification/feature/address,
 district/region/service/caller filters. Journal disclosure shows persisted detail
 without opening the card. Registration and ЧС no longer use invented operator
-numbers or the injured flag. Saved cards place the description on the right;
+numbers or the injured flag. Saved DDS cards place the description below the address on the left;
 desktop header/footer remain visible around scrollable content.
 
 `/map?sid=UUID` opens a read-only incident coordinate window through the existing
-owner-scoped API. Coordinates must first be saved on the card. Provide authorized
-offline Web-Mercator XYZ PNG tiles at `assets/map-tiles/{z}/{x}/{y}.png` (zoom2–19)
-for a geographic background, with the data provider's required license/attribution.
-No tile pack is included. Without it, the UI explicitly shows only a grid/marker,
-not a geographic map. It does not determine coordinates from an address or device.
+owner-scoped API. The map uses the installed regional offline package and supports
+address search before saving coordinates. Selection requires confirmation in the
+card. Copy `deploy/maps/regional.sqlite` for deployment; no external geocoder or
+browser location permission is required. See `docs/MAPS.md`.
 Checks: `node frontend/test_map_math.cjs`, `node frontend/test_map_browser.cjs`.
 
 The BFF keeps one pooled HTTP client per upstream service for its process lifetime.
@@ -77,7 +125,7 @@ Manual selections are preserved; saved routing grounds remain viewable.
 show criterion differences, weights and timing; JSON export includes the report.
 Check both assets: `node --check assets/student.js` and
 `node --check assets/instructor.js`.
-Completed reports have a separate on-demand AI review action, a cloud-data notice,
+Completed reports have a separate on-demand AI review action,
 pending/retry states and source-backed findings. The card and criterion grade are
 not rewritten by model results.
 
@@ -106,7 +154,7 @@ in JSON export, retained in user/session-scoped sessionStorage across reload in 
 tab. It is not part of the grade and is not uploaded to Backend.
 Teacher portal includes group series setup: title, group, multi-select scenarios,
 card count; prepare, start and finish all. Student's new-session dialog lists running
-series alongside standalone assignments. Series use text, selected by Backend.
+series alongside standalone assignments. Series support text or SIP with teacher-assigned extensions.
 Completed reports offer «Следующая карточка серии». Reload/new-session reopens the
 same active card. Teacher refresh updates issued/completed counts.
 Lesson setup offers fill/actions/mixed modes and a completed-card source selector.
@@ -145,6 +193,48 @@ settings, scrubbed logs and host-approved updates. `/map` uses the installed off
 OSM centre extract; selected coordinates require confirmation in the student window.
 
 Interface copy is intentionally concise: repeated synthetic-data and unofficial-status
-banners live in the project documentation instead of every screen. The UI still shows
-the active mock provider, external-provider data transfer, destructive confirmations,
-data-loss warnings, errors and operationally relevant limitations.
+banners live in the project documentation instead of every screen. The current local
+deployment has no blanket cloud-transfer notice; the UI still shows the actual model
+or mock status, destructive confirmations, data-loss warnings, errors and operationally
+relevant limitations.
+# UI fixes — 2026-09-23
+
+The service briefing dialog uses two shrinkable columns and full-width controls.
+Long transcript messages wrap while preserving line breaks; the dialog scrolls
+vertically without clipping the call button or shifting replies horizontally.
+
+DDS response tools include a current-progress request. Inbox updates refresh allowed
+statuses immediately without replacing the student's unsaved comment. The scoped
+DDS layout uses a compact address/map link and chronological incoming reports.
+Browser acceptance on the isolated mock store includes a full 12/12 exercise and
+offline address search; it is not a physical SIP/audio acceptance test.
+
+Scenario editing includes structured inputs for prepared DDS cards, operational reports, crews and decision expectations. Advanced JSON preserves additional classifier metadata. Assigned crews with a phone can be selected in the briefing contact list.
+
+The crew selector is not a nested form. Map opens in a same-origin dialog iframe, with explicit coordinate confirmation, loading/error/retry states. Only `/map` permits same-origin framing; other pages retain `frame-ancestors 'none'`. Inbox polling delivers updates across active cards without replacing unsaved edits.
+
+DDS response inputs explicitly use dark text on their white background. This fixes
+white-on-white comments and status selectors inherited from the dark response panel.
+Browser verification includes visible typing, saved actions and two completed cards.
+
+# 26 September DDS hardening
+
+DDS tiles display time and state together, with upper overflow rows and compact
+response controls. Scenario authoring exposes explicit recipient affiliations.
+While a SIP briefing dialog is open, polling requests bounded recovery after a
+confirmed transport failure, preserving the same briefing and transcript.
+Run `$env:ARM_DDS_PREVIEW='1'; node frontend/test_briefing_browser.cjs` in PowerShell
+for isolated DDS layout checks/screenshots at three viewport sizes.
+
+27 September DDS visual pass: the saved-card header uses the reference's narrow
+call control, three telephone cells and compact incident summary, with separate
+`просмотр` / `дополнение` actions. The 64 px service bar keeps overflow tiles above
+it; service history opens from its tile and the pencil opens a compact status row.
+The preview check now captures 1920×1080 and 1280×720, verifies that the upper tiles
+do not cover the card, and exercises both view modes. The general ARM browser check
+verifies the embedded map dialog.
+At 760 px, the open DDS card uses a compact journal toolbar without overlapping
+date, clock, navigation or new-card action; search remains available on the journal.
+The ARM realism and onboarding browser fixtures cover inbox polling and the current
+13-step tutorial. Card view/edit mode is always a boolean, including for cards whose
+lock flag is absent.

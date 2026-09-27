@@ -18,7 +18,7 @@ ALLOWED_TABLES = {
     "sessions", "scenarios", "scenario_owners", "workspace", "rubrics",
     "rubric_history", "lessons", "account_users", "account_sessions",
     "account_login_failures", "account_audit", "learning_groups",
-    "group_members", "assignments", "generation_drafts", "materials",
+    "group_members", "assignments", "generation_drafts", "teacher_corrections", "materials",
     "assessment_policies", "assessment_policy_history", "expert_reviews",
     "group_insights", "directory_links", "arm_vis_deliveries", "arm_vis_audit", "arm_recipient_settings",
 }

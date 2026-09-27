@@ -1,12 +1,13 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Карта происшествия · Тренажёр 112</title>
-<link rel="stylesheet" href="/assets/map.css"><script src="/assets/local-map.js" defer></script><script src="/assets/map.js" defer></script></head>
+<link rel="stylesheet" href="/assets/map.css"><script src="/assets/map-network.js" defer></script><script src="/assets/local-map.js" defer></script><script src="/assets/map.js" defer></script></head>
 <body><header><div><strong>СИСТЕМА-112</strong><span>Карта происшествия</span></div><button id="closeMap" type="button">Закрыть окно</button></header>
 <main><section class="details" aria-labelledby="mapTitle"><div><h1 id="mapTitle">Координаты карточки</h1><p id="status" role="status" aria-live="polite">Загрузка карточки…</p></div><dl><div><dt>Широта (WGS84)</dt><dd id="latitude">—</dd></div><div><dt>Долгота (WGS84)</dt><dd id="longitude">—</dd></div><div class="address"><dt>Адрес из карточки</dt><dd id="address">—</dd></div></dl></section>
 <section class="map-panel" aria-label="Локальная карта"><div class="map-toolbar"><div><strong>Локальная карта</strong><span id="zoomLabel">Масштаб —</span></div><div class="zoom-controls" aria-label="Масштаб карты"><button id="zoomOut" type="button" aria-label="Уменьшить масштаб">−</button><button id="zoomIn" type="button" aria-label="Увеличить масштаб">+</button></div></div>
  <div class="canvas-wrap"><canvas id="mapCanvas" width="960" height="560" tabindex="0" role="img" aria-label="Карта происшествия. Перемещение мышью или стрелками, масштаб колёсиком."></canvas><div id="emptyMap" class="empty-map" hidden></div></div>
  <p id="tileNotice" class="limits" hidden>Загрузка карты…</p>
+ <button id="retryMap" type="button" hidden>Повторить загрузку карты</button>
  <form id="geocodeForm"><label>Поиск по локальной адресной базе <input id="geocodeQuery" placeholder="Улица и номер дома" minlength="3" maxlength="160" required></label><button>Найти</button></form><div id="geocodeResults"></div>
  <p class="limits" id="mapCoverage">Загрузка локальной подложки…</p><p class="limits">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>, ODbL 1.0.</p></section>
 </main></body></html>

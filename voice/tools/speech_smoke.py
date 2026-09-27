@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from app.audio.formats import FRAME_BYTES, SAMPLE_RATE
 from app.audio.stt import VoskSTT
-from app.audio.tts import SileroTTS
+from app.audio.tts import SileroTTS, shutdown_tts
 from app.audio.providers import stop_process
 from app.domain.messages import VoiceStyle
 
@@ -27,8 +27,7 @@ async def main(args):
     finally:
         await stt.close()
         await tts.close()
-        await stop_process(SileroTTS._process)
-        SileroTTS._process = None
+        await shutdown_tts()
     if args.wav:
         args.wav.parent.mkdir(parents=True, exist_ok=True)
         with wave.open(str(args.wav), "wb") as output:

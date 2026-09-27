@@ -17,6 +17,50 @@ def test_spoken_reply_preserves_words_and_removes_markup():
 
 
 @pytest.mark.asyncio
+async def test_phone_turn_timeout_returns_saved_fallback():
+    async def timed_out(_messages):
+        raise TimeoutError('slow provider')
+    store = Store(':memory:'); engine = Engine(store, timed_out); sid = str(uuid4())
+    await engine.handle(sid, event(sid, 'call.connected'))
+    response = await engine.handle(sid, event(sid, 'operator.utterance', 'Проверка связи'))
+    assert 'Повторите' in response['payload']['text']
+    assert store.load(sid)['provider_error']
+
+
+@pytest.mark.asyncio
+async def test_phone_turn_uses_fifteen_second_model_budget(monkeypatch):
+    import asyncio
+    import llm
+
+    assert llm.VOICE_REPLY_TIMEOUT_SECONDS == 15.0
+    monkeypatch.setattr(llm, 'VOICE_REPLY_TIMEOUT_SECONDS', .01)
+
+    async def slow_model(_messages):
+        await asyncio.sleep(.1)
+        return 'Помогите мне.'
+
+    store = Store(':memory:'); engine = Engine(store, slow_model); sid = str(uuid4())
+    await engine.handle(sid, event(sid, 'call.connected'))
+    response = await engine.handle(sid, event(sid, 'operator.utterance', 'Проверка связи'))
+    assert 'Повторите' in response['payload']['text']
+    assert store.load(sid)['provider_error']
+
+
+@pytest.mark.asyncio
+async def test_duty_reply_bounds_slow_model(monkeypatch):
+    import asyncio
+    import llm
+    from briefing import duty_reply
+    async def slow(*args, **kwargs):
+        await asyncio.sleep(5)
+    monkeypatch.setattr(llm, 'configuration', lambda: {'provider':'ollama', 'configured':True})
+    monkeypatch.setattr(llm, 'reply', slow)
+    monkeypatch.setattr(llm, 'VOICE_REPLY_TIMEOUT_SECONDS', .01)
+    result = await asyncio.wait_for(duty_reply([], {}, 'Служба 101', []), .5)
+    assert result == 'Информация принята.'
+
+
+@pytest.mark.asyncio
 async def test_role_reversal_is_repaired_before_playback():
     answers = iter(['Помогу, если сможете выйти.', 'Мне плохо, помогите мне, пожалуйста.'])
     async def model(messages):
@@ -31,10 +75,70 @@ async def test_role_reversal_is_repaired_before_playback():
     assert all('Помогу' not in m['content'] for m in store.load(sid)['messages'])
 
 
+@pytest.mark.asyncio
+async def test_role_repair_uses_same_phone_model_budget(monkeypatch):
+    import asyncio
+    import llm
+
+    monkeypatch.setattr(llm, 'VOICE_REPLY_TIMEOUT_SECONDS', .01)
+    attempts = 0
+
+    async def model(_messages):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            return 'Помогу, если сможете выйти.'
+        await asyncio.sleep(.1)
+        return 'Мне плохо, помогите мне.'
+
+    store = Store(':memory:')
+    store.put_scenario(custom_scenario())
+    engine = Engine(store, model)
+    sid = str(uuid4())
+    await engine.handle(sid, event(sid, 'call.connected', scenario_id='medical_case'))
+    reply = await engine.handle(sid, event(sid, 'operator.utterance', 'Как я могу помочь?'))
+    assert attempts == 2
+    assert 'Повторите' in reply['payload']['text']
+    assert store.load(sid)['provider_error']
+
+
+@pytest.mark.asyncio
+async def test_role_repair_does_not_restart_whole_deadline(monkeypatch):
+    import asyncio
+    import llm
+    monkeypatch.setattr(llm, 'VOICE_REPLY_TIMEOUT_SECONDS', .2)
+    async def model(_messages):
+        await asyncio.sleep(.13)
+        return 'Помогу, если сможете выйти.'
+    store = Store(':memory:')
+    engine = Engine(store, model)
+    sid = str(uuid4())
+    await engine.handle(sid, event(sid, 'call.connected'))
+    start = asyncio.get_running_loop().time()
+    reply = await engine.handle(sid, event(sid, 'operator.utterance', 'Как я могу помочь?'))
+    assert asyncio.get_running_loop().time() - start < .25
+    assert 'Повторите' in reply['payload']['text']
+
+
 def event(sid, kind, text="", mode="auto", scenario_id=None):
     return {"session_id": sid, "event_id": str(uuid4()), "type": kind,
             "payload": {"text": text, "utterance_id": str(uuid4()), "mode": mode,
                         "scenario_id": scenario_id}}
+
+
+@pytest.mark.asyncio
+async def test_field_report_call_speaks_only_scenario_fact():
+    store = Store(':memory:')
+    sid = str(uuid4())
+    store.save(sid, {'step': 0, 'seq': 0, 'messages': [], 'replies': {}, 'ended': False,
+                     'field_report': {'source': 'Старший бригады',
+                                      'text': 'Бригада прибыла на адрес'}})
+    engine = Engine(store)
+    opening = await engine.handle(sid, event(sid, 'call.connected'))
+    assert opening['payload']['text'] == 'Старший бригады. Бригада прибыла на адрес'
+    reply = await engine.handle(sid, event(sid, 'operator.utterance', 'Принял доклад'))
+    assert 'Бригада прибыла на адрес' in reply['payload']['text']
+    assert [message['role'] for message in store.load(sid)['messages']] == ['assistant', 'user', 'assistant']
 
 
 @pytest.mark.asyncio
@@ -60,6 +164,19 @@ async def test_resume_preserves_transcript_and_ignores_superseded_end():
     await engine.handle(sid,event(sid,'call.ended'));assert store.load(sid)['ended']
 
 
+@pytest.mark.asyncio
+async def test_resume_replays_last_answer_without_resetting_dialogue():
+    store=Store(':memory:');engine=Engine(store);sid=str(uuid4())
+    await engine.handle(sid,event(sid,'call.connected'))
+    before=store.load(sid)['messages'][:]
+    resume=event(sid,'session.resume');resume['payload']['previous_call_id']=str(uuid4())
+    await engine.handle(sid,resume)
+    reply=await engine.handle(sid,event(sid,'call.connected'))
+    assert reply['payload']['text'] == 'Связь восстановлена. ' + before[-1]['content']
+    assert store.load(sid)['messages'][:len(before)] == before
+    assert await engine.handle(sid,event(sid,'call.connected')) is None
+
+
 def custom_scenario(scenario_id="medical_case", opening="Мне очень плохо."):
     return Scenario(id=scenario_id, title="Проблема со здоровьем", description="Проверка",
                     victim_name="Иван", incident="Сильная боль в груди", location="Учебная улица, дом 1",
@@ -72,7 +189,7 @@ async def test_selected_scenario_is_snapshotted_and_replayed(tmp_path):
     calls = []
 
     async def model(messages):
-        assert "пострадавшего" in messages[0]["content"]
+        assert "distressed caller" in messages[0]["content"]
         assert "Боль началась десять минут назад" in messages[0]["content"]
         calls.append(messages)
         return "Учебная улица, дом один."
@@ -176,3 +293,23 @@ def test_every_profile_is_described_for_the_administrator():
     for name, profile in llm.PROFILES.items():
         assert profile['title'] and profile['hint'], name
         assert profile['model'], name
+
+
+@pytest.mark.asyncio
+async def test_mock_spoken_reply_respects_json_schema(monkeypatch):
+    import llm
+    monkeypatch.setenv('LLM_PROFILE', 'mock')
+    assert await llm.reply([{'role': 'user', 'content': 'Здравствуйте'}])
+
+
+@pytest.mark.asyncio
+async def test_voice_playback_receipt_is_persisted_and_idempotent(tmp_path):
+    store = Store(str(tmp_path / 'playback.db'))
+    engine = Engine(store)
+    sid = str(uuid4())
+    reply = await engine.handle(sid, event(sid, 'call.connected'))
+    receipt = event(sid, 'caller.playback')
+    receipt['payload'] = {'reply_id': reply['payload']['reply_id'], 'status': 'played'}
+    assert await engine.handle(sid, receipt) is None
+    assert await engine.handle(sid, receipt) is None
+    assert store.load(sid)['playback'][reply['payload']['reply_id']] == 'played'

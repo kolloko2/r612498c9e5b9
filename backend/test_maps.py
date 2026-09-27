@@ -31,6 +31,8 @@ def test_regional_queries(package):
     assert maps.features(30,50,31,51,15)['features']==[]
     assert maps.search('Химки ул Лесная дом 7')['results'][0]['latitude']==55.89
     assert maps.search('" OR *')['results']==[]
+    assert maps.features(36,54,39,57,12)['features'][0]['name']=='Лесная'
+    assert maps.features(30,50,31,51,12)['features']==[]
 
 
 def test_bounds_and_missing_package(package, monkeypatch, tmp_path):
@@ -41,3 +43,12 @@ def test_bounds_and_missing_package(package, monkeypatch, tmp_path):
     with pytest.raises(HTTPException) as error:
         maps.manifest()
     assert error.value.status_code==503
+
+
+def test_house_number_is_not_a_prefix_or_street_number(package, tmp_path):
+    with sqlite3.connect(tmp_path/'regional.sqlite') as db:
+        db.execute("INSERT INTO addresses VALUES(2,'Химки, Лесная улица, 70',55.89,37.44)")
+        db.execute("INSERT INTO addresses VALUES(3,'Химки, 7-я Лесная улица, 15',55.89,37.44)")
+        db.execute("INSERT INTO address_search(address_search) VALUES('rebuild')")
+    found = maps.search('Химки Лесная 7')['results']
+    assert [item['label'] for item in found] == ['Химки, Лесная улица, 7']

@@ -32,6 +32,22 @@ def base(card):
     return '/api/v1/student/sessions/' + card['id'] + '/briefings'
 
 
+def test_assigned_crew_contact_is_validated(reporting):
+    c = reporting
+    card = saved_card(c)
+    card.update(exercise_mode='actions', owner_service='Служба 101', assigned_crew={
+        'id':'Бригада 17', 'leader':'Старший группы', 'phone':'70000000017'})
+    with c['store'].db:
+        c['store'].db.execute('UPDATE workspace SET body=? WHERE id=?', (json.dumps(card), card['id']))
+    request = {'message_id': str(uuid4()), 'service':'Служба 101', 'crew_id':'Бригада 17',
+               'phone':'70000000017', 'transport':'text'}
+    response = c['client'].post(base(card), headers=c['headers']['student1'], json=request)
+    assert response.status_code == 201, response.text
+    assert response.json()['crew_id'] == 'Бригада 17'
+    request.update(message_id=str(uuid4()), phone='wrong')
+    assert c['client'].post(base(card), headers=c['headers']['student1'], json=request).status_code == 422
+
+
 def test_report_completeness_is_checked_against_the_card():
     card = {'street': 'Лесная', 'house': '12', 'incident_type': 'Пожар в квартире'}
     assert check('', card)['complete'] is False

@@ -16,6 +16,7 @@ class ChatStore:
             chat = json.loads(body)
             if chat['status'] not in ('ended', 'failed'):
                 chat['status'] = 'failed'
+                chat['reason'] = 'service_restart'
                 for m in chat['messages']:
                     if m['status'] in ('queued', 'playing', 'recognizing'):
                         m['status'] = 'error'

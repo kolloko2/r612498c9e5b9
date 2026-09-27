@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from cluster import Coordinator, ClusterUnavailable, LockUnavailable
 
-EventType = Literal['card.saved', 'service.updated', 'notification.recorded', 'card.processed', 'card.linked', 'card.forwarded', 'call.requested', 'session.finished']
+EventType = Literal['card.saved', 'service.updated', 'notification.recorded', 'card.processed', 'card.linked', 'card.forwarded', 'call.requested', 'session.finished', 'crew.assigned', 'situation.update', 'field_report.call_started']
 
 
 class SequenceStep(BaseModel):
@@ -131,6 +131,17 @@ def expert_history(store, sid):
 def effective(value, expert):
     if expert:
         return {'score_percent': expert['score_percent'], 'passed': expert['passed'], 'source': 'expert'}
+    if value.get('exercise_mode') == 'actions' and value.get('dds_review'):
+        review = value['dds_review']
+        policy = value.get('policy_result')
+        passed = review.get('passed')
+        if policy is not None:
+            if policy.get('passed') is False:
+                passed = False
+            elif policy.get('passed') is None and passed is True:
+                passed = None
+        return {'score_percent': review.get('score_percent'), 'passed': passed,
+                'source': 'automatic'}
     return {'score_percent': (value.get('evaluation') or {}).get('score_percent'),
             'passed': (value.get('policy_result') or {}).get('passed'), 'source': 'automatic'}
 
@@ -180,7 +191,8 @@ def router(store, accounts, learning, authorize, coordinator=None):
         expert = expert_history(store, str(sid))
         return {'session_id': str(sid), 'title': value.get('title'),
                 'student_name': (accounts.get_user(value.get('student_id')) or {}).get('display_name', 'Студент'),
-                'automatic': value.get('evaluation'), 'policy_result': value.get('policy_result'),
+                'automatic': value.get('evaluation'), 'dds_review': value.get('dds_review'),
+                'policy_result': value.get('policy_result'),
                 'expert': expert, 'effective': effective(value, expert['current'])}
 
     @api.get('/api/v1/instructor/scenarios/{sid}/assessment-policy')
@@ -276,6 +288,11 @@ def router(store, accounts, learning, authorize, coordinator=None):
             cell['attempts'] += 1
             cell['count'] += not passed
         for v in completed:
+            for check in (v.get('dds_review') or {}).get('checks', []):
+                if check.get('passed') is not None:
+                    record('dds:'+v.get('teacher_id', '')+':'+v['scenario_id']+':'
+                           +(v.get('dds_review') or {}).get('version', 'v1')+':'+check['id'],
+                           check['label'], check['passed'], v['scenario_id'], v['title'])
             for c in (v.get('evaluation') or {}).get('criteria', []):
                 record('field:'+v.get('teacher_id', '')+':'+v['scenario_id']+':'+str(v['evaluation'].get('rubric_revision', 0))+':'+c['id'],
                        c['label'], c['passed'], v['scenario_id'], v['title'])

@@ -1,5 +1,109 @@
 # API Contract
 
+Voice model inference is bounded to fifteen seconds per live turn, including
+112 role repair, separately from long authoring requests. DDS uses its deterministic
+clarification fallback; 112 returns a repetition request. No assessment fact is
+inferred from fallback text and transcript/ACK persistence is unchanged.
+This deadline excludes STT, synthesis and playback. Local phone inference uses
+`PHONE_LLM_MODEL`, CPU-only `num_gpu=0`, context4096 and at most120 output tokens.
+Authoring profiles remain separate. Startup preload uses the configured OLLAMA_URL.
+
+## Deadline hardening (2026-09-26)
+
+Territorial lookup also normalizes explicit district abbreviations/full names,
+city prefixes and common street-type abbreviations. It uses the 20 shipped rules
+unless TERRITORIAL_ROUTES_FILE overrides them; no fuzzy address matching occurs.
+
+Card adds `recipient_affiliations`: optional object with `area`, `district`,
+`department` keys and nonempty recipient names (160 characters maximum).
+These are explicit author-provided routing destinations, not geographic guesses.
+Area/district recipients require the matching address field. Routing merges them
+with approved directory rules and classifier recipients, preserving provenance.
+DDS students cannot change affiliations or recipients of an issued card.
+
+POST `/student/sessions/{sid}/briefings/{bid}/recover?expected_call_id=<UUID>`
+checks an owned, open SIP briefing and resumes only a confirmed transport failure
+or durable `service_restart`. A stale expected ID returns the current briefing;
+active calls are unchanged. At most three retries in 30 seconds; transcript and
+report remain in the same briefing. Normal hangup never triggers redial. Browser
+polling invokes this while the briefing dialog is open, not after browser closure.
+
+Voice GET `/calls/{call_id}` now reads durable terminal snapshots after restart;
+unknown IDs still return 404. Interrupted persisted calls have `service_restart`.
+The existing student call recovery also accepts this reason. Reconnection replays
+the last saved assistant answer; unreceived speech cannot be reconstructed.
+Grammar preview/report version `grammar-v3` adds advisory syntax hints without
+changing scores for ambiguous wording.
+
+## Customer audit fixes (2026-09-23)
+
+MaterialWrite/MaterialUpdate accept PDF/TXT/DOCX/XLSX up to25 MiB
+(base64 maxLength34952536); request limit36 MiB, per-teacher attachments500 MiB.
+Material responses add `extraction` with status `ready|partial|empty`, characters,
+passages, pages_or_images, warnings and preview (detail only). Internal passages
+are never returned. Saving extracts text/OCR locally; the BFF allows240 seconds.
+Old materials require resaving to index their attachments. Group/owner/publication
+permissions are unchanged. OCR absence/failure/limits are visible in warnings.
+
+DdsExpectation adds `brief_required_fields` (Card field names allowlisted in schema),
+`correction_evidence` (field -> student-visible source statement), `check_weights`
+(check id -> positive weight up to100), and `pass_percent` (default100).
+Enabled scenarios with expected corrections require source evidence containing
+each expected answer; invalid/missing evidence returns422. Student workspace adds
+`correction_evidence` as a list of statements, without exposing the private rubric.
+DDS checks use weights; critical failures still prevent passing. Default briefing
+facts include populated street/house/building/structure/apartment/incident/injured.
+
+Grammar preview/report adds advisory `suggestions` (dictionary/agreement); these
+do not add to automatic error counts. Close address spellings remain reference
+mismatches, not automatically corrected typos. Territorial default is the bounded
+Str1fe690 teaching example; ENV still overrides it. district=округ, area=район.
+
+## Outgoing progress request (2026-09-23)
+
+`POST /student/sessions/{sid}/progress` (student session authentication, owned
+editable DDS attempt, assigned crew, no request body) returns the public workspace
+plus `progress_message`. Text mode records the earliest due undelivered operational
+update once. SIP uses the existing field-report call and playback confirmation;
+starting a call never unlocks a status. A repeated query with no new facts returns
+the latest available report, or a no-news answer; SIP readback uses `progress_call`
+(`session_id`, `call_id`) and is ended with the lesson. Future reports and applicant
+messages are excluded. Not owned: 404; incompatible state: 409; unavailable Voice: 503.
+
+New prepared DDS attempts with crews freeze `updates_anchor=crew_assigned`:
+operational `unlocks_status` delays start at `assigned_crew.at`; applicant updates
+still start at receipt. Old issued attempts keep their original receipt anchor.
+`handling_limit_seconds` is frozen as max(180, last operational delay + response
+margin + 30). This is a training budget, not an official regulation. Receipt to
+acceptance remains an independent 30-second criterion.
+
+## Manual text checks and local territorial routing (2026-09-23)
+
+POST `/student/grammar/preview` and `/instructor/grammar/preview` use their existing
+role/service authentication. Body: `{card:Card,comment?:string<=1000,text?:string<=100000|null}`.
+Text, when supplied, is checked instead of the card description. Response is the
+grammar report; no hidden rubric, persistence, automatic correction or grading.
+Completed reports additionally check comments from the student's own service events.
+
+Routing preview includes approved exact-match local rules from ENV
+`TERRITORIAL_ROUTES_FILE`; mappings carry `cell:territory:<rule-id>` and source text.
+Their services also appear in the catalog and are frozen into newly created DDS
+cards. No directory means no invented territorial recipients. Existing issued
+cards are not silently rerouted. See `docs/TERRITORIES_XML_GRAMMAR.md`.
+
+Material/workstation XML is a client form import/export, not a new backend route.
+The existing JSON save routes retain RBAC, validation and explicit publication.
+
+### DDS 103 initial completion (2026-09-23)
+
+The existing service-status POST accepts initial 103 «Работы завершены» with
+«Завершение работ без бригады» and no assigned crew, as allowed by the source.
+This counts as receipt_decided_at and bypasses future crew/report prerequisites.
+The allowed_service_statuses projection exposes the same exception. Other services,
+later progress states and missing comments do not receive this bypass. Teacher
+expected crew/result checks remain effective; prior reports are not recomputed.
+No request or response fields were added.
+
 REST prefix: `/api/v1`; control WebSocket prefix: `/ws/v1`.
 
 ## Offline regional map
@@ -100,12 +204,14 @@ optional; absence is explicitly displayed and no streets are fabricated.
 This section supersedes historical text-only lesson descriptions below.
 CreateLesson adds `transport: text|sip` (default text), and `sip_extensions`:
 an object mapping group student IDs to distinct strings of 1–8 ASCII digits,
-maximum 100 entries. Non-members, duplicate numbers, text with mappings and
-actions-only with SIP return422. At start, every active member needs a mapping
+maximum 100 entries. Non-members and duplicate numbers return422. Text lessons
+may carry numbers for outgoing DDS briefings; actions-only with SIP is allowed.
+At start, every active member of a SIP lesson needs a mapping
 (otherwise409). Numbers must already be provisioned in Asterisk and Voice's ENV
 allowlist; this API does not configure telephony. Older lessons remain text.
 Student lesson summaries expose transport and only their own `sip_extension`.
-Fill cards freeze their student's number; mixed action cards always remain text.
+Fill cards freeze their student's number; mixed action cards receive incoming data
+as text but retain the assigned number for an outgoing DDS briefing.
 The browser starts a call on opening a new active SIP lesson card; creation errors
 offer manual retry, not automatic repeated calls. `/sessions/{sid}/call` reuses a
 saved call ID and audits sanitized connection failures as `call.failed`.
@@ -342,6 +448,9 @@ teacher session. Drafts are private to their author; foreign ID = 404, wrong rol
 - `POST /generations`: `{request_id: UUID, brief: string (3–3000), category_id}`;
   201 full draft. Category defaults to other. A successful request ID is reusable
   with identical input (no additional model call); different input = 409.
+  `mode=dds` additionally requires `owner_service` and produces a ready incoming
+  DDS card, operational updates and a decision expectation. `mode=caller` keeps
+  the previous 112 flow and remains the API default; the browser defaults to DDS.
 - `GET /generations/{id}`: full persisted draft and revision history.
 - `POST /generations/{id}/revise`: `{revision: integer >=1, comment: string
   (3–2000, nonblank)}`. Returns an updated preview, not a published scenario.
@@ -349,7 +458,7 @@ teacher session. Drafts are private to their author; foreign ID = 404, wrong rol
   teacher-owned enabled scenario plus its rubric revision 1 atomically. Returns
   approved draft; a repeated approval of the same revision is idempotent.
 
-Full draft: id, brief, category_id, status (draft/approved), revision, scenario,
+Full draft: id, brief, category_id, mode, owner_service, status (draft/approved), revision, scenario,
 rubric, provider, model, updated_at, history. History entries contain revision,
 comment, at, scenario and rubric. Approval adds approved_scenario_id, approved_at,
 approved_by. The scenario inside the draft remains the original disabled preview;
@@ -360,8 +469,9 @@ timeouts, malformed JSON or invalid references = sanitized 502; prior draft rema
 unchanged. Failed initial requests can be retried with the same request ID.
 
 Generation uses the existing ENV-selected mock/OpenRouter/Ollama provider with a
-2000-token budget and 45-second operation deadline. Only the brief, category,
-previous preview and correction comment are sent, never student sessions. OpenRouter
+2000-token caller or 2500-token DDS budget and 45-second operation deadline. Only the brief, category,
+previous preview, correction comment and up to four teacher-approved correction examples
+are sent, never student sessions. OpenRouter
 sends these synthetic materials outside the machine. Mock returns a marked fixture
 and records comments without interpreting them. Generated criteria currently cover
 literal text fields caller_name/address_note/description/street/house/city/apartment;
@@ -630,6 +740,10 @@ draft into the teacher's own scenario catalog with a fresh id, records ownership
 and writes rubric revision 1. It is idempotent per teacher and draft: a repeat
 returns the existing `scenario_id` with `created: false` and never overwrites
 teacher edits. Unknown drafts return 404; repeated ids inside one request 422.
+Optional `new_revision: true` publishes a new scenario/rubric when the current
+publication differs from the catalog, updating the ticket link but preserving
+the old scenario, teacher edits and issued attempts. An identical current copy
+is returned unchanged. Defaults to false for backward compatibility.
 
 # Тепловая карта ошибок и выгрузка XLSX (2026-09-15)
 
@@ -726,3 +840,89 @@ per participant and `response_seconds`, `timing`, `grammar`, `workstation` per c
 
 `GET /api/v1/instructor/routing/catalog` отдаёт преподавателю тот же список
 служб, что и `/student/routing/catalog` — он нужен для выбора службы ВИС.
+
+## Цикл готовой карточки ДДС (2026-09-18)
+
+`Scenario.prefilled_card` — необязательный объект с полями `Card`: раздельный
+адрес (`street`, `house`, `building`, `apartment` и другие), `incident_type`,
+`services`, `service_phones` (словарь служба → учебный телефон) и прочие факты. Он накладывается на безопасные исходные сведения
+сценария при создании шаблона; `owner_service` добавляется к службам. Ошибка
+схемы карточки даёт 422 при подготовке занятия. Редактор сохраняет имеющиеся
+`updates` и `dds_expectation` при правке сценария.
+
+Готовая карточка поступает данными (`transport: text`), а закреплённый за
+обучающимся `sip_extension` остаётся доступным для отдельного исходящего
+`POST /api/v1/student/sessions/{sid}/briefings` с `transport: sip`. Входящий
+звонок заявителя для такой карточки не создаётся.
+
+`POST /api/v1/student/sessions/{sid}/open` идемпотентно фиксирует `opened_at`
+и событие `card.opened` при открытии входящей строки. Первый статус «Принята» или «Не принята» собственной ДДС фиксирует
+`receipt_decided_at`; для «Принята» также фиксируется `accepted_at`. Для
+готовой карточки с `owner_service` поле `response_seconds` и норматив 30 секунд
+считаются от `created_at` до `receipt_decided_at`, как указано в памятке ДДС (стр. 5, 21).
+`opening_seconds` отдельно измеряет открытие карточки. Обработка — 3 минуты. Политика оценки
+использует балл `dds_review` для действий ДДС. Отчёт занятия, статистика и
+подбор сложности также используют его, а не балл по уже заполненным полям.
+
+В режиме ДДС `PUT /card` отвергает изменение `services` и `service_phones` (403),
+`POST /forward` также возвращает 403. Информационный список поступает с готовой
+карточкой. `POST /briefings` и `POST /notifications` в этом режиме доступны
+только для получателя с номером из `service_phones`; для телефонного доклада
+переданный номер должен совпадать с ним. Остальные службы доступны для просмотра.
+Преподаватель может задать независимые верные сведения в
+`DdsExpectation.expected_corrections`, чтобы оценивать обнаружение ошибки во
+входящей карточке. Полнота телефонного доклада проверяется по снимку
+`initial_card`, а не по последующим правкам обучающегося.
+
+`Scenario.crew_options` задаёт список учебных бригад с `id`, `leader` и `phone`.
+После статуса «Принята» диспетчер выбирает одну через
+`POST /api/v1/student/sessions/{sid}/crew` с `{message_id, crew_id,
+decision_by: "dispatcher"|"leadership", decision_note}`. Повтор того же
+`message_id` идемпотентен. Если у сценария есть бригады, статусы хода работ
+нельзя выставить до выбора. Эталон может указать `expected_crew_id` и
+`leadership_decision_required` для проверки решения.
+
+`POST /api/v1/student/sessions/{sid}/finish` возвращает 409 для принятой
+карточки, пока не зафиксированы итоговый статус собственной ДДС, отметка
+обработки и все запланированные оперативные вводные. Преподаватель вправе
+остановить карточку досрочно; отсутствующие действия останутся ошибками в
+`dds_review`. Для обоснованного отказа достаточно статуса «Не принята».
+
+`DdsExpectation.brief_keywords` и `result_keywords` задают буквальные факты
+для принятого доклада дежурному и итогового комментария. При проверке адреса
+используются границы слов: дом 10 не совпадает с домом 100. Докладом считается
+только телефонограмма из завершённого исходящего доклада, не ручная запись.
+
+`GET /api/v1/instructor/corrections` возвращает до 100 исправлений своего
+преподавателя. `POST` принимает `{request_id:UUID, profile, situation, incorrect,
+correct}`; повтор с тем же телом идемпотентен, конфликт — 409.
+`POST /{id}/disable` отключает пример для будущих вызовов модели, сохраняя
+запись. До четырёх последних активных примеров своего преподавателя и профиля
+передаются в генерацию, текстовый/голосовой доклад и ИИ-разбор карточки.
+Оценки и сохранённые ответы задним числом не меняются.
+Опубликованные материалы преподавателя того же профиля также могут передаваться
+модели как максимум три ограниченных текстовых фрагмента с названием и ревизией.
+Для доклада и разбора действующего занятия выбор дополнительно ограничен группой.
+Распознавание текста изображений внутри PDF не выполняется.
+
+Для готовой карточки ДДС с назначенным `sip_extension` оперативные вводные
+не выдаются текстом по `POST /sessions/{sid}/updates`. В ответе находятся
+`pending_phone_reports` (доступные по времени, но ещё не заслушанные вводные).
+`POST /sessions/{sid}/updates/{update_id}/call` инициирует отдельный SIP-вызов
+на учебный номер рабочего места, сохраняет `call_id` и идемпотентно возвращает
+карточку. `POST /sessions/{sid}/updates/{update_id}/confirm` принимает доклад
+только после фактического соединения (реплика старшего записана в состоянии
+голосовой сессии), добавляет `situation.update` с `transport: sip` и открывает
+соответствующий статус. Повторное подтверждение не дублирует вводную.
+Без SIP-номера действует прежняя текстовая доставка.
+# Исправления рабочего места — 23.09.2026
+
+- Список `GET /instructor/sessions` использует `dds_review.score_percent` для готовых карточек с оценкой действий; для остальных сохраняется балл `evaluation`. Схема ответа не изменена.
+
+- Создание телефонного доклада принимает необязательный `crew_id`. Он должен совпадать с назначенной бригадой своей ДДС; номер телефона проверяется по бригаде, а не по списку служб.
+
+- `POST /api/v1/student/inbox/poll`: обновляет все активные карточки текущего студента, не только открытую; исключает остановленные занятия. За запрос инициирует не более одного ожидающего SIP-доклада. Ошибка Voice возвращается как `phone_error` карточки.
+- Студенческие ответы списка и карточки не содержат `dds_expectation` и `planned_unlocks`. Доступны `dds_assessment_enabled` и `card_locked`; терминальный статус своей ДДС блокирует `PUT .../card` с 409 ещё до завершения занятия.
+- Синонимы статусов нормализуются до проверки оперативных вводных и обязательного результата работ.
+- Подтверждение телефонного доклада требует `caller.playback` со статусом `played` для его начальной реплики; наличие текста ответа само по себе недостаточно. После подтверждения линия освобождается. Остановка занятия завершает также отдельные звонки доклада и оперативных вводных.
+- В правилах последовательности доступны `crew.assigned`, `situation.update`, `field_report.call_started`.

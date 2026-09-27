@@ -38,6 +38,7 @@ def load_catalog(path: Path = CATALOG) -> dict:
 class PublishRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     draft_ids: list[str] = Field(min_length=1, max_length=MAX_PUBLISH)
+    new_revision: bool = False
 
 
 def timestamp() -> str:
@@ -116,12 +117,19 @@ def router(store, accounts, authorize, Scenario, catalog=None):
         created: list[dict] = []
         with store.db:
             for key in body.draft_ids:
-                if key in existing:
+                item = drafts[key]
+                same = False
+                if key in existing and body.new_revision:
+                    previous = store.scenario(existing[key])
+                    expected = Scenario.model_validate({**item['scenario'], 'id': existing[key], 'enabled': True}).model_dump()
+                    rubric_row = store.db.execute('SELECT body FROM rubrics WHERE scenario_id=?',
+                        (f"{user['id']}:{existing[key]}",)).fetchone()
+                    same = previous == expected and bool(rubric_row) and json.loads(rubric_row[0]) == Rubric.model_validate(item['rubric']).model_dump()
+                if key in existing and (not body.new_revision or same):
                     # Повторная публикация не создаёт второй сценарий и не
                     # затирает правки преподавателя в уже опубликованном.
                     created.append({"draft_id": key, "scenario_id": existing[key], "created": False})
                     continue
-                item = drafts[key]
                 scenario_id = f"{key}-{uuid4().hex[:8]}"
                 scenario = Scenario.model_validate({**item["scenario"], "id": scenario_id,
                                                     "enabled": True}).model_dump()
@@ -135,7 +143,7 @@ def router(store, accounts, authorize, Scenario, catalog=None):
                 store.db.execute("INSERT INTO rubrics VALUES (?,?,?)", (rubric_key, 1, encoded))
                 store.db.execute("INSERT INTO rubric_history VALUES (?,?,?,?)",
                                  (rubric_key, 1, now, encoded))
-                store.db.execute("INSERT INTO ticket_publications VALUES (?,?,?,?)",
+                store.db.execute("INSERT INTO ticket_publications VALUES (?,?,?,?) ON CONFLICT (draft_id, teacher_id) DO UPDATE SET scenario_id=excluded.scenario_id, published_at=excluded.published_at",
                                  (key, user["id"], scenario_id, now))
                 created.append({"draft_id": key, "scenario_id": scenario_id, "created": True})
         return {"published": created}

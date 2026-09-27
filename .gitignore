@@ -36,3 +36,5 @@ deploy/tls/ca/
 deploy/tls/certs/
 deploy/tls/manifest.json
 deploy/directory/private/
+# Local recordings, customer source documents and acceptance captures.
+/artifacts/

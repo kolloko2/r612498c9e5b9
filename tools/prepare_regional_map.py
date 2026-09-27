@@ -102,6 +102,7 @@ def build(inputs, output):
             print(f'Importing {region}', flush=True)
             Importer(region).apply_file(os.path.relpath(path), locations=True, idx='flex_mem')
         db.execute("INSERT INTO address_search(address_search) VALUES('rebuild')")
+        db.execute('CREATE INDEX IF NOT EXISTS features_zoom ON features(min_zoom)')
         extent = db.execute('SELECT min(south),min(west),max(north),max(east) FROM bounds').fetchone()
         meta = {'title': ' / '.join(REGIONS.get(r, r) for r, _ in inputs), 'bbox': list(extent),
                 'features': count, 'addresses': db.execute('SELECT count(*) FROM addresses').fetchone()[0],

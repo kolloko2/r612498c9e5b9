@@ -34,7 +34,12 @@ Lists omit attachment bytes and article bodies; opening detail fetches them.
 The UI searches titles/descriptions and filters by level/profile; it does not
 perform OCR or search inside PDF/DOCX attachments. Article bodies render as plain
 text. Downloads use an opaque binary Blob, not an embedded HTML/PDF executable view.
-No model reads uploaded material, and no document text becomes a system prompt.
+For this teacher's published materials, up to three recent profile-matching
+excerpts (1,500 characters each) are passed as labelled reference data to
+scenario generation, briefing dialogue and advisory review. During an active
+lesson the selection is additionally limited to its group. PDF text layers,
+DOCX paragraphs and UTF-8 TXT are supported; image-only PDFs need a text article
+because OCR is not performed. Document text never becomes a system prompt.
 Reference use is allowed during training; no exam-mode restriction is implemented.
 
 Only PDF, UTF-8 TXT and DOCX, 1 byte–5 MiB per attachment. The service checks names,

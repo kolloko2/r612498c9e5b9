@@ -33,7 +33,7 @@ function refreshLessonTransportControls(){
  const select=el('lessonTransport'),container=el('lessonExtensions');if(!select||!container)return;
  // Телефония нужна и в режиме ДДС: по ней идёт доклад дежурному службы.
  const mode=el('lessonMode').value;select.disabled=false;
- el('lessonTransportNote').textContent=mode==='mixed'?'SIP применяется только к карточкам заполнения; карточки действий остаются текстовыми. Номера должны быть уникальны и заранее добавлены в Voice ALLOWED_EXTENSIONS и Asterisk.':'Для SIP укажите внутренний номер каждого студента группы. Номера должны быть уникальны и заранее добавлены в Voice ALLOWED_EXTENSIONS и Asterisk.';
+ el('lessonTransportNote').textContent=mode==='actions'?'Готовая карточка поступает данными; назначенный SIP-номер нужен для исходящего доклада дежурному. Номера должны быть доступны в Voice и Asterisk.':mode==='mixed'?'SIP используется для вызова заявителя в режиме 112 и для исходящего доклада в режиме ДДС. Номера должны быть доступны в Voice и Asterisk.':'Укажите внутренний номер каждого студента группы. Номера должны быть доступны в Voice и Asterisk.';
  container.hidden=select.value!=='sip';container.replaceChildren();if(container.hidden)return;
  const group=currentLessonGroup(),saved=lessonExtensions.get(group?.id)||{};lessonExtensions.set(group?.id,saved);
  for(const member of group?.students||[]){const label=node('label');label.append(member.display_name||member.username||member.id);const input=document.createElement('input');input.inputMode='numeric';input.pattern='[0-9]{1,8}';input.maxLength=8;input.required=true;input.placeholder='Например, 201';input.value=saved[member.id]||'';input.dataset.studentId=member.id;input.setAttribute('aria-label',`SIP-номер: ${member.display_name||member.id}`);input.addEventListener('input',()=>{saved[member.id]=input.value;});label.append(input);container.append(label);}
@@ -113,7 +113,7 @@ async function showLessonReport(id){
   for(const c of person.cards){
    const t=c.timing||{},norm=value=>value===true?'в норме':value===false?'превышен':'не измерено';
    section.append(node('p',`№ ${c.number} · ${c.title} · ${c.status} · ${c.score_percent==null?'без автоматической оценки':c.score_percent+'%'}`),
-    node('p',`Реакция: ${c.response_seconds??'—'} с из ${t.response_limit_seconds??'—'} (${norm(t.response_within_limit)}) · обработка: ${c.elapsed_seconds??'—'} с из ${t.limit_seconds??'—'} (${norm(t.within_limit)})`),
+    node('p',`${c.exercise_mode==='actions'?'Подтверждение получения':'Реакция'}: ${c.response_seconds??'—'} с из ${t.response_limit_seconds??'—'} (${norm(t.response_within_limit)}) · обработка: ${c.elapsed_seconds??'—'} с из ${t.limit_seconds??'—'} (${norm(t.within_limit)})`),
     button('Открыть карточку и историю',()=>act(async()=>{el('lessonReportDialog').close();await showSession(c.id);})));}
   container.append(section);}
  if(!el('lessonReportDialog').open)el('lessonReportDialog').showModal();
@@ -203,7 +203,7 @@ async function loadLessons(){
   if(value.guided_step)guided.append(node('span',`сейчас показывается шаг ${value.guided_step}`,'muted'));
   card.append(guided);
  }
- if(['planned','running','stopping'].includes(value.state))card.append(button('Завершить всем',()=>{const reason=prompt('Причина завершения для всей группы:');if(!reason?.trim())return;act(async()=>{await api(`/api/v1/instructor/lessons/${value.id}/finish`,'POST',{reason:reason.trim()});await loadLessons();await loadSessions();});}));
+ if(['planned','running','stopping'].includes(value.state))card.append(button('Завершить всем',()=>openLessonStop(value)));
  card.append(button('Участники в реальном времени',()=>openLiveLesson(value.id,value.title)),button('Отчёт и участники',()=>act(()=>showLessonReport(value.id))));el('lessons').append(card);}
 }
 el('lessonMode').onchange=()=>{refreshLessonChoices();const mixed=el('lessonMode').value==='mixed';el('lessonModeSwitch').disabled=!mixed;if(!mixed)el('lessonModeSwitch').checked=false;};el('lessonModeSwitch').disabled=el('lessonMode').value!=='mixed';
@@ -227,6 +227,12 @@ function renderLiveLesson(value){
   if(person.latest_result){const score=person.latest_result.score_percent==null?'без автоматической оценки':`${person.latest_result.score_percent}%`,policy=person.latest_result.policy_result?.passed;card.append(node('p',`Последний зафиксированный результат: ${score}${policy===true?' · политика выполнена':policy===false?' · политика не выполнена':''}`));}
   container.append(card);
  }
+}
+function openLessonStop(lesson){
+ el('stopLessonDialog')?.remove();
+ const dialog=node('dialog'),heading=node('h2','Завершить занятие группы'),form=node('form',undefined,'stack'),label=node('label','Причина завершения'),reason=document.createElement('textarea'),error=node('p'),actions=node('div',undefined,'card-actions'),submit=node('button','Завершить занятие'),cancel=button('Отмена',()=>dialog.close());
+ dialog.id='stopLessonDialog';heading.id='stopLessonHeading';dialog.setAttribute('aria-labelledby',heading.id);reason.required=true;reason.maxLength=1000;reason.rows=3;submit.type='submit';error.setAttribute('role','alert');label.append(reason);actions.append(submit,cancel);form.append(node('p',lesson.title),node('p','Новые карточки больше не поступят. Незавершённые работы будут остановлены и оценены по сохранённым действиям.'),label,error,actions);dialog.append(heading,form);document.body.append(dialog);
+ form.onsubmit=async event=>{event.preventDefault();if(!reason.value.trim()){reason.setCustomValidity('Укажите причину завершения');reason.reportValidity();return;}submit.disabled=cancel.disabled=true;reason.disabled=true;try{await api(`/api/v1/instructor/lessons/${lesson.id}/finish`,'POST',{reason:reason.value.trim()});dialog.close();await loadLessons();await loadSessions();}catch(e){error.textContent=e.message;}finally{submit.disabled=cancel.disabled=false;reason.disabled=false;}};reason.oninput=()=>reason.setCustomValidity('');dialog.showModal();
 }
 async function openLiveLesson(id,title){
  const dialog=ensureLiveDialog();liveLessonId=id;liveLessonTitle=title;liveRequestVersion++;el('liveLessonHeading').textContent=`Участники · ${title}`;empty(el('liveLessonContent'),'Загрузка…');el('liveLessonObserved').textContent='';if(!dialog.open)dialog.showModal();await refreshLiveLesson();
@@ -287,7 +293,7 @@ function renderSession(value){
   visHost.replaceChildren(node('h3','Служба от внешней системы (ВИС)'),createVisForm(id,visAvailable));
  }
  const dialogue=host('dialogue');dialogue.replaceChildren(node('h3','Диалог'));dialogue.className='detail-section';if(value.messages?.length){for(const message of value.messages){const line=node('div',undefined,`message ${message.role==='assistant'?'assistant':''}`);line.append(node('strong',message.role==='assistant'?'Заявитель':'Студент'),node('p',message.content));dialogue.append(line);}}else dialogue.append(node('p','Реплик нет'));
- const evaluation=host('evaluation');evaluation.replaceChildren();if(value.evaluation){evaluation.className='detail-section';evaluation.append(node('h3','Оценка'),node('p',value.evaluation.score_percent===null?'Оценка не настроена':`${value.evaluation.score_percent}%`,'score'));for(const criterion of value.evaluation.criteria||[])evaluation.append(node('p',`${criterion.passed?'✓':'×'} ${criterion.label}: ${criterion.recommendation||''}`));}
+ const evaluation=host('evaluation');evaluation.replaceChildren();if(value.evaluation||value.dds_review){evaluation.className='detail-section';const score=value.exercise_mode==='actions'&&value.dds_review?value.dds_review.score_percent:value.evaluation?.score_percent;evaluation.append(node('h3','Оценка'),node('p',score===null||score===undefined?'Оценка не настроена':`${score}%`,'score'));for(const criterion of value.evaluation?.criteria||[])evaluation.append(node('p',`${criterion.passed?'✓':'×'} ${criterion.label}: ${criterion.recommendation||''}`));}
  const notes=host('feedback-notes');notes.replaceChildren(node('h3','Обратная связь преподавателя'));notes.className='detail-section';for(const note of value.teacher_feedback||[])notes.append(node('p',`${new Date(note.at).toLocaleString('ru-RU')} · ${note.teacher_name}: ${note.text}`));
  const formHost=host('feedback-form');if(!formHost.querySelector(`[data-session-feedback-form="${id}"]`))formHost.replaceChildren(createFeedbackForm(id),button('Обновить карточку и диалог',()=>act(()=>showSession(id,{open:false}))));
 }

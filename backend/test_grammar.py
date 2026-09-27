@@ -2,6 +2,14 @@ import pytest
 
 from grammar import analyze, distance
 
+
+def test_service_comments_are_checked_without_modification():
+    comment = 'Проишествие  устранено , зделано'
+    result = analyze({}, comments=[comment])
+    assert result['errors'] >= 4
+    assert all(issue['field'] == 'service_comment:1' for issue in result['mechanical'])
+    assert comment == 'Проишествие  устранено , зделано'
+
 RUBRIC = {'title': 'Эталон', 'time_limit_seconds': 180, 'criteria': [
     {'id': 'street', 'label': 'Улица', 'field': 'street', 'mode': 'equals',
      'expected': ['Дубнинская'], 'weight': 1},
@@ -71,3 +79,13 @@ def test_without_rubric_only_mechanical_checks_run():
 def test_invalid_card_rejected():
     with pytest.raises(ValueError):
         analyze('не карточка', RUBRIC)
+
+
+def test_local_syntax_hints_do_not_penalize_or_rewrite():
+    text = 'Бригада прибыли. Согласно приказа работы работы завершены (результат'
+    result = analyze({'description': text})
+    kinds = {item['kind'] for item in result['suggestions']}
+    assert {'subject_verb_agreement', 'preposition_case', 'repeated_word', 'unpaired_delimiter'} <= kinds
+    assert result['errors'] == 0
+    assert not any(item['kind'] == 'subject_verb_agreement' for item in
+                   analyze({'description': 'Бригада прибыла. Рабочие прибыли.'})['suggestions'])

@@ -5,7 +5,7 @@ from zipfile import ZipFile
 import pytest
 from accounts import Accounts
 from learning import Learning
-from materials import router, install_upload_limit, attachment, MaterialWrite
+from materials import router, install_upload_limit, attachment, MaterialWrite, material_context
 from fastapi import HTTPException
 from test_rbac_integration import classroom
 
@@ -47,6 +47,23 @@ def test_publish_group_scope_and_revoke(library):
     assert client.get(student_url, headers=h['student1']).status_code == 200
     assert client.put(url, headers=h['teacher1'], json=payload(c, revision=2)).status_code == 200
     assert client.get(student_url, headers=h['student1']).status_code == 404
+
+
+def test_only_published_own_material_enters_model_context(library):
+    c = library
+    own_id = c['users']['teacher1']['id']
+    group_id = c['group']['id']
+    draft = c['client'].post(BASE, headers=c['headers']['teacher1'],
+                             json=payload(c, body='Черновик преподавателя')).json()
+    assert material_context(c['store'], own_id, 'general', group_id) == []
+    published = c['client'].put(BASE + '/' + draft['id'], headers=c['headers']['teacher1'],
+                                json=payload(c, body='Проверенный порядок действий',
+                                             published=True, revision=1))
+    assert published.status_code == 200
+    context = material_context(c['store'], own_id, 'general', group_id)
+    assert len(context) == 1 and 'Проверенный порядок' in context[0]['excerpt']
+    assert material_context(c['store'], c['users']['teacher2']['id'], 'general', group_id) == []
+    assert material_context(c['store'], own_id, 'general', 'другая-группа') == []
 
 
 def test_attachment_roundtrip_preserve_replace_remove(library):
@@ -91,7 +108,7 @@ def test_docx_signature_size_and_macro_rejection():
     with pytest.raises(HTTPException):
         attachment(value)
     value.filename = 'test.pdf'
-    value.file_base64 = base64.b64encode(b'%PDF-'+b'x'*(5*1024*1024)).decode()
+    value.file_base64 = base64.b64encode(b'%PDF-'+b'x'*(25*1024*1024)).decode()
     with pytest.raises(HTTPException):
         attachment(value)
 
@@ -108,4 +125,4 @@ def test_request_limit_preserves_small_body_and_blocks_chunked():
 
     with TestClient(app) as client:
         assert client.post(BASE, json={'body': 'text'}).json() == {'body': 'text'}
-        assert client.post(BASE, content=iter([b'x' * 1024 * 1024] * 9)).status_code == 413
+        assert client.post(BASE, content=iter([b'x' * 1024 * 1024] * 37)).status_code == 413

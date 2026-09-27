@@ -4,9 +4,11 @@ test -r /run/secrets/sip220_password
 test -r /ca/ca.cert.pem
 test -r /audio/operator.wav
 mkdir -p /tmp/baresip /output
+extension=${SIP_PROBE_EXTENSION:-220}
+case "$extension" in ''|*[!0-9]*) echo 'Invalid probe extension' >&2; exit 2;; esac
 # Let the automatic opening finish before the spoken fixture, then leave enough
 # quiet time for Backend inference and the synthesized reply.
-sox /audio/operator.wav /tmp/operator.wav pad 10 20
+sox /audio/operator.wav /tmp/operator.wav pad "${SIP_PROBE_LEAD_SECONDS:-10}" "${SIP_PROBE_SILENCE_SECONDS:-20}"
 password=$(cat /run/secrets/sip220_password)
 if printf '%s' "$password" | grep -q '[;"]'; then
     echo 'Unsupported password characters' >&2
@@ -33,6 +35,10 @@ module srtp.so
 module account.so
 module menu.so
 EOF
-printf '<sip:220@asterisk:5061;transport=tls>;auth_user=220;auth_pass=%s;regint=30;answermode=auto;answerdelay=0;audio_codecs=pcmu/8000/1;audio_source=aufile,/tmp/operator.wav;audio_player=aufile,/output/caller.wav;mediaenc=srtp-mand\n' "$password" > /tmp/baresip/accounts
+if [ -n "${SIP_PROBE_PORT:-}" ]; then
+    case "$SIP_PROBE_PORT" in *[!0-9]*) exit 2;; esac
+    printf 'sip_listen 0.0.0.0:%s\n' "$SIP_PROBE_PORT" >> /tmp/baresip/config
+fi
+printf '<sip:%s@asterisk:5061;transport=tls>;auth_user=%s;auth_pass=%s;regint=30;answermode=auto;answerdelay=0;audio_codecs=pcmu/8000/1;audio_source=aufile,/tmp/operator.wav;audio_player=aufile,/output/caller.wav;mediaenc=srtp-mand\n' "$extension" "$extension" "$password" > /tmp/baresip/accounts
 chmod 600 /tmp/baresip/accounts
-exec baresip -v -4 -f /tmp/baresip -t 60
+exec baresip -v -4 -f /tmp/baresip -t "${SIP_PROBE_SECONDS:-60}"

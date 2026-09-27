@@ -43,6 +43,7 @@ try {
         throw 'SIP 220 probe client exited before registration'
     }
     $create = docker exec trainer112-backend-1 python -c "import json,os,ssl,urllib.request,uuid; data=json.dumps({'session_id':str(uuid.uuid4()),'extension':'220','mode':'$Mode'}).encode(); req=urllib.request.Request('https://voice:8001/api/v1/calls',data=data,headers={'Content-Type':'application/json','Authorization':'Bearer '+os.environ['VOICE_API_TOKEN']}); ctx=ssl.create_default_context(cafile=os.environ['INTERNAL_CA_FILE']); print(urllib.request.urlopen(req,context=ctx,timeout=10).read().decode())"
+    if ($LASTEXITCODE -ne 0) { throw 'Voice call creation failed' }
     $call = $create | ConvertFrom-Json
     docker exec trainer112-backend-1 python -c "import json,os,ssl,time,urllib.request; cid='$($call.call_id)'; ctx=ssl.create_default_context(cafile=os.environ['INTERNAL_CA_FILE']); h={'Authorization':'Bearer '+os.environ['VOICE_API_TOKEN']}; deadline=time.monotonic()+15; status='';
 while time.monotonic()<deadline:
@@ -50,6 +51,7 @@ while time.monotonic()<deadline:
  if status=='active': break
  time.sleep(.25)
 assert status=='active', status"
+    if ($LASTEXITCODE -ne 0) { throw 'SIP call did not become active' }
     if ($Mode -eq 'manual') {
         docker exec trainer112-backend-1 python -c "import json,os,ssl,urllib.request,uuid; cid='$($call.call_id)'; ctx=ssl.create_default_context(cafile=os.environ['INTERNAL_CA_FILE']); h={'Authorization':'Bearer '+os.environ['VOICE_API_TOKEN'],'Content-Type':'application/json'}; data=json.dumps({'message_id':str(uuid.uuid4()),'text':'Проверка обратного звукового канала.'}).encode(); req=urllib.request.Request('https://voice:8001/api/v1/chat/'+cid+'/say',data=data,headers=h); urllib.request.urlopen(req,context=ctx,timeout=10).read()"
         Start-Sleep -Seconds 20
@@ -60,20 +62,24 @@ while time.monotonic()<deadline:
  if recognized and len(played)>=2: break
  time.sleep(.5)
 print(json.dumps(result)); assert result.get('recognized') and result.get('played',0)>=2, result"
+        if ($LASTEXITCODE -ne 0) { throw 'Automatic dialogue did not complete two replies' }
         $auto = $autoJson | ConvertFrom-Json
     }
     $endedJson = docker exec trainer112-backend-1 python -c "import os,ssl,urllib.request; req=urllib.request.Request('https://voice:8001/api/v1/calls/$($call.call_id)/hangup',data=b'',method='POST',headers={'Authorization':'Bearer '+os.environ['VOICE_API_TOKEN']}); ctx=ssl.create_default_context(cafile=os.environ['INTERNAL_CA_FILE']); print(urllib.request.urlopen(req,context=ctx,timeout=60).read().decode())"
+    if ($LASTEXITCODE -ne 0) { throw 'Voice hangup failed' }
     $ended = $endedJson | ConvertFrom-Json
     if ($ended.status -ne 'ended') { throw "Voice call ended with status $($ended.status)" }
     $tracksJson = docker exec trainer112-voice-1 python -c "import json,wave; p='$($ended.recordings.operator)'.rsplit('/',1)[0]; out={};
 for name in ('operator','caller'):
  f=wave.open(p+'/'+name+'.wav','rb'); data=f.readframes(f.getnframes()); width=f.getsampwidth(); samples=memoryview(data).cast('h'); out[name]={'frames':len(samples),'rms':int((sum(int(x)*int(x) for x in samples)/max(1,len(samples)))**.5)}
 print(json.dumps(out))"
+    if ($LASTEXITCODE -ne 0) { throw 'Recording inspection failed' }
     $tracks = $tracksJson | ConvertFrom-Json
     if ($tracks.operator.rms -le 0 -or $tracks.caller.rms -le 0) {
         throw "Silent Voice track: operator RMS=$($tracks.operator.rms), caller RMS=$($tracks.caller.rms)"
     }
     $chatJson = docker exec trainer112-backend-1 python -c "import json,os,ssl,urllib.request; ctx=ssl.create_default_context(cafile=os.environ['INTERNAL_CA_FILE']); req=urllib.request.Request('https://voice:8001/api/v1/chat/$($call.call_id)',headers={'Authorization':'Bearer '+os.environ['VOICE_API_TOKEN']}); print(urllib.request.urlopen(req,context=ctx,timeout=5).read().decode())"
+    if ($LASTEXITCODE -ne 0) { throw 'Voice transcript inspection failed' }
     $chat = $chatJson | ConvertFrom-Json
     if (-not ($chat.messages | Where-Object { $_.role -eq 'me' -and $_.status -eq 'recognized' -and $_.text -match 'раз два три' })) {
         throw 'Vosk did not recognize the expected synthetic phrase'

@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     tts_api_key: SecretStr = SecretStr("")
     tts_voice: str = ""
     tts_speaker: str = "baya"
+    tts_workers: int = Field(2, ge=1, le=4)
+    tts_threads_per_worker: int = Field(2, ge=1, le=8)
     tts_fallback_voice: str = ""
     # Порог и пауза подобраны под живую речь диспетчера. Порог 0.025 обрезал
     # тихое и невнятное начало фразы, а пауза 400 мс считала концом реплики

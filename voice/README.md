@@ -1,11 +1,25 @@
 # Voice Gateway для учебных SIP звонков
 
+27 September: the root Compose Voice memory limit defaults to 4096 MiB;
+the previous 2048 MiB cap caused memory reclaim/swap during hybrid STT + Silero.
+This is not proof of 20-call capacity. `tools/acceptance_parallel_sip.py` tests
+two independent TLS/SRTP phones through the actual deployed pipeline.
+
+`tools/concurrency_probe.py` measures concurrent pipelines without SIP using
+synthetic audio. `--speech --hybrid` enables installed Vosk/GigaAM/Silero models;
+phone transport and backend replies remain mock and are labelled as such in JSON.
+This does not measure RTP delay. Workers force UTF-8 and support Cyrillic Windows
+installation paths. See `docs/VOICE_CHECK_2026-09-23.md` in the repository root.
+
 Новый корневой Docker Compose собирает Voice вместе с Backend/PostgreSQL и
 локальным Asterisk: см. `docs/DOCKER_DEPLOYMENT.md`. Секреты берутся из приватного
 `.env.docker`; ARI и Media доступны только внутри Docker-сети. Это заменяет старое
 ограничение «Compose содержит только Voice» для корневого Compose; voice/compose.yaml
 остаётся отдельным developer-стендом. По умолчанию сохраняется честный spike-режим:
-готовность SIP не означает проверенный голосовой диалог. Локальная LLM не добавлена.
+готовность SIP не означает проверенный голосовой диалог. Локальная LLM работает
+в Backend через Ollama: Voice пересылает распознанную реплику и ждёт его ответ,
+не обращаясь к модели напрямую. Backend ожидает ответ модели до 15 секунд за ход,
+после чего использует безопасную запасную реплику соответствующего сценария.
 
 Групповые занятия: Backend передаёт назначенный преподавателем номер каждого
 студента. Эти номера нужно заранее зарегистрировать в Asterisk и включить в
@@ -235,7 +249,7 @@ spike и проверки пользователем через гарнитур
 
 На установленном стенде используется `STT_PROVIDER=hybrid`: Vosk выдаёт промежуточный текст, а русская GigaAM v2 уточняет окончательную фразу через sherpa-onnx. Для GigaAM задайте `STT_FINAL_MODEL` на каталог с `model.int8.onnx` и `tokens.txt`. Адаптер также поддерживает прежний Zipformer с файлами `am/encoder.onnx`, `am/decoder.onnx`, `am/joiner.onnx` и `lang/tokens.txt`. Зависимость sherpa-onnx входит в набор `[local]`.
 
-Для более естественного русского голоса и автоматических ударений можно установить CPU PyTorch, указать `TTS_PROVIDER=silero`, `TTS_VOICE=/models/v5_5_ru.pt` и `TTS_SPEAKER=baya`. Процесс Silero прогревается при старте и остаётся загруженным между репликами. `TTS_FALLBACK_PROVIDER=piper` вместе с `TTS_FALLBACK_VOICE` оставляет Piper резервом.
+Для русского голоса установите CPU PyTorch, укажите `TTS_PROVIDER=silero`, `TTS_VOICE=/models/v5_5_ru.pt` и `TTS_SPEAKER=baya`. Пул Silero сохраняет модели между репликами: `TTS_WORKERS=2` (1–4), `TTS_THREADS_PER_WORKER=2` (1–8). Это дочерние процессы синтеза, не Uvicorn workers. Кэш до 8 MiB/128 реплик хранится только в памяти и очищается при остановке. Отмена звонка останавливает только занятый им процесс, остальные продолжают работу. `TTS_FALLBACK_PROVIDER=piper` вместе с `TTS_FALLBACK_VOICE` оставляет Piper резервом.
 
 Vosk возвращает partial; Backend получает только итоговую фразу после VAD endpoint. Piper отдаёт PCM поток по фрагментам, `rate` преобразуется в `length_scale`; emotion/intensity остаются необязательными hints и игнорируются этим адаптером. Частота голоса приводится к 16 kHz с сохранением состояния между фрагментами. Загрузка/инференс работают в отдельных завершаемых процессах: barge-in и hangup могут остановить их без блокировки FastAPI event loop. Эта простая реализация загружает Piper на каждый ответ; после измерений можно добавить управляемый пул процессов.
 
@@ -326,7 +340,7 @@ JSON-команды, текст и PCM frame contents не сохраняютс�
 ежечасно создаётся gzip-копия. Заявленный минимум хранения — 183 дня, но политика
 резервного копирования каталога остаётся обязанностью оператора стенда.
 
-Backend должен дедуплицировать `event_id`. Утилита повторяет журнал целиком, сохраняет исходные IDs и никогда не создаёт звонок. Автоматического восстановления активного звонка после рестарта Voice нет.
+Backend дедуплицирует `event_id`. Replay сохраняет исходные IDs и сам не создаёт звонок. После аварийного рестарта Voice сохранённый terminal snapshot позволяет Backend выполнить ограниченный повторный вызов при открытом рабочем месте/докладе. Это новый физический звонок в прежнем занятии, не восстановление потерянных аудиопакетов.
 
 ## Barge in и окружение
 
@@ -368,7 +382,7 @@ VAD работает на исходном входе оператора: 60 м�
 
 JSON логи `turn.latency` содержат `vad_start_ms`, `vad_end_ms`, `stt_final_ms`, `backend_send_ms`, `backend_reply_ms`, `tts_request_ms`, `tts_first_audio_ms`, `playback_start_ms` и доступные разности. Метки — миллисекунды от начала звонка. `playback_start_ms` фиксирует начало передачи в локальную очередь вывода; акустический момент воспроизведения в телефоне не измеряется. Первый звук считается от запроса TTS, а total turn — от VAD end. SLA не задан. Partial логируется без текста и не отправляется в business logic.
 
-Запускайте **один Uvicorn worker**: CallContext и маршрутизация ARI/media находятся в памяти процесса. Горизонтальное масштабирование требует отдельной маршрутизации звонков и здесь не реализовано. Потеря ARI завершает активные вызовы и переводит health в degraded; для восстановления ARI требуется перезапуск сервиса. Ошибки удаления ресурсов АТС логируются явно: при недоступной АТС необходимо сверить оставшиеся каналы на стенде.
+Запускайте **один Uvicorn worker**: CallContext и маршрутизация ARI/media находятся в памяти процесса. Пул TTS не меняет это ограничение. Потеря ARI завершает активные вызовы и переводит health в degraded; канал событий переподключается автоматически с паузой 1–5 секунд. Backend управляет ограниченным повторным вызовом. При недоступной АТС необходимо сверить оставшиеся каналы на стенде.
 
 В Docker можно выполнить `docker compose up --build` после создания `.env`. Состав содержит только Voice; Asterisk и Backend должны быть доступны отдельно. Для связи с АТС на Docker host используйте `host.docker.internal`; для подключения АТС к Voice задайте `VOICE_BIND_ADDRESS` приватным IP хоста. Записи/outbox находятся в named volumes. Опциональные провайдеры требуют `INSTALL_LOCAL_PROVIDERS=true`, сборки заново и read-only mount моделей. Docker сборка в текущей среде не проверялась.
 
@@ -382,3 +396,13 @@ JSON логи `turn.latency` содержат `vad_start_ms`, `vad_end_ms`, `stt
 - [Piper Python API](https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/API_PYTHON.md).
 
 Протокол сверялся с этими первичными источниками при реализации. Итоги локальных проверок — в `docs/VERIFICATION.md`; стендовая приёмка — в `docs/ACCEPTANCE.md`.
+
+# 26 September recovery update
+
+Persistent chat snapshots now retain terminal call reasons. An unclean restart
+marks previously active calls `failed/service_restart`; GET calls reads those
+snapshots after the in-memory cache is gone. Normal ended calls retain their reason
+and do not become recoverable. Backend controls bounded redial, not Voice itself.
+ARI event transport reconnects with 1–5 second backoff. This supersedes historical
+notes above that require restarting Voice after every ARI disconnect.
+Unreceived audio cannot be restored; separate physical attempts keep separate recordings.

@@ -23,7 +23,7 @@ function addCriterion(value={}){
 }
 async function load(id){
  busy=true;el('editor').disabled=true;el('save').disabled=true;el('scenario').disabled=true;
- try{const result=await api('/api/v1/instructor/scenarios/'+encodeURIComponent(id)+'/rubric');loadedId=id;revision=result.revision;const s=scenarios.find(x=>x.id===id);el('scenarioContext').textContent=s?`${s.incident}\n${s.location}`:'';el('title').value=result.rubric?.title||s?.title||'';el('limit').value=result.rubric?.time_limit_seconds||30;el('criteria').replaceChildren();for(const c of result.rubric?.criteria||[])addCriterion(c);dirty=false;el('revision').textContent='Версия '+revision;status(result.rubric?'Эталон загружен':'Эталон ещё не задан. Добавьте критерии и сохраните.');}
+try{const result=await api('/api/v1/instructor/scenarios/'+encodeURIComponent(id)+'/rubric');loadedId=id;revision=result.revision;const s=scenarios.find(x=>x.id===id);el('scenarioContext').textContent=s?`${s.incident}\n${s.location}`:'';el('title').value=result.rubric?.title||s?.title||'';el('limit').value=result.rubric?.time_limit_seconds||180;el('responseLimit').value=result.rubric?.response_limit_seconds||30;el('criteria').replaceChildren();for(const c of result.rubric?.criteria||[])addCriterion(c);dirty=false;el('revision').textContent='Версия '+revision;status(result.rubric?'Эталон загружен':'Эталон ещё не задан. Добавьте критерии и сохраните.');}
  finally{busy=false;el('editor').disabled=false;el('save').disabled=!loadedId;el('scenario').disabled=false;}
 }
 async function guarded(action){try{await action();}catch(e){status(e.message,true);}}
@@ -35,7 +35,7 @@ el('rubricForm').onsubmit=event=>{event.preventDefault();if(busy||!loadedId)retu
  const criteria=[...el('criteria').children].map(row=>{const read=key=>row.querySelector(`[data-key="${key}"]`).value;return {id:row.dataset.id,label:read('label'),field:read('field'),mode:read('mode'),weight:Number(read('weight')),expected:read('expected').split('\n').map(v=>v.trim()).filter(Boolean)};});
  if(!criteria.length)throw Error('Добавьте хотя бы один критерий');
  busy=true;el('editor').disabled=true;el('save').disabled=true;el('scenario').disabled=true;
- try{const result=await api('/api/v1/instructor/scenarios/'+encodeURIComponent(loadedId)+'/rubric','PUT',{revision,rubric:{title:el('title').value,time_limit_seconds:Number(el('limit').value),criteria}});revision=result.revision;dirty=false;el('revision').textContent='Версия '+revision;status('Эталон сохранён. Он будет использован в новых занятиях.');}
+ try{const result=await api('/api/v1/instructor/scenarios/'+encodeURIComponent(loadedId)+'/rubric','PUT',{revision,rubric:{title:el('title').value,time_limit_seconds:Number(el('limit').value),response_limit_seconds:Number(el('responseLimit').value),criteria}});revision=result.revision;dirty=false;el('revision').textContent='Версия '+revision;status('Эталон сохранён. Он будет использован в новых занятиях.');}
  finally{busy=false;el('editor').disabled=false;el('save').disabled=false;el('scenario').disabled=false;}
 });};
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});

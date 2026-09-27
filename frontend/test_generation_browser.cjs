@@ -19,7 +19,8 @@ async function serve(page){
   if(url.origin!==origin)return route.abort();
   if(p.startsWith('/api/')){
    let data,status=200;
-   if(p==='/api/v1/instructor/generations'&&request.method()==='GET')data=drafts.map(summary);
+   if(p==='/api/v1/instructor/corrections'&&request.method()==='GET')data=[];
+   else if(p==='/api/v1/instructor/generations'&&request.method()==='GET')data=drafts.map(summary);
    else if(p==='/api/v1/instructor/generations'&&request.method()==='POST'){
     const body=request.postDataJSON();let draft=drafts.find(d=>d.id===body.request_id);
     if(!draft){draft=makeDraft(body);drafts.unshift(draft);status=201;}data=draft;
@@ -49,8 +50,9 @@ async function serve(page){
   const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('dialog',dialog=>dialog.accept());
   await serve(page);await page.goto(origin+'/generation');
+  await expect(page.getByText(/при облачном провайдере|передаётся внешнему сервису/i)).toHaveCount(0);
   await expect(page.locator('#drafts')).toContainText('пока нет');
-  await page.locator('#brief').fill('Создать синтетическое занятие о задымлении');await page.locator('#category').selectOption('fire');await page.locator('#generate').click();
+  await page.locator('#brief').fill('Создать синтетическое занятие о задымлении');await page.locator('#category').selectOption('fire');await page.locator('#ownerService').fill('Служба 101');await page.locator('#generate').click();
   await expect(page.locator('#preview')).toBeVisible();await expect(page.locator('#scenario')).toContainText('Учебная улица');await expect(page.locator('#rubric')).toContainText('Название улицы');await expect(page.locator('#provider')).toContainText('Mock-режим: модель не вызывалась');
   const originalTitle=await page.locator('#previewTitle').textContent();await page.locator('#comment').fill('Уточнить название, не меняя факты');await page.locator('#revise').click();
   await expect(page.locator('#status')).toContainText('ИИ не вернул');await expect(page.locator('#comment')).toHaveValue('Уточнить название, не меняя факты');await expect(page.locator('#previewTitle')).toHaveText(originalTitle);

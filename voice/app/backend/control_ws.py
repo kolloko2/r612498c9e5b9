@@ -57,14 +57,25 @@ class ControlWS:
 
     async def emit(self, kind, payload):
         async with self.send_lock:
-            self.context.seq += 1
-            event = EventEnvelope(seq=self.context.seq, session_id=self.context.session_id,
+            event = EventEnvelope(seq=self.context.seq + 1, session_id=self.context.session_id,
                                   type=kind, elapsed_ms=self.context.elapsed_ms(), payload=payload)
-            await asyncio.to_thread(self._append, event)
+            write = asyncio.create_task(asyncio.to_thread(self._append, event))
+            cancelled = False
+            try:
+                await asyncio.shield(write)
+            except asyncio.CancelledError:
+                # Do not let a cancelled playback task release the send lock while
+                # its disk write is still pending behind call.ended/recording.ready.
+                await write
+                cancelled = True
+            self.context.seq = event.seq
             if self.settings.backend_mode == "mock":
-                await self._mock(event)
+                if not cancelled:
+                    await self._mock(event)
             else:
                 self.queue.put_nowait(event)
+            if cancelled:
+                raise asyncio.CancelledError
         return event
 
     async def _mock(self, event):

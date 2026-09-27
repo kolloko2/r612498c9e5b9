@@ -80,6 +80,7 @@ async function serve(page) {
       };
       else if (p === '/api/v1/student/routing/catalog') data = { rules_version: 'full-v2', services: ['Служба 101', 'Служба 102', 'ЦОДД', 'Мослифт'], flags: [] };
       else if (p === '/api/v1/student/routing/preview') data = routing;
+      else if (p === '/api/v1/student/inbox/poll') data = [];
       else if (p === '/api/v1/student/assignments' || p === '/api/v1/student/lessons') data = [];
       else if (p === '/api/v1/student/sessions') data = cards.map(copy);
       else {

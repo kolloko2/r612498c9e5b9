@@ -32,15 +32,15 @@ def outcome(attempt: dict[str, Any]) -> str:
     timing = attempt.get('timing') or {}
     within = timing.get('within_limit')
     response_within = timing.get('response_within_limit')
-    critical = (attempt.get('grammar') or {}).get('critical_errors', 0)
+    critical = (attempt.get('grammar') or {}).get('critical_errors', 0) or attempt.get('dds_critical', 0)
 
     missed_norm = within is False or response_within is False
     if score is None:
         # Без настроенного эталона судим только по нормативам и адресным опечаткам.
         return 'weak' if missed_norm or critical else 'neutral'
-    if score >= STRONG_SCORE and not missed_norm and not critical:
+    if score >= STRONG_SCORE and not missed_norm and not critical and attempt.get('dds_passed') is not False:
         return 'strong'
-    if score < WEAK_SCORE or missed_norm or critical:
+    if score < WEAK_SCORE or missed_norm or critical or attempt.get('dds_passed') is False:
         return 'weak'
     return 'neutral'
 
@@ -76,6 +76,10 @@ def recommend(current: str, history: list[dict[str, Any]]) -> dict[str, Any]:
 def attempt_view(card: dict[str, Any]) -> dict[str, Any]:
     """Сжатие завершённой карточки до полей, влияющих на подбор уровня."""
     evaluation = card.get('evaluation') or {}
-    return {'status': card.get('status'), 'difficulty': card.get('difficulty', 'basic'),
-            'score_percent': evaluation.get('score_percent'), 'timing': evaluation.get('timing'),
-            'grammar': card.get('grammar')}
+    dds = card.get('dds_review') or {}
+    result = {'status': card.get('status'), 'difficulty': card.get('difficulty', 'basic'),
+            'score_percent': dds.get('score_percent') if dds else evaluation.get('score_percent'),
+            'timing': evaluation.get('timing'), 'grammar': card.get('grammar')}
+    if dds:
+        result.update(dds_passed=dds.get('passed'), dds_critical=len(dds.get('critical_errors', [])))
+    return result

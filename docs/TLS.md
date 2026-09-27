@@ -3,8 +3,8 @@
 ## Status
 
 `deploy/tls/docker-compose.tls.yml` is a complete, explicitly selected TLS overlay.
-It is **staged but not activated**. The normal root Compose file remains the plain
-development deployment. Selecting the overlay is not enough: every service is also
+It is activated on the current workstation with the cluster overlay. The root
+Compose file alone remains the plain development deployment. Selecting the overlay is not enough: every service is also
 guarded by the `tls` profile.
 
 The overlay encrypts and verifies these paths:

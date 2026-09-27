@@ -6,9 +6,10 @@ holds a manual transcription with its own provenance block; this importer never
 reads the PDF and never invents incident facts.
 
 Every generated draft keeps the source text verbatim in `incident` and derives
-facts only by splitting that same text. Category and DDS profile come from an
-explicit keyword table; a call matching no rule stays `other`/`general` and is
-reported as unclassified rather than guessed. Drafts are always disabled: a
+facts only by splitting that same text. The explicit 96-row ticket_exercises
+table supplies the final DDS category, address and authored operational cycle;
+the keyword table records the original automatic classification only.
+Drafts are always disabled: a
 teacher validates each one before it can be issued, as the task statement requires.
 
 Caller telephone numbers are replaced with deterministic synthetic numbers by
@@ -22,13 +23,16 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
+from ticket_exercises import complete
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "tools" / "data" / "tickets_source.json"
 OUTPUT = ROOT / "backend" / "data" / "tickets.json"
+CURATED_DDS = ROOT / "tools" / "data" / "dds_prefilled_cards.json"
 SCHEMA_VERSION = 1
 
 # Scenario.id must match ^[a-z0-9][a-z0-9_-]{2,63}$ in backend/server.py.
@@ -128,14 +132,14 @@ def _normalize_phones(text: str, keep_source: bool) -> tuple[str, list[str]]:
 
 
 def _caller_name(text: str) -> str:
-    match = FULL_NAME.search(text)
-    if match:
-        return " ".join(match.groups())
-    # Часть билетов называет только роль заявителя.
+    # A named casualty is not necessarily the caller. Explicit caller role wins.
     for role in ("вызывает мама", "вызывает папа", "вызывает муж", "вызывает супруг",
                  "вызывает отец", "вызывает брат", "вызывает подруга", "вызывает себе"):
         if role in text.lower():
             return role.replace("вызывает ", "").capitalize()
+    match = FULL_NAME.search(text)
+    if match:
+        return " ".join(match.groups())
     return "Заявитель"
 
 
@@ -340,9 +344,43 @@ def _rubric(ticket: int, call: int, caller: str, known: list[str], situation: st
             "time_limit_seconds": 30, "criteria": criteria}
 
 
+def _curated_dds_card(draft_id: str, location: str, phones: list[str], overlay: dict) -> tuple[dict, str]:
+    """Use only a checked address transcription and an exact classifier record."""
+    if overlay['source_address'] != location:
+        raise ValueError(f'{draft_id}: source address changed; review the DDS card')
+    backend_path = str(ROOT / 'backend')
+    if backend_path not in sys.path:
+        sys.path.insert(0, backend_path)
+    from classifier import get_catalog, resolve
+    from routing import main_services, preview
+
+    version = get_catalog()['version']
+    record = resolve(overlay['classifier_id'], version)
+    owner = next(iter(main_services(record['main_service'])), '')
+    if not owner:
+        raise ValueError(f'{draft_id}: classifier has no mapped primary DDS')
+    card = {
+        'address_note': location,
+        'phone': phones[0] if phones else '',
+        'incident_type': record['incident_type'],
+        'classifier_id': record['id'],
+        'classifier_version': version,
+        'classifier_group': record['group_id'],
+        'classifier_features': record['features'],
+        **overlay['fields'],
+    }
+    routed = preview(card)
+    card['services'] = list(dict.fromkeys([owner, *(item['service'] for item in routed['suggestions'])]))
+    # A synthetic contact is explicit in the reviewed training card. Recipients
+    # without a number remain visible, but cannot be called by the DDS.
+    card['service_phones'] = {owner: '+7 900 000-00-01'}
+    return card, owner
+
+
 def build(source: dict[str, Any], keep_source_phones: bool) -> dict[str, Any]:
     drafts: list[dict[str, Any]] = []
     unclassified: list[str] = []
+    curated = json.loads(CURATED_DDS.read_text(encoding='utf-8'))
     for ticket in source["tickets"]:
         for call in ticket["calls"]:
             situation, phones = _normalize_phones(call["situation"], keep_source_phones)
@@ -355,7 +393,7 @@ def build(source: dict[str, Any], keep_source_phones: bool) -> dict[str, Any]:
             draft_id = DRAFT_ID.format(ticket=ticket["number"], call=call["n"])
             if keyword is None:
                 unclassified.append(draft_id)
-            drafts.append({
+            draft = {
                 "id": draft_id,
                 "ticket": ticket["number"],
                 "call": call["n"],
@@ -380,25 +418,16 @@ def build(source: dict[str, Any], keep_source_phones: bool) -> dict[str, Any]:
                     "emotion": EMOTIONS[category],
                     "behavior": BEHAVIOR,
                     "opening": _opening(situation, category),
-                    # Обстановка меняется уже после передачи карточки: часть
-                    # вводных открывает статусы хода работ, часть осложняет
-                    # обстановку и требует пересмотра решения.
-                    "owner_service": CATEGORY_OWNER.get(category, ""),
-                    # Ожидаемые решения: профильную карточку принимают, доклад
-                    # дежурному обязателен, на доклад с места даётся 90 секунд.
-                    "dds_expectation": {
-                        "should_accept": True,
-                        "brief_service": CATEGORY_OWNER[category],
-                        "update_response_limit_seconds": 90,
-                    } if category in CATEGORY_OWNER else None,
-                    "updates": (_operational(CATEGORY_OWNER[category])[:3]
-                                + CATEGORY_UPDATES.get(category, [])[:1]
-                                + _operational(CATEGORY_OWNER[category])[3:]
-                                ) if category in CATEGORY_OWNER else [],
                     "enabled": False,
                 },
                 "rubric": _rubric(ticket["number"], call["n"], caller, known, situation),
-            })
+            }
+            if draft_id in curated:
+                card, owner = _curated_dds_card(draft_id, location, phones, curated[draft_id])
+                draft['scenario']['prefilled_card'] = card
+                draft['scenario']['owner_service'] = owner
+            complete(draft, call, phones)
+            drafts.append(draft)
 
     payload = json.dumps(drafts, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return {

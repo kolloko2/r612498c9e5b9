@@ -1,6 +1,7 @@
 import asyncio
 import importlib
 import sys
+import os
 
 
 async def stop_process(process):
@@ -19,9 +20,10 @@ def custom_provider(spec, settings):
     return getattr(importlib.import_module(module), factory)(settings)
 
 
-async def spawn_worker(kind, model):
+async def spawn_worker(kind, model, *, env=None):
     return await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "app.audio.provider_worker", kind, model,
+        sys.executable, "-X", "utf8", "-m", "app.audio.provider_worker", kind, model,
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
+        env={**os.environ, **(env or {})},
     )

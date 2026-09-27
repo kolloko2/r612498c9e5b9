@@ -122,6 +122,8 @@ class CallRuntime:
 
     async def playback_event(self, reply_id, status):
         self.manager.chat.message(self.context.call_id, reply_id, status=status)
+        if self.mode == 'auto' and status in ('played', 'interrupted', 'error'):
+            await self.backend.emit('caller.playback', {'reply_id': str(reply_id), 'status': status})
         if self.mode != "manual" and status in ("playing", "played", "interrupted", "error"):
             guard = self.settings.echo_guard_ms / 1000
             self.capture_blocked_until = max(self.capture_blocked_until,
@@ -423,7 +425,8 @@ class CallManager:
 
     def release(self, runtime):
         key = str(runtime.context.call_id)
-        self.chat.update(key, status=runtime.context.status.value)
+        self.chat.update(key, status=runtime.context.status.value,
+                         reason=runtime.context.stop_reason)
         chat = self.chat.get(key)
         for message in chat["messages"]:
             if message["status"] in ("queued", "playing", "recognizing"):
@@ -442,7 +445,14 @@ class CallManager:
         key = str(call_id)
         if runtime := self.calls.get(key):
             return runtime.context.snapshot()
-        return self.history.get(key)
+        if key in self.history:
+            return self.history[key]
+        # Persistent terminal state survives process restarts and cache eviction.
+        saved = self.chat.get(key)
+        if saved:
+            return {name: saved.get(name) for name in
+                    ('call_id', 'session_id', 'status', 'reason')}
+        return None
 
     async def hangup(self, call_id):
         if runtime := self.calls.get(str(call_id)):

@@ -6,13 +6,20 @@ let sessions = [], current = null, dirty = false, viewing = false, sending = fal
 if(typeof BroadcastChannel!=='undefined'){
  const geocoderChannel=new BroadcastChannel('trainer112-geocoder');
  geocoderChannel.onmessage=({data})=>{
-  if(data?.type!=='coordinates'||data.sid!==current?.id||current.status==='Завершена')return;
+  if(data?.type!=='coordinates'||data.sid!==current?.id||current.status==='Завершена'||current.card_locked)return;
   if(!Number.isFinite(data.latitude)||!Number.isFinite(data.longitude)||Math.abs(data.latitude)>90||Math.abs(data.longitude)>180)return;
-  if(!confirm(`Использовать координаты адреса «${String(data.label).slice(0,200)}»? Текст адреса не изменится. Затем сохраните карточку.`))return;
-  viewing=false;current.card.latitude=data.latitude;current.card.longitude=data.longitude;
-  const fields=document.querySelectorAll('[data-field="latitude"],[data-field="longitude"]');
-  for(const input of fields){input.value=data[input.dataset.field];input.disabled=false;}
-  markDirty();$('save').hidden=false;notify('Координаты изменены в черновике. Сохраните карточку.');
+  let dialog=$('coordinateConfirm');if(dialog)dialog.remove();
+  dialog=element('dialog');dialog.id='coordinateConfirm';
+  const message=element('p',`Использовать координаты адреса «${String(data.label).slice(0,200)}»? Текст адреса не изменится.`);
+  const apply=element('button','Применить координаты'),cancel=element('button','Отмена');
+  cancel.onclick=()=>dialog.close();
+  apply.onclick=()=>{
+   if(data.sid!==current?.id||current.card_locked)return dialog.close();
+   viewing=false;current.card.latitude=data.latitude;current.card.longitude=data.longitude;
+   for(const input of document.querySelectorAll('[data-field="latitude"],[data-field="longitude"]')){input.value=data[input.dataset.field];input.disabled=false;}
+   markDirty();$('save').hidden=false;dialog.close();$('mapDialog')?.close();notify('Координаты изменены в черновике. Сохраните карточку.');
+  };
+  dialog.append(message,apply,cancel);document.body.append(dialog);dialog.showModal();
  };
 }
 // Номер рабочего места оператор вводит при входе. Назначение преподавателя
@@ -65,7 +72,7 @@ let serviceNames = [];
 let routingView = null, routingFingerprint = '', routingRequest = 0;
 const pendingReviews = new Set();
 let catalog = null, routingCatalog = null, assignments = [], savedServices = new Set(), pendingServiceAction = null, pendingNotification = null;
-let studentUserId='',activeLessonId='',lessonFlowBusy=false,availableLessons=[];
+let studentUserId='',activeLessonId='',lessonFlowBusy=false,availableLessons=[],pendingLessonSessionId='';
 function chooseLesson(id){activeLessonId=id;if(studentUserId){if(id)sessionStorage.setItem('activeLesson:'+studentUserId,id);else sessionStorage.removeItem('activeLesson:'+studentUserId);}}
 function enterLessonCard(data,allowAutomaticSip=true){
  if(!allowAutomaticSip)attemptedLessonCalls.add(data.id);
@@ -89,9 +96,9 @@ function lessonExplanation(lesson){
   : lesson.mode==='fill'
   ? 'полный цикл 112: карточку заполняете вы со слов заявителя'
   : 'смешанное: и готовые карточки, и приём вызова';
- const channel=lesson.transport==='sip'
-  ? `разговор по телефону, ваш номер ${lesson.sip_extension||'не назначен'}`
-  : 'разговор текстом в окне «Диалог»';
+ const channel=lesson.mode==='actions'
+  ? lesson.sip_extension?`доклад голосом или текстом, ваш номер ${lesson.sip_extension}`:'доклад текстом; SIP-номер не назначен'
+  : lesson.transport==='sip'?`разговор по телефону, ваш номер ${lesson.sip_extension||'не назначен'}`:'разговор текстом в окне «Диалог»';
  const next=lesson.state==='running'&&!lesson.exhausted
   ? 'после завершения карточки сразу выдаётся следующая'
   : '';
@@ -125,10 +132,13 @@ async function refreshLessonFlow(){
   if(sending||dirty)return;
   if(current&&current.status!=='Завершена'&&current.lesson_id!==lesson.id){$('lessonState').textContent+=' · сначала завершите открытую карточку';return;}
   if(current?.lesson_id===lesson.id&&current.status!=='Завершена')return;
+  if(pendingLessonSessionId&&lesson.active_session_ids?.includes(pendingLessonSessionId))return;
   if(!catalog)await loadClassifier();
   const after=current?.lesson_id===lesson.id?current.id:null;
    const data=await api(`student/lessons/${lesson.id}/next`,'POST',{...(after?{after_session_id:after}:{}),...nextMode(),workstation:workstation()});
-   enterLessonCard(data,lesson.active_session_id!==data.id);
+   if(data.exercise_mode==='actions'&&!data.opened_at){
+    if(pendingLessonSessionId!==data.id){pendingLessonSessionId=data.id;await loadSessions();$('journalPanel').hidden=false;$('cardPanel').hidden=true;notify(`Поступила карточка № ${data.number}. Откройте её в журнале.`);}
+   }else enterLessonCard(data,lesson.active_session_id!==data.id);
  }catch(error){$('lessonState').textContent=error.message+' · повторная проверка автоматически';}
  finally{lessonFlowBusy=false;}
 }
@@ -186,8 +196,11 @@ function renderRows() {
  $('rows').replaceChildren(); $('empty').hidden = sessions.length > 0; $('count').textContent = `Записей: ${list.length}`;
  for (const s of list) {
   const row = document.createElement('tr'),detailId=`journal-detail-${s.id}`,expanded=expandedJournalRows.has(s.id);row.tabIndex=0;row.setAttribute('aria-label', `Происшествие ${s.number}`);
+  const awaitingReceipt=s.exercise_mode==='actions'&&s.owner_service&&!s.receipt_decided_at&&s.status!=='Завершена';
+  const receiptSeconds=awaitingReceipt?Math.ceil(30-(Date.now()-new Date(s.created_at).getTime())/1000):null;
+  const receiptLabel=awaitingReceipt?(receiptSeconds>0?` · ${receiptSeconds} с до подтверждения`:' · подтверждение просрочено'):'';
   const toggle=element('button',expanded?'⌃':'⌄','row-toggle');toggle.type='button';toggle.setAttribute('aria-expanded',String(expanded));toggle.setAttribute('aria-controls',detailId);toggle.setAttribute('aria-label',`${expanded?'Скрыть':'Показать'} сведения карточки ${s.number}`);const toggleCell=element('td');toggleCell.append(toggle);row.append(toggleCell);
-  const registration=s.registration||{},values=[(s.linked_cards||[]).length||'',s.card.bookmarked?'▮':'',s.card.important?'!':'',s.card.emergency?'ϟ':'',registration.operator||'—',registration.workstation||'—',s.number,new Date(s.created_at).toLocaleDateString('ru-RU'),new Date(s.created_at).toLocaleTimeString('ru-RU'),s.card.incident_type||'Не классифицировано',s.card.injured?'Да':'Нет',`${s.incident_status||'Новая'} / ${s.status}`,addressText(s.card)];
+  const registration=s.registration||{},values=[(s.linked_cards||[]).length||'',s.card.bookmarked?'▮':'',s.card.important?'!':'',s.card.emergency?'ϟ':'',registration.operator||'—',registration.workstation||'—',s.number,new Date(s.created_at).toLocaleDateString('ru-RU'),new Date(s.created_at).toLocaleTimeString('ru-RU'),s.card.incident_type||'Не классифицировано',s.card.injured?'Да':'Нет',`${s.incident_status||'Новая'} / ${s.status}${receiptLabel}`,addressText(s.card)];
   values.forEach((v,index)=>{const cell=element('td',v);if(index===11&&['Не оповещено','Отказ','Не завершено'].includes(s.incident_status))cell.classList.add('incident-status-abnormal');row.append(cell);});
   const view=element('button','▣','row-view');view.type='button';view.setAttribute('aria-label',`Открыть карточку ${s.number}`);const viewCell=element('td');viewCell.append(view);row.append(viewCell);$('rows').append(row);
   const description=element('tr',undefined,'description-row incident-detail-row');description.id=detailId;description.hidden=!expanded;const td=element('td');td.colSpan=15;
@@ -199,13 +212,17 @@ function renderRows() {
  }
  if (!list.length && sessions.length) { const tr=element('tr');const td=element('td','По заданным параметрам происшествий нет');td.colSpan=15;tr.append(td);$('rows').append(tr); }
 }
-async function openSession(id) { if (!confirmLeave()) return; if(!catalog)await loadClassifier(); current = await api('student/sessions/'+id);attachStoredDraft(current);attemptedLessonCalls.add(id);transcriptKey = ''; dirty = false; viewing = current.revision > 0; localStorage.setItem('studentSession',id); renderCard(); }
+async function openSession(id) { if (!confirmLeave()) return; const incoming=sessions.find(item=>item.id===id);current=incoming?.exercise_mode==='actions'&&incoming.status!=='Завершена'?await api(`student/sessions/${id}/open`,'POST',{}):await api('student/sessions/'+id);if(!incoming&&current.exercise_mode==='actions'&&current.status!=='Завершена')current=await api(`student/sessions/${id}/open`,'POST',{});if(!catalog)await loadClassifier();pendingLessonSessionId='';attachStoredDraft(current);attemptedLessonCalls.add(id);transcriptKey = ''; dirty = false; viewing = current.revision > 0; localStorage.setItem('studentSession',id); renderCard(); }
 function renderCard() {
  $('journalPanel').hidden = true; $('cardPanel').hidden = false; $('journal').classList.remove('selected'); $('openCard').classList.add('selected');
- const finished = current.status === 'Завершена', readonly = viewing || finished;
+  const finished = current.status === 'Завершена', readonly = Boolean(viewing || finished || current.card_locked);
  if(viewing||finished)savedServices=new Set(current.card.services||[]);
  $('cardPanel').classList.toggle('readonly',readonly); $('cardPanel').classList.remove('dirty');
  for (const input of fields) { if(input.type==='checkbox') input.checked=!!current.card[input.dataset.field]; else input.value=current.card[input.dataset.field] ?? ''; input.disabled=readonly; }
+ for(const [key,short,long] of [['injured','Пострадавшие','Пострадавшие'],['refused','Отказ от скорой','Нет на месте / Отказ от скорой'],['no_access','Заблокированные','Нет доступа / Заблокированные']]){
+  const input=fields.find(field=>field.dataset.field===key);
+  input.parentElement.replaceChildren(input,document.createTextNode(current.exercise_mode==='actions'?short:long));
+ }
  $('registrationInfo').textContent=current.registration?`${current.registration.operator} · ${current.registration.workstation}`:'Регистратор не указан в старой карточке';
  $('cardSeat').textContent=$('registrationInfo').textContent;
  $('cardNumber').textContent='Происшествие '+current.number;
@@ -213,8 +230,13 @@ function renderCard() {
  $('addressSummary').textContent=addressText(current.card); $('characters').textContent=current.card.description.length+' / 1999';
  $('saveState').textContent=finished?'Занятие завершено':current.revision?'Сохранено':'Новая карточка';updateIncidentState();
  $('restoreDraft').hidden=finished||dirty||!current.unsaved_draft;
- $('save').hidden=readonly; $('edit').hidden=!readonly||finished; $('finish').disabled=finished;$('processed').disabled=finished||!current.revision||!!current.processed_at;
- $('clearAddress').disabled=readonly; $('addService').hidden=readonly; $('responseSection').hidden=!current.revision;
+ $('save').hidden=readonly; $('edit').hidden=!readonly||finished||current.card_locked; $('finish').disabled=finished;$('processed').disabled=finished||!current.revision||!!current.processed_at;
+ $('cardView').disabled=readonly||!current.revision;
+ $('cardView').classList.toggle('active',readonly);
+ $('cardSupplement').hidden=finished||current.card_locked;
+ $('cardSupplement').disabled=!readonly;
+ $('cardSupplement').classList.toggle('active',!readonly);
+ $('clearAddress').disabled=readonly; $('addService').hidden=readonly||current.exercise_mode==='actions'; $('responseSection').hidden=!current.revision;
  $('responseService').disabled=finished; $('responseStatus').disabled=finished; $('responseOrderNumber').disabled=finished; $('responseComment').disabled=finished; $('addResponse').disabled=finished;
  $('callStatus').textContent=finished?'завершён':current.transport==='text'?'текстовое обращение':current.call_id?'SIP: проверка связи…':'не подключен';
  $('sipCall').hidden=current.transport!=='sip'; $('sipCall').disabled=finished||!!current.call_id;
@@ -225,10 +247,57 @@ function renderCard() {
  // сам, и тогда открывается диалог с заявителем.
  const dds=current.exercise_mode==='actions';
  $('cardPanel').classList.toggle('dds-mode',dds);
+ if(!$('cardTutorial')){
+  const tutorial=element('button','?','square');tutorial.id='cardTutorial';tutorial.type='button';
+  tutorial.title='Обучение работе с АРМ';tutorial.setAttribute('aria-label',tutorial.title);
+  tutorial.onclick=()=>window.startOnboarding?.();$('closeCard').before(tutorial);
+ }
+ if($('cardPanel').dataset.responseSession!==current.id){
+  $('cardPanel').classList.remove('response-open');$('cardPanel').dataset.responseSession=current.id;
+ }
+ // Keep dispatcher tools available without turning the saved card into a table.
+ if(!$('closeResponsePanel')){
+  const close=element('button','×');close.id='closeResponsePanel';close.type='button';
+  close.setAttribute('aria-label','Закрыть реагирование');
+  close.onclick=()=>$('cardPanel').classList.remove('response-open');
+  $('responseSection').prepend(close);
+  const grammar=element('button','Проверить текст');grammar.type='button';grammar.id='checkGrammar';
+  grammar.onclick=()=>guarded(async()=>{
+   const report=await api('student/grammar/preview','POST',{card:readCard(),comment:$('responseComment').value});
+   let dialog=$('grammarDialog');if(!dialog){dialog=element('dialog');dialog.id='grammarDialog';document.body.append(dialog);}
+   dialog.replaceChildren(element('h2','Проверка текста'));
+   const labels={description:'Описание',caller_name:'Заявитель',street:'Улица',address_note:'Описательный адрес','service_comment:1':'Комментарий службы'};
+   for(const item of [...report.mechanical,...(report.suggestions||[])])dialog.append(element('p',`${labels[item.field]||item.field}: ${item.hint}${item.fragment?' — '+item.fragment:''}`));
+   if(!report.errors&&!(report.suggestions||[]).length)dialog.append(element('p','Опечаток проверяемых типов не найдено.'));
+   const close=element('button','Закрыть');close.type='button';close.onclick=()=>dialog.close();dialog.append(close);dialog.showModal();
+  });
+  $('responseSection').querySelector('.response-tools').append(grammar);
+  const progress=element('button','Уточнить ход работ');progress.id='requestProgress';progress.type='button';
+  progress.onclick=()=>guarded(async()=>{
+   if(dirty)throw Error('Сначала сохраните изменения карточки');
+   const sid=current.id;progress.disabled=true;
+   try{const result=await api(`student/sessions/${sid}/progress`,'POST',{});
+    if(current?.id!==sid)return;current=result;renderCard();
+    let dialog=$('progressDialog');if(!dialog){dialog=element('dialog');dialog.id='progressDialog';document.body.append(dialog);}
+    dialog.replaceChildren(element('h2','Старший бригады'),element('p',result.progress_message));
+    const close=element('button','Закрыть');close.type='button';close.onclick=()=>dialog.close();dialog.append(close);dialog.showModal();
+   }finally{progress.disabled=current?.status==='Завершена'||!current?.assigned_crew;}
+  });
+  $('responseSection').querySelector('.response-tools').append(progress);
+  const tools=element('button','✎');tools.id='cardResponseTools';tools.type='button';
+  tools.setAttribute('aria-label','Действия карточки и реагирование');
+  tools.onclick=()=>{const panel=$('cardPanel');if(panel.classList.contains('response-compact')){panel.classList.remove('response-compact');panel.classList.add('response-open');}else panel.classList.toggle('response-open');};
+  $('closeCard').before(tools);
+ }
  $('modeNote').textContent=dds?'АРМ диспетчера ДДС':'Расширенный режим: приём вызова 112';
+ $('requestProgress').hidden=!dds;$('requestProgress').disabled=finished||!current.assigned_crew;
+ let evidence=$('correctionEvidence');if(!evidence){evidence=element('div');evidence.id='correctionEvidence';}
+ $('cardPanel').querySelector('.phone-row').after(evidence);
+ evidence.replaceChildren();for(const text of current.correction_evidence||[])evidence.append(element('p','Уточнение от источника: '+text));
+ if(dds&&current.handling_limit_seconds)$('timer').title=`Приём: 30 с. Обработка с учётом вводных: ${current.handling_limit_seconds} с.`;
  $('conversation').hidden=dds;
  if(dds){$('messageForm').hidden=true;$('speak').disabled=true;$('callStatus').textContent='карточка передана Службой 112';}
- $('openNotification').disabled=finished||!current.revision;$('openForward').disabled=finished||!current.revision;$('openBriefing').disabled=finished||!current.revision;$('openLinks').disabled=finished||!current.revision;$('openReminder').disabled=finished;$('printCard').hidden=!current.revision;$('printCard').disabled=false;renderSurvey(); renderServices(); renderDialogue(); renderServiceHistory();renderNotificationHistory();renderLinkedCards(); renderSituationUpdates(); tick();
+ $('openNotification').disabled=finished||!current.revision;$('openForward').hidden=dds;$('openForward').disabled=dds||finished||!current.revision;$('openBriefing').disabled=finished||!current.revision;$('openLinks').disabled=finished||!current.revision;$('openReminder').disabled=finished;$('printCard').hidden=!current.revision;$('printCard').disabled=false;renderSurvey(); renderServices();renderCrew();renderDialogue();renderServiceHistory();renderNotificationHistory();renderLinkedCards();renderSituationUpdates();tick();
  const pending=storedMessage(current.id);if(pending&&current.transport==='text'&&current.status!=='Завершена'){$('operatorText').value=pending.text;$('send').textContent='Повторить отправку';}
  if(!finished&&current.lesson_id&&current.transport==='sip'&&!current.call_id&&!attemptedLessonCalls.has(current.id)){
   attemptedLessonCalls.add(current.id);startSipCall();
@@ -240,9 +309,46 @@ function renderCard() {
 const seenUpdates=new Set();
 function renderSituationUpdates(){
  const list=current?.situation_updates||[];
+ const pending=current?.pending_phone_reports||[];
  const box=$('situationFeed');
  box.replaceChildren();
- box.hidden=!list.length;
+ box.hidden=!list.length&&!pending.length;
+ for(const item of pending){
+  const line=element('article',undefined,'situation-update');
+  line.append(element('small',`${item.source} · ожидается телефонный доклад`));
+  const button=element('button',item.call_id?'Подтвердить услышанный доклад':'Принять телефонный доклад');
+  button.type='button';
+  button.addEventListener('click',()=>guarded(async()=>{
+   button.disabled=true;
+   try{
+    const action=item.call_id?'confirm':'call';
+    const sid=current.id;
+    const data=await api(`student/sessions/${sid}/updates/${encodeURIComponent(item.id)}/${action}`,'POST',{});
+    if(current?.id!==sid)return;
+    Object.assign(current,{pending_phone_reports:data.pending_phone_reports,
+     situation_updates:data.situation_updates,events:data.events,
+     allowed_service_statuses:data.allowed_service_statuses,
+     field_report_calls:data.field_report_calls});
+    renderSituationUpdates();renderServices();
+    notify(action==='call'?'Примите вызов на учебный IP-телефон. После доклада подтвердите получение.':'Телефонный доклад внесён в карточку.');
+   }finally{button.disabled=false;}
+  }));
+  line.append(button);
+  if(item.call_id){
+   const retry=element('button','Повторить вызов');retry.type='button';
+   retry.addEventListener('click',()=>guarded(async()=>{
+    retry.disabled=true;
+    try{
+     const sid=current.id;
+     const data=await api(`student/sessions/${sid}/updates/${encodeURIComponent(item.id)}/call`,'POST',{});
+     if(current?.id!==sid)return;
+     current.pending_phone_reports=data.pending_phone_reports||[];
+     renderSituationUpdates();notify('Проверьте вызов на учебном IP-телефоне.');
+    }finally{retry.disabled=false;}
+   }));line.append(retry);
+  }
+  box.append(line);
+ }
  for(const item of list){
   const line=element('article',undefined,'situation-update');
   line.append(element('small',`${formatted(item.at)} · ${item.source}`),element('p',item.text));
@@ -251,9 +357,16 @@ function renderSituationUpdates(){
 }
 function receiveSituationUpdates(data){
  const list=data.situation_updates||[];
- if(list.length===(current.situation_updates||[]).length)return;
+ const oldPending=(current.pending_phone_reports||[]).map(item=>item.id+':'+(item.call_id||'')).join('|');
+ const newPending=(data.pending_phone_reports||[]).map(item=>item.id+':'+(item.call_id||'')).join('|');
+ if(list.length===(current.situation_updates||[]).length&&oldPending===newPending)return;
  current.situation_updates=list;
+ current.pending_phone_reports=data.pending_phone_reports||[];
  current.events=data.events||current.events;
+ const selectedStatus=$('responseStatus').value;
+ current.allowed_service_statuses=data.allowed_service_statuses||current.allowed_service_statuses;
+ populateResponseStatuses();
+ if([...$('responseStatus').options].some(option=>option.value===selectedStatus))$('responseStatus').value=selectedStatus;
  renderSituationUpdates();
  for(const item of list){
   if(seenUpdates.has(item.id))continue;
@@ -283,7 +396,14 @@ function renderDdsReview(){
  box.append(element('small',review.note,'subtle'));
 }
 function updateIncidentState(){$('incidentState').textContent=`Происшествие: ${current.incident_status||'Новая'} · занятие: ${current.status}`;}
-$('openMap').onclick=()=>{if(!current)return;if(dirty){notify('Сначала сохраните карточку: карта показывает сохранённые координаты.',true);return;}window.open('/map?sid='+encodeURIComponent(current.id),'_blank','noopener,noreferrer,width=1100,height=760');};
+$('openMap').onclick=event=>{
+ event.preventDefault();if(!current)return;
+ if(dirty){notify('Сначала сохраните карточку: карта показывает сохранённые координаты.',true);return;}
+ let dialog=$('mapDialog');
+ if(!dialog){dialog=element('dialog');dialog.id='mapDialog';dialog.style.cssText='width:min(1100px,95vw);max-width:95vw;padding:12px';const close=element('button','Закрыть карту');close.type='button';close.onclick=()=>dialog.close();const frame=element('iframe');frame.title='Карта происшествия';frame.style.cssText='width:100%;height:75vh;border:0';dialog.append(close,frame);document.body.append(dialog);}
+ dialog.querySelector('iframe').src='/map?sid='+encodeURIComponent(current.id);dialog.showModal();
+};
+addEventListener('message',event=>{if(event.origin===location.origin&&event.source===$('mapDialog')?.querySelector('iframe')?.contentWindow&&event.data?.type==='close-map')$('mapDialog').close();});
 // Реальная опросная карта задаёт вопросы, а не нумерует признаки: «где»,
 // «что именно», «какие обстоятельства». Уровни классификатора по смыслу
 // ложатся на эти три вопроса, и подписи помогают оператору выбирать по слуху,
@@ -301,7 +421,7 @@ function renderSurvey() {
  for(let level=0;level<3&&candidates.length;level++){
   const choices=[...new Set(candidates.map(r=>r.features[level]))];
   const row=element('div',undefined,'survey-row'),options=element('div',undefined,'options');row.append(element('span',surveyQuestion(level)),options);
-  for(const value of choices){const active=selected.length>level&&selected[level]===value;if(readonly){if(active)options.append(element('span',value||'Не задан в источнике','survey-value'));continue;}const b=element('button',value||'Не задан в источнике',active?'active':'');b.type='button';b.setAttribute('aria-pressed',String(active));b.onclick=()=>{c.classifier_features=selected.slice(0,level).concat(value);c.classifier_id='';c.incident_type='';chooseRecord();markDirty();renderSurvey();guarded(refreshRouting);};options.append(b);}
+  for(const value of choices){const active=selected.length>level&&selected[level]===value;if(readonly){if(active&&value)options.append(element('span',value,'survey-value'));continue;}const b=element('button',value||'Не задан в источнике',active?'active':'');b.type='button';b.setAttribute('aria-pressed',String(active));b.onclick=()=>{c.classifier_features=selected.slice(0,level).concat(value);c.classifier_id='';c.incident_type='';chooseRecord();markDirty();renderSurvey();guarded(refreshRouting);};options.append(b);}
   $('surveyOptions').append(row);
   if(selected.length<=level)break;
   candidates=candidates.filter(r=>r.features[level]===selected[level]);
@@ -318,14 +438,25 @@ function primaryServices(){
  return routingView?.primary_services||current?.routing?.primary_services||[];
 }
 function renderServices() {
+ if(!window.ddsFooterObserver&&window.ResizeObserver){
+  window.ddsFooterObserver=new ResizeObserver(entries=>{
+   for(const entry of entries)$('cardPanel').style.setProperty('--dds-footer-height',`${entry.target.getBoundingClientRect().height+8}px`);
+  });
+  window.ddsFooterObserver.observe($('services').parentElement);
+ }
+ const opened=new Set([...$('services').querySelectorAll('details[open]')].map(item=>item.dataset.service));
  $('services').replaceChildren(); $('responseService').replaceChildren();
  for (const service of current.card.services) {
   const tile=element('details',undefined,'service-tile'),summary=element('summary'),state=current.service_states[service]||{};
+  tile.dataset.service=service;tile.open=opened.has(service);
+  tile.ontoggle=()=>{if(tile.open)for(const other of $('services').querySelectorAll('details[open]'))if(other!==tile)other.open=false;};
   const name=element('strong',service);
   // Основная служба для типа происшествия подчёркнута двойной линией: в
   // реальном АРМ по этому признаку оператор видит, кто отвечает за вызов.
   if(primaryServices().includes(service)){name.classList.add('primary-service');name.title='Основная служба для этого типа происшествия';}
   summary.append(name);
+  const contact=current.card.service_phones?.[service];
+  if(contact&&current.exercise_mode!=='actions')summary.append(element('small',`☎ ${contact}`));
   // Своя ДДС выделена: статусы диспетчер ведёт только по ней, остальные
   // службы он видит, но их состояние приходит от них самих.
   if(current.owner_service&&service===current.owner_service){
@@ -335,18 +466,46 @@ function renderServices() {
    tile.classList.add('foreign-service');
   }
   if(state.source==='vis')summary.append(element('span','ВИС','vis-badge'));
-  summary.append(element('small',state.status||'Добавлена'));if(state.at)summary.append(element('small',formatted(state.at)));tile.append(summary);
+  const stamp=state.at||state.added_at;
+  const statusText=current.exercise_mode==='actions'
+   ?`${stamp?new Date(stamp).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})+' ':''}${state.status||'Добавлена'}`
+   :state.status||'Добавлена';
+  summary.append(element('small',statusText,'service-status'));if(stamp&&current.exercise_mode!=='actions')summary.append(element('small',formatted(stamp)));tile.append(summary);
   const history=current.events.filter(e=>e.type==='service.updated'&&e.detail.service===service),list=element('div',undefined,'service-tile-history');
+  if(contact)list.append(element('p',`Телефон: ${contact}`));
   if(!history.length)list.append(element('small','История статусов пока пуста'));
   for(const event of history){const item=element('p');item.append(element('b',event.detail.status),document.createTextNode(` · ${formatted(event.at)}`));if(event.detail.order_number)item.append(element('span',`Наряд: ${event.detail.order_number}`));if(event.detail.comment)item.append(element('span',event.detail.comment));list.append(item);}
   tile.append(list);$('services').append(tile);
+  if(current.exercise_mode==='actions'&&service===current.owner_service){
+   const edit=element('button','✎','service-edit');edit.type='button';
+   edit.setAttribute('aria-label','Реагирование своей службы');
+   edit.onclick=event=>{event.preventDefault();event.stopPropagation();const panel=$('cardPanel');panel.classList.add('response-compact');panel.classList.toggle('response-open');};
+   summary.append(edit);
+  }
   if(!current.owner_service||service===current.owner_service)$('responseService').add(new Option(service,service));
  }
  populateResponseStatuses();
 }
+function renderCrew(){
+ const choices=current.crew_options||[],box=$('crewSection'),selected=current.assigned_crew;
+ box.hidden=current.exercise_mode!=='actions'||!choices.length;
+ if(box.hidden)return;
+ $('crewAssigned').textContent=selected?`${selected.id} · ${selected.leader} · ${selected.phone} · решение: ${selected.decision_by==='leadership'?'руководитель':'диспетчер'}`:'Выберите бригаду после принятия карточки.';
+ $('crewSelect').replaceChildren();
+ for(const choice of choices)$('crewSelect').add(new Option(`${choice.id} · ${choice.leader} · ${choice.phone}`,choice.id));
+ $('crewForm').hidden=!!selected||current.status==='Завершена';
+ $('crewForm').querySelector('button').disabled=current.service_states?.[current.owner_service]?.status!=='Принята';
+}
+$('assignCrew').onclick=()=>{guarded(async()=>{
+ if(dirty)throw Error('Сначала сохраните карточку');
+ current=await api(`student/sessions/${current.id}/crew`,'POST',{
+  message_id:crypto.randomUUID(),crew_id:$('crewSelect').value,
+  decision_by:$('crewDecision').value,decision_note:$('crewDecisionNote').value.trim()});
+ renderCard();notify('Бригада назначена');
+});};
 function populateResponseStatuses(){const values=current?.allowed_service_statuses?.[$('responseService').value]||[];
- $('responseHint').textContent=values.length?'':(current?.owner_service?'Следующий статус откроется, когда служба сообщит о ходе работ.':'');$('responseStatus').replaceChildren();for(const value of values)$('responseStatus').add(new Option(value,value));const terminal=!values.length||current.status==='Завершена';$('responseStatus').disabled=terminal;$('responseOrderNumber').disabled=terminal;$('responseComment').disabled=terminal;$('addResponse').disabled=terminal;updateResponseHint();}
-function updateResponseHint(){$('responseComment').placeholder=$('responseStatus').value==='Работы завершены'?'Укажите: «Завершение работ без бригады», если применимо':'Комментарий (обязателен при отказе)';}
+ $('responseHint').textContent=current?.card_locked?'Работа с карточкой завершена.':values.length?'':(current?.owner_service?'Следующий статус откроется, когда служба сообщит о ходе работ.':'');$('responseStatus').replaceChildren();for(const value of values)$('responseStatus').add(new Option(value,value));const terminal=!values.length||current.status==='Завершена';$('responseStatus').disabled=terminal;$('responseOrderNumber').disabled=terminal;$('responseComment').disabled=terminal;$('addResponse').disabled=terminal;updateResponseHint();}
+function updateResponseHint(){$('responseComment').placeholder=$('responseStatus').value==='Работы завершены'?(current?.owner_service==='103'&&!current?.assigned_crew?'Укажите результат; без бригады — «Завершение работ без бригады»':'Результат работ: что сделано и какова обстановка'):'Комментарий (обязателен при отказе)';}
 $('responseService').onchange=populateResponseStatuses;$('responseStatus').onchange=updateResponseHint;
 function renderServiceHistory() {
  $('serviceHistory').replaceChildren();
@@ -375,7 +534,7 @@ assignments=await api('student/assignments');const lessons=await api('student/le
 }
 function selectTransport(){const assignment=assignments.find(a=>a.id===$('scenario').value);$('transport').disabled=!!assignment?.lesson;if(assignment?.lesson)$('transport').value=assignment.transport||'text';}
 $('scenario').addEventListener('change',selectTransport);
-$('newForm').onsubmit=e=>{e.preventDefault();guarded(async()=>{$('start').disabled=true;try{const assignment=assignments.find(a=>a.id===$('scenario').value);if(!assignment)throw Error('Выберите назначенное занятие');if(assignment.lesson)chooseLesson(assignment.id);else chooseLesson('');current=assignment.lesson?await api(`student/lessons/${assignment.id}/next`,'POST',{...nextMode(),workstation:workstation()}):await api('student/sessions','POST',{scenario_id:assignment.scenario_id,assignment_id:assignment.id,transport:$('transport').value,workstation:workstation()});attachStoredDraft(current);if(assignment.lesson&&assignment.active_session_id===current.id)attemptedLessonCalls.add(current.id);dirty=false;viewing=false;transcriptKey='';localStorage.setItem('studentSession',current.id);renderCard();$('newDialog').close();if(current.exercise_mode!=='actions')$('dialogueDialog').showModal();else notify('Готовая карточка: внесите действия и результаты реагирования служб');}finally{$('start').disabled=!assignments.length;}});};
+$('newForm').onsubmit=e=>{e.preventDefault();guarded(async()=>{$('start').disabled=true;try{const assignment=assignments.find(a=>a.id===$('scenario').value);if(!assignment)throw Error('Выберите назначенное занятие');if(assignment.lesson)chooseLesson(assignment.id);else chooseLesson('');current=assignment.lesson?await api(`student/lessons/${assignment.id}/next`,'POST',{...nextMode(),workstation:workstation()}):await api('student/sessions','POST',{scenario_id:assignment.scenario_id,assignment_id:assignment.id,transport:$('transport').value,workstation:workstation()});if(current.exercise_mode==='actions')current=await api(`student/sessions/${current.id}/open`,'POST',{});pendingLessonSessionId='';attachStoredDraft(current);if(assignment.lesson&&assignment.active_session_id===current.id)attemptedLessonCalls.add(current.id);dirty=false;viewing=false;transcriptKey='';localStorage.setItem('studentSession',current.id);renderCard();$('newDialog').close();if(current.exercise_mode!=='actions')$('dialogueDialog').showModal();else notify('Готовая карточка: внесите действия и результаты реагирования служб');}finally{$('start').disabled=!assignments.length;}});};
 $('messageForm').onsubmit=e=>{e.preventDefault();if(sending)return;guarded(async()=>{const text=$('operatorText').value.trim();if(!text)return;const sid=current.id,previous=storedMessage(sid),pending=previous?.text===text?previous:{text,message_id:crypto.randomUUID()};storeMessage(sid,pending);sending=true;$('send').disabled=true;$('send').textContent='Заявитель отвечает…';$('dialogueError').textContent='';try{const result=await api(`student/sessions/${sid}/messages`,'POST',pending);if(current?.id!==sid)return;current.messages=result.messages;current.provider_error=result.provider_error;clearMessage(sid);renderDialogue();$('operatorText').value='';if(!result.provider_error)say(result.messages.at(-1)?.content||'');}finally{sending=false;$('send').disabled=false;$('send').textContent=storedMessage(sid)?'Повторить отправку':'Отправить';}});};
 // Инструкция оператора: по «Сохранить» система спрашивает подтверждение и
 // показывает, каким службам уйдут сведения. Первое сохранение карточки со
@@ -410,11 +569,13 @@ $('sendVis').onclick=()=>guarded(async()=>{
 });
 $('restoreDraft').onclick=()=>{if(!current?.unsaved_draft||current.status==='Завершена')return;current.card=JSON.parse(JSON.stringify(current.unsaved_draft));viewing=false;dirty=true;renderCard();markDirty();notify('Черновик восстановлен. Проверьте поля и сохраните карточку.');};
 $('edit').onclick=()=>{viewing=false;renderCard();};
-$('finish').onclick=()=>{if(sending){notify('Дождитесь ответа заявителя');return;}$('finishDialog').showModal();};
-$('confirmFinish').onclick=()=>guarded(async()=>{const button=$('confirmFinish');button.disabled=true;try{if(dirty||!current.revision)await saveCard();current=await api(`student/sessions/${current.id}/finish`,'POST');dirty=false;viewing=true;window.speechSynthesis?.cancel();$('finishDialog').close();renderCard();if(current.lesson_id){chooseLesson(current.lesson_id);await refreshLessonFlow();if(current.status==='Завершена')showAudit();}else showAudit();}finally{button.disabled=false;}});
+$('cardView').onclick=()=>{if(dirty){notify('Сначала сохраните дополнение карточки.',true);return;}viewing=true;renderCard();};
+$('cardSupplement').onclick=()=>$('edit').click();
+$('finish').onclick=()=>{if(sending){notify('Дождитесь ответа заявителя');return;}if($('finishError'))$('finishError').textContent='';$('finishDialog').showModal();};
+$('confirmFinish').onclick=()=>guarded(async()=>{const button=$('confirmFinish');button.disabled=true;try{if(dirty||!current.revision)await saveCard();current=await api(`student/sessions/${current.id}/finish`,'POST');dirty=false;viewing=true;window.speechSynthesis?.cancel();$('finishDialog').close();renderCard();if(current.lesson_id){chooseLesson(current.lesson_id);await refreshLessonFlow();if(current.status==='Завершена')showAudit();}else showAudit();}catch(error){let message=$('finishError');if(!message){message=element('p');message.id='finishError';message.setAttribute('role','alert');button.before(message);}message.textContent=error.message;throw error;}finally{button.disabled=false;}});
 $('processed').onclick=()=>guarded(async()=>{if(!current||current.status==='Завершена'||current.processed_at)return;if(dirty||!current.revision)throw Error('Сначала сохраните карточку');const button=$('processed');button.disabled=true;try{current=await api(`student/sessions/${current.id}/processed`,'POST',{});dirty=false;viewing=true;renderCard();notify('Происшествие отмечено как отработанное. Занятие не завершено.');}finally{button.disabled=!!current.processed_at;}});
 function renderServiceChoices(){
- const readonly=viewing||current.status==='Завершена';$('serviceChoices').replaceChildren();
+ const readonly=viewing||current.status==='Завершена'||current.exercise_mode==='actions';$('serviceChoices').replaceChildren();
  // Подобранные классификатором службы выделяются, как в реальном АРМ: оператор
  // должен видеть, что предложила система, и что он добавил руками.
  const suggested=new Set((routingView?.suggestions||current?.routing?.suggestions||[]).map(item=>item.service));
@@ -448,13 +609,14 @@ function renderRouting(result){
  for(const warning of result.warnings)panel.append(element('p',warning,'routing-warning'));
 }
 async function refreshRouting(){
+ if(current.exercise_mode==='actions')return;
  const request=++routingRequest,sid=current.id,card=readCard(),fingerprint=JSON.stringify(card);
  routingView=null;$('applyRouting').disabled=true;$('routingPreview').replaceChildren(element('p','Подбор служб…'));
  try{const result=await api('student/routing/preview','POST',card);if(request!==routingRequest||current.id!==sid||JSON.stringify(readCard())!==fingerprint)return;routingView=result;routingFingerprint=fingerprint;const added=result.suggestions.map(s=>s.service).filter(s=>!current.card.services.includes(s));if(added.length){current.card.services=[...new Set([...current.card.services,...added])];if(current.card.services.length>100)throw Error('В карточке допускается не более 100 служб');dirty=true;for(const id of ['processed','openForward','openBriefing','openNotification','openLinks','printCard'])$(id).disabled=true;$('saveState').textContent='Не сохранено';$('cardPanel').classList.add('dirty');renderServices();}if($('serviceDialog').open)renderServiceChoices();renderServices();renderRouting(result);$('applyRouting').disabled=!result.suggestions.length;}
  catch(e){if(request===routingRequest){$('routingPreview').replaceChildren(element('p',e.message,'routing-warning'));}throw e;}
 }
 function openServices(){
- const readonly=viewing||current.status==='Завершена';routingRequest++;routingView=null;$('applyRouting').disabled=true;
+ const readonly=viewing||current.status==='Завершена'||current.exercise_mode==='actions';routingRequest++;routingView=null;$('applyRouting').disabled=true;
  $('routingFlags').disabled=readonly;$('refreshRouting').hidden=readonly;$('applyRouting').hidden=readonly;
  const card=readCard();$('routingContext').textContent=`Пострадавшие: ${card.injured?'да':'нет'}. Нет доступа: ${card.no_access?'да':'нет'}. Эти признаки меняются в верхней части карточки. Отказ от скорой не считается признаком «не на месте».`;
  renderServiceChoices();$('serviceDialog').showModal();if(readonly)renderRouting(current.routing);else guarded(refreshRouting);
@@ -464,7 +626,7 @@ $('addService').onclick=openServices;
 const routingInfo=element('button','основания');routingInfo.type='button';routingInfo.id='routingInfo';routingInfo.onclick=openServices;$('addService').after(routingInfo);
 $('refreshRouting').onclick=()=>guarded(refreshRouting);
 $('applyRouting').onclick=()=>{
- if(!routingView||routingFingerprint!==JSON.stringify(readCard())||viewing||current.status==='Завершена')return;
+ if(!routingView||routingFingerprint!==JSON.stringify(readCard())||viewing||current.status==='Завершена'||current.exercise_mode==='actions')return;
  const services=[...new Set([...current.card.services,...routingView.suggestions.map(s=>s.service)])];
  if(services.length>100){notify('В карточке допускается не более 100 служб',true);return;}
  current.card.services=services;markDirty();renderServices();renderServiceChoices();notify('Службы добавлены. Сохраните карточку.');
@@ -472,7 +634,7 @@ $('applyRouting').onclick=()=>{
 $('addResponse').onclick=()=>guarded(async()=>{if(dirty)throw Error('Сначала сохраните карточку');const service=$('responseService').value,status=$('responseStatus').value,order_number=$('responseOrderNumber').value.trim(),comment=$('responseComment').value.trim(),signature=JSON.stringify({sid:current.id,service,status,order_number,comment});if(!service||!status)throw Error('Для этой службы нет доступных статусов');if(!pendingServiceAction||pendingServiceAction.signature!==signature)pendingServiceAction={signature,body:{message_id:crypto.randomUUID(),service,status,order_number,comment}};const button=$('addResponse');button.disabled=true;try{current=await api(`student/sessions/${current.id}/services`,'POST',pendingServiceAction.body);pendingServiceAction=null;$('responseOrderNumber').value='';$('responseComment').value='';renderCard();notify('Статус службы сохранён');}finally{populateResponseStatuses();}});
 function renderNotificationHistory(){$('notificationHistory').replaceChildren();for(const item of current.notifications||[]){const tr=element('tr');for(const value of [formatted(item.at),item.service,item.destination,item.phone,item.recipient,item.comment||'—',item.operator||item.operator_name||'Оператор'])tr.append(element('td',value));$('notificationHistory').append(tr);}}
 function renderLinkedCards(){$('linkedCards').replaceChildren();if(!(current.linked_cards||[]).length)return;$('linkedCards').append(element('strong','Связанные карточки: '));for(const item of current.linked_cards){const button=element('button',`№ ${item.number}`);button.type='button';button.onclick=()=>guarded(async()=>{if(!confirmLeave())return;$('linksDialog').close();await openSession(item.id);});$('linkedCards').append(button);}}
-$('openNotification').onclick=()=>{if(dirty){notify('Сначала сохраните карточку',true);return;}if(!current?.revision||current.status==='Завершена')return;$('notificationService').replaceChildren();for(const service of current.card.services)$('notificationService').add(new Option(service,service));$('notificationDialog').showModal();};
+$('openNotification').onclick=()=>{if(dirty){notify('Сначала сохраните карточку',true);return;}if(!current?.revision||current.status==='Завершена')return;$('notificationService').replaceChildren();for(const service of current.card.services)if(current.exercise_mode!=='actions'||current.card.service_phones?.[service])$('notificationService').add(new Option(service,service));if(!$('notificationService').options.length){notify('У получателей нет доступных телефонов',true);return;}$('notificationDialog').showModal();};
 $('notificationForm').onsubmit=event=>{event.preventDefault();guarded(async()=>{if(dirty)throw Error('Сначала сохраните карточку');const body={service:$('notificationService').value,destination:$('notificationDestination').value.trim(),phone:$('notificationPhone').value.trim(),recipient:$('notificationRecipient').value.trim(),comment:$('notificationComment').value.trim()},signature=JSON.stringify({sid:current.id,...body});if(!pendingNotification||pendingNotification.signature!==signature)pendingNotification={signature,body:{message_id:crypto.randomUUID(),...body}};const button=$('saveNotification');button.disabled=true;try{current=await api(`student/sessions/${current.id}/notifications`,'POST',pendingNotification.body);pendingNotification=null;for(const id of ['notificationDestination','notificationPhone','notificationRecipient','notificationComment'])$(id).value='';$('notificationDialog').close();renderCard();notify('Телефонограмма записана.');}finally{button.disabled=false;}});};
 $('openLinks').onclick=()=>{if(dirty){notify('Сначала сохраните карточку',true);return;}if(!current?.revision||current.status==='Завершена')return;$('linkTarget').replaceChildren();const linked=new Set((current.linked_cards||[]).map(v=>v.id));for(const item of sessions)if(item.id!==current.id&&!linked.has(item.id))$('linkTarget').add(new Option(`№ ${item.number} · ${item.card.incident_type||'без типа'} · ${addressText(item.card)}`,item.id));$('addLink').disabled=!$('linkTarget').options.length;$('linksDialog').showModal();};
 $('addLink').onclick=()=>guarded(async()=>{if(dirty)throw Error('Сначала сохраните карточку');const target_id=$('linkTarget').value;if(!target_id)throw Error('Нет доступной карточки для связи');const button=$('addLink');button.disabled=true;try{current=await api(`student/sessions/${current.id}/links`,'POST',{target_id});$('linksDialog').close();renderCard();notify('Ссылка на карточку сохранена');}finally{button.disabled=false;}});
@@ -486,7 +648,7 @@ function showAudit() {
  if(current.exercise_mode==='actions')$('auditContent').append(element('p','Выдана готовая карточка. Действия и изменения фиксируются отдельно.'));
  renderDdsReview();
  if(current.action_report)$('auditContent').append(element('p',`Изменено полей: ${current.action_report.changed_fields.length}. Действий служб: ${current.action_report.service_actions}. ${current.action_report.note}`));
- if(finished&&current.lesson_id){const next=element('button','Следующая карточка серии');next.onclick=()=>guarded(async()=>{next.disabled=true;try{const result=await api(`student/lessons/${current.lesson_id}/next`,'POST',{...nextMode(),workstation:workstation()});current=result;dirty=false;viewing=false;transcriptKey='';localStorage.setItem('studentSession',current.id);$('auditDialog').close();renderCard();if(current.exercise_mode!=='actions')$('dialogueDialog').showModal();else notify('Готовая карточка: внесите действия и результаты реагирования служб');}finally{next.disabled=false;}});$('auditContent').append(next);}
+ if(finished&&current.lesson_id){const next=element('button','Следующая карточка серии');next.onclick=()=>guarded(async()=>{next.disabled=true;try{const result=await api(`student/lessons/${current.lesson_id}/next`,'POST',{...nextMode(),workstation:workstation()});current=result.exercise_mode==='actions'?await api(`student/sessions/${result.id}/open`,'POST',{}):result;pendingLessonSessionId='';dirty=false;viewing=false;transcriptKey='';localStorage.setItem('studentSession',current.id);$('auditDialog').close();renderCard();if(current.exercise_mode!=='actions')$('dialogueDialog').showModal();else notify('Готовая карточка: внесите действия и результаты реагирования служб');}finally{next.disabled=false;}});$('auditContent').append(next);}
  $('requestReview').hidden=!finished;
  $('requestReview').disabled=pendingReviews.has(current.id)||['ready','mock'].includes(review?.status);
  $('requestReview').textContent=pendingReviews.has(current.id)?'ИИ анализирует…':review?.status==='failed'?'Повторить ИИ-разбор':['ready','mock'].includes(review?.status)?'ИИ-разбор сохранён':'Получить ИИ-разбор';
@@ -497,10 +659,11 @@ function showAudit() {
    $('auditContent').append(element('p',`${report.score_percent}% · ${report.earned_weight} из ${report.total_weight} баллов по эталону «${report.rubric_title}», версия ${report.rubric_revision}.`));
    const timing=report.timing;$('auditContent').append(element('p',`Время занятия: ${timing.elapsed_seconds} сек. Лимит задания: ${timing.limit_seconds} сек. ${timing.within_limit?'В пределах лимита.':'Лимит превышен.'} Время не включено в балл за поля.`));
    for(const criterion of report.criteria){const item=element('article');item.append(element('strong',`${criterion.passed?'✓':'Ошибка'} · ${criterion.label} (${criterion.passed?criterion.weight:0}/${criterion.weight})`));item.append(element('p','Ваш ответ: '+JSON.stringify(criterion.actual)));item.append(element('p','Эталон: '+criterion.expected.join(' / ')));if(!criterion.passed)item.append(element('p',criterion.recommendation));$('auditContent').append(item);}
-  }else $('auditContent').append(element('p',report?'Оценка не выставлена: при старте занятия эталон не был настроен.':'Это занятие завершено до появления оценивания; пересчёт не выполнялся.'));
+  }else if(current.dds_review)$('auditContent').append(element('p',`Итог по действиям ДДС: ${current.dds_review.score_percent}% · ${current.dds_review.passed?'зачтено':'не зачтено'}.`));
+  else $('auditContent').append(element('p',report?'Оценка не выставлена: при старте занятия эталон не был настроен.':'Это занятие завершено до появления оценивания; пересчёт не выполнялся.'));
   $('auditContent').append(element('h3','Заполненность карточки'));
   const labels={caller_name:'Имя заявителя',street:'Улица',house:'Дом',description:'Описание',incident_type:'Тип происшествия',services:'Службы'};for(const check of current.checks||[])$('auditContent').append(element('p',`${check.passed?'✓':'○'} ${labels[check.field]}: ${check.passed?'заполнено':'не заполнено'}`));
- }else $('auditContent').append(element('p',current.assessment_enabled?`Эталон зафиксирован. Лимит занятия: ${current.time_limit_seconds} сек. Правильные ответы откроются после завершения.`:'Для этого занятия эталон не настроен; итоговый балл не будет выставлен.'));
+ }else $('auditContent').append(element('p',current.exercise_mode==='actions'&&current.dds_assessment_enabled?'Оценка действий ДДС будет рассчитана после отработки происшествия.':current.assessment_enabled?`Эталон зафиксирован. Лимит занятия: ${current.time_limit_seconds} сек. Правильные ответы откроются после завершения.`:'Для этого занятия эталон не настроен; итоговый балл не будет выставлен.'));
  if(finished){
   $('auditContent').append(element('h3','ИИ-разбор текста · отдельно от балла'));
   if(!review)$('auditContent').append(element('p','Разбор ещё не запрашивался. Запустите его кнопкой ниже.'));
@@ -731,6 +894,7 @@ document.addEventListener('keydown',event=>{
  const editing=/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName||'');
  if(event.key==='Insert'&&!event.altKey&&!event.ctrlKey){event.preventDefault();guarded(newSession);return;}
  if(event.key==='Escape'&&!document.querySelector('dialog[open]')&&!$('cardPanel').hidden){
+  if($('cardPanel').classList.contains('response-open')){event.preventDefault();$('cardPanel').classList.remove('response-open');return;}
   // Esc закрывает карточку только когда не открыт ни один диалог: иначе
   // браузер сам закрывает верхний диалог, и это ожидаемое поведение.
   if(dirty){notify('Есть несохранённые изменения. Сохраните карточку или восстановите черновик позже.',true);return;}
@@ -760,8 +924,8 @@ const advancedInputs=[...$('advancedFilters').querySelectorAll('input,select')];
 function resetFilters(all=false){for(const input of advancedInputs)input.value='';if(all){$('search').value='';$('statusFilter').value='';}renderRows();}
 $('applyAdvanced').onclick=renderRows;$('resetAdvanced').onclick=()=>resetFilters(false);$('resetSearch').onclick=()=>resetFilters(true);
 // В реальной Системе 112 поле таймера краснеет, когда время набора карточки
-// превышено. Норматив берётся из карточки: у готовой карточки ДДС это 30 секунд
-// на реакцию, у полного цикла — лимит эталона.
+// превышено. В ДДС 30 секунд идут до подтверждения получения, после этого
+// остаётся отдельный трёхминутный норматив обработки.
 function tick(){
  const date=new Date();
  $('today').textContent=date.toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
@@ -769,10 +933,12 @@ function tick(){
  if(!current)return;
  const seconds=Math.max(0,Math.floor(((current.finished_at?new Date(current.finished_at):date)-new Date(current.created_at))/1000));
  $('timer').textContent=`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
- const limit=current.time_limit_seconds;
+ const dds=current.exercise_mode==='actions'&&current.owner_service;
+ const limit=dds?(current.receipt_decided_at?(current.handling_limit_seconds||180):30):current.time_limit_seconds;
  const over=Number.isFinite(limit)&&limit>0&&seconds>limit;
  $('cardPanel').querySelector('.timer').classList.toggle('overdue',over);
- $('timer').title=over?`Норматив ${limit} с превышен`:limit?`Норматив ${limit} с`:'Норматив не задан';
+ const label=dds?(current.receipt_decided_at?'обработки':'подтверждения получения'):'занятия';
+ $('timer').title=over?`Норматив ${label} ${limit} с превышен`:limit?`Норматив ${label} ${limit} с`:'Норматив не задан';
 }
 async function recoverCurrentSession(){
  if(recoveryBusy||!navigator.onLine)return;recoveryBusy=true;
@@ -795,8 +961,31 @@ window.addEventListener('offline',()=>{noteDisconnected();notify('Соедине
 window.addEventListener('online',()=>{healthText='Проверка связи…';$('health').textContent=healthText;guarded(recoverCurrentSession);});
 window.addEventListener('beforeunload',e=>{if(dirty){persistDraft();e.preventDefault();e.returnValue='';}});
 let feedbackPolling=false;
-setInterval(async()=>{if(feedbackPolling||!current||document.hidden)return;const sid=current.id;feedbackPolling=true;try{// Вводные приходят по секундомеру карточки; сервер решает, чей срок настал.
- const data=current.status==='Завершена'?await api(`student/sessions/${sid}`):await api(`student/sessions/${sid}/updates`,'POST',{});if(current?.id!==sid)return;if(current.status!=='Завершена'&&data.status==='Завершена'){receiveRemoteCompletion(data);return;}current.incident_status=data.incident_status;updateIncidentState();receiveSituationUpdates(data);const previous=(current.teacher_feedback||[]).length;current.teacher_feedback=data.teacher_feedback||[];if(current.teacher_feedback.length>previous){notify('Новое замечание преподавателя — откройте «Отчёт и история»');if($('auditDialog').open)showAudit();}}catch{/* The normal health indicator handles connectivity. */}finally{feedbackPolling=false;}},5000);
+const backgroundUpdateKeys=new Set();
+setInterval(async()=>{
+ if(feedbackPolling||!studentUserId)return;
+ feedbackPolling=true;
+ try{
+  const values=await api('student/inbox/poll','POST',{});
+  for(const value of values){
+   if(value.id===current?.id)continue;
+   for(const item of [...(value.situation_updates||[]),...(value.pending_phone_reports||[])]){
+    const key=value.id+':'+item.id;
+    if(backgroundUpdateKeys.has(key))continue;
+    backgroundUpdateKeys.add(key);notify(`Карточка № ${value.number}: новое сообщение от ${item.source}`);
+   }
+  }
+  if(!current)return;
+  const sid=current.id;
+  const data=values.find(value=>value.id===sid)||await api(`student/sessions/${sid}`);
+  if(current?.id!==sid)return;
+  if(current.status!=='Завершена'&&data.status==='Завершена'){receiveRemoteCompletion(data);return;}
+  current.incident_status=data.incident_status;updateIncidentState();receiveSituationUpdates(data);
+  const previous=(current.teacher_feedback||[]).length;current.teacher_feedback=data.teacher_feedback||[];
+  if(current.teacher_feedback.length>previous){notify('Новое замечание преподавателя — откройте «Отчёт и история»');if($('auditDialog').open)showAudit();}
+ }catch{/* Connection state is displayed by the common health indicator. */}
+ finally{feedbackPolling=false;}
+},5000);
 let polling=false;setInterval(async()=>{if(polling)return;polling=true;try{if($('autoRefresh').checked&&!$('journalPanel').hidden)await loadSessions();if(current?.transport==='sip'&&current.call_id&&current.status!=='Завершена'){
  const sid=current.id,data=await api(`student/sessions/${sid}`);if(current?.id!==sid)return;
  current.messages=data.messages;current.provider_error=data.provider_error;current.call_id=data.call_id;renderDialogue();
@@ -828,6 +1017,7 @@ function renderBriefing(){
  $('briefingFinishForm').hidden=!open||!report.complete;
  $('briefingMissing').className='briefing-missing'+(report.complete?' ready':'');
  $('briefingMissing').textContent=!open?'Доклад принят дежурным.'
+  :briefing.recovery?.state==='exhausted'?'Автовосстановление исчерпано. Проверьте телефон и создайте новый доклад; предыдущие реплики сохранены.'
   :voice&&!briefing.messages.length?'Ожидание ответа дежурного по телефону…'
   :report.complete?'Сведения названы полностью. Можно завершать доклад.'
   :'Ещё не названо: '+(report.missing||[]).join(', ');
@@ -837,17 +1027,24 @@ $('openBriefing').onclick=()=>{
  if(!current?.revision||current.status==='Завершена')return;
  briefing=null;renderBriefing();
  $('briefingService').replaceChildren();
- for(const service of current.card.services)$('briefingService').add(new Option(service,service));
- $('briefingTransportLabel').hidden=current.transport!=='sip';
- if(current.transport==='sip')$('briefingTransport').value='sip';
+ for(const service of current.card.services)if(current.exercise_mode!=='actions'||current.card.service_phones?.[service])$('briefingService').add(new Option(service,service));
+ if(current.assigned_crew?.phone)$('briefingService').add(new Option(`${current.assigned_crew.id} · ${current.assigned_crew.leader}`,'crew:'+current.assigned_crew.id));
+ if(!$('briefingService').options.length){notify('У получателей нет доступных телефонов',true);return;}
+ $('briefingPhone').value=current.card.service_phones?.[$('briefingService').value]||'';
+ $('briefingPhone').readOnly=current.exercise_mode==='actions';
+ $('briefingTransportLabel').hidden=!current.sip_extension||current.exercise_mode==='actions';
+ $('briefingTransport').value=current.sip_extension?'sip':'text';
  $('briefingText').value='';$('briefingRecipient').value='';
+ $('briefingService').onchange();
  $('briefingDialog').showModal();
 };
+$('briefingService').onchange=()=>{const crew=$('briefingService').value.startsWith('crew:');if(crew){$('briefingPhone').value=current.assigned_crew.phone;$('briefingDestination').value=current.assigned_crew.leader;}else if(current?.exercise_mode==='actions'){$('briefingPhone').value=current.card.service_phones?.[$('briefingService').value]||'';$('briefingDestination').value='';}};
 $('startBriefing').onclick=()=>guarded(async()=>{
  if(!$('briefingService').value)throw Error('Сначала сохраните службу в карточке');
- const transport=current.transport==='sip'?$('briefingTransport').value:'text';
+ const transport=current.sip_extension?$('briefingTransport').value:'text';
+ const crew=$('briefingService').value.startsWith('crew:');
  briefing=await api(`student/sessions/${current.id}/briefings`,'POST',{message_id:crypto.randomUUID(),
-  service:$('briefingService').value,destination:$('briefingDestination').value.trim(),
+  service:crew?current.owner_service:$('briefingService').value,crew_id:crew?current.assigned_crew.id:'',destination:$('briefingDestination').value.trim(),
   phone:$('briefingPhone').value.trim(),transport});
  renderBriefing();
  notify(transport==='sip'?'Вызов создан: говорите по учебному телефону':'Соединение установлено');
@@ -861,7 +1058,13 @@ function pollBriefing(){
   try{
    const list=await api(`student/sessions/${current.id}/briefings`);
    const fresh=list.find(item=>item.id===briefing.id);
-   if(fresh){briefing=fresh;renderBriefing();}
+   if(fresh){briefing=fresh;renderBriefing();
+    if(fresh.transport==='sip'&&fresh.call_id&&fresh.recovery?.state!=='exhausted'){
+     const sid=current.id,bid=fresh.id;
+     const restored=await api(`student/sessions/${sid}/briefings/${bid}/recover?expected_call_id=${encodeURIComponent(fresh.call_id)}`,'POST');
+     if(current?.id===sid&&briefing?.id===bid){briefing=restored;renderBriefing();if(restored.call_id!==fresh.call_id)notify('Связь восстанавливается: примите повторный звонок. Доклад сохранён.');}
+    }
+   }
   }catch{/* окно останется с прежним состоянием до следующей попытки */}
  },2500);
 }
@@ -885,6 +1088,7 @@ $('briefingFinishForm').onsubmit=event=>{event.preventDefault();guarded(async()=
 // Перенаправление в другую службу: третье действие диспетчера наряду с приёмом
 // и отказом. Служба добавляется в карточку, но событие пишется отдельным типом.
 $('openForward').onclick=()=>{
+ if(current?.exercise_mode==='actions')return;
  if(dirty){notify('Сначала сохраните карточку',true);return;}
  if(!current?.revision||current.status==='Завершена')return;
  const select=$('forwardService');select.replaceChildren();

@@ -8,7 +8,7 @@ from app.api import calls, health, chat, integration
 from app.asterisk.call_manager import CallManager
 from app.asterisk.media_ws import router as media_router
 from app.config import Settings
-from app.audio.tts import preload_tts
+from app.audio.tts import preload_tts, shutdown_tts
 from app.security_audit import VoiceAuditLog, VoiceAuditMiddleware
 
 
@@ -37,7 +37,10 @@ def create_app(settings=None):
         finally:
             archive_task.cancel()
             await asyncio.gather(archive_task, return_exceptions=True)
-            await manager.close()
+            try:
+                await manager.close()
+            finally:
+                await shutdown_tts()
 
     app = FastAPI(title="Training Voice Gateway", version="0.1.0", lifespan=lifespan)
     app.state.security_audit = audit

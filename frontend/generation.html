@@ -9,12 +9,11 @@
     .layout{display:grid;grid-template-columns:minmax(230px,1fr) minmax(0,3fr);gap:24px;align-items:start}.panel,.preview-section{background:#fff;border:1px solid #cad3d9;padding:18px;margin-bottom:16px}.drafts{display:grid;gap:8px;margin-top:12px}.draft{width:100%;text-align:left}.draft[aria-current="true"]{border-color:#1878a7;background:#eaf6fb}.meta{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:#5a6a75}.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fact{margin:0;white-space:pre-wrap}.fact strong{display:block;margin-bottom:5px}.wide{grid-column:1/-1}.rubric{width:100%;border-collapse:collapse}.rubric th,.rubric td{border:1px solid #cad3d9;padding:9px;text-align:left;vertical-align:top}.rubric th{background:#eef4f7}.approval{border-left:4px solid #1878a7}.empty{color:#5a6a75;font-style:italic}.conflict{display:none}.conflict.visible{display:inline-block}.history summary{cursor:pointer}.history article{border-top:1px solid #dce3e7;padding:12px 0}.history article:first-of-type{margin-top:12px}.approved{color:#236529;font-weight:bold}@media(max-width:800px){.layout,.facts{grid-template-columns:1fr}.wide{grid-column:auto}}
   </style>
   <script src="/assets/generation.js" defer></script>
-</head>
+<link rel="stylesheet" href="/assets/cabinet.css"></head>
 <body>
 <header><strong>СИСТЕМА-112 · ИИ-авторинг</strong><a href="/scenarios">Библиотека сценариев</a></header>
 <main>
   <h1>Черновик сценария и эталона</h1>
-  <p class="notice">При облачном провайдере содержимое задания передаётся внешнему сервису.</p>
   <div class="layout">
     <aside class="panel">
       <h2>Сохранённые черновики</h2>
@@ -24,12 +23,24 @@
     <section>
       <form id="generateForm" class="panel">
         <h2>Новая задача</h2>
+        <label>Режим сценария<select id="generationMode"><option value="dds">Готовая карточка ДДС</option><option value="caller">Полный цикл 112</option></select></label>
+        <label id="ownerServiceLabel">Своя служба ДДС<input id="ownerService" maxlength="160" placeholder="Например, Служба 101"></label>
         <label>Учебная категория<select id="category" required><option value="fire">Пожары</option><option value="traffic">ДТП и транспорт</option><option value="medical">Медицина</option><option value="utilities">ЖКХ и инженерные сети</option><option value="public">Общественная безопасность</option><option value="other">Прочее</option></select></label>
         <div class="facts"><label>Уровень сложности<select id="difficulty"><option value="basic">Базовый</option><option value="standard">Стандартный</option><option value="advanced">Повышенный</option></select></label><label>Профиль ДДС<select id="ddsProfile"><option value="general">Общий</option><option value="fire">Пожарная охрана</option><option value="police">Полиция</option><option value="medical">Скорая медицинская помощь</option><option value="gas">Аварийная газовая служба</option><option value="utilities">ЖКХ и инженерные сети</option></select></label></div>
         <label>Учебные цели<textarea id="learningObjectives" maxlength="1500" rows="4" placeholder="Что должен отработать студент"></textarea></label>
         <label>Методическое задание<textarea id="brief" required maxlength="3000" rows="7" placeholder="Опишите учебную ситуацию, цели, важные факты и что должен зафиксировать оператор."></textarea></label>
         <footer><button id="generate" type="submit">Создать черновик</button><span id="briefCount">0 / 3000</span></footer>
       </form>
+      <section class="panel">
+        <h2>Исправления преподавателя для ИИ</h2>
+        <form id="correctionForm">
+          <label>Ситуация<textarea id="correctionSituation" required minlength="5" maxlength="500" rows="2"></textarea></label>
+          <label>Неверный ответ<textarea id="correctionIncorrect" required minlength="3" maxlength="500" rows="2"></textarea></label>
+          <label>Как правильно<textarea id="correctionCorrect" required minlength="3" maxlength="700" rows="2"></textarea></label>
+          <button id="saveCorrection" type="submit">Сохранить исправление</button>
+        </form>
+        <div id="corrections"></div>
+      </section>
       <p id="status" role="status" aria-live="polite"></p>
       <button id="reloadConflict" class="conflict" type="button">Перечитать актуальную версию</button>
       <div id="preview" hidden>
@@ -39,7 +50,7 @@
           <p id="provider" class="hint"></p>
         </section>
         <section class="preview-section"><h2>Сценарий</h2><div id="scenario" class="facts"></div></section>
-        <section class="preview-section"><h2>Эталон оценки</h2><div id="rubric"></div></section>
+        <section class="preview-section"><h2 id="rubricTitle">Эталон оценки</h2><div id="rubric"></div></section>
         <section id="revisionPanel" class="preview-section">
           <h2>Доработка</h2>
           <form id="reviseForm"><label>Комментарий преподавателя<textarea id="comment" required maxlength="2000" rows="5" placeholder="Что именно изменить в сценарии или эталоне?"></textarea></label><footer><button id="revise" type="submit">Отправить на доработку</button><span id="commentCount">0 / 2000</span></footer></form>

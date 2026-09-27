@@ -7,7 +7,7 @@ Ollama устанавливается на хост, а не в контейне
 Запуск:
 
     python tools/fetch_llm.py            # профиль из .env.docker
-    python tools/fetch_llm.py --profile accelerated
+    python tools/fetch_llm.py --profile standard
     python tools/fetch_llm.py --check    # только проверить, ничего не качать
 
 Скрипт ничего не устанавливает сам: если Ollama нет, он скажет, откуда её взять.
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import urllib.error
@@ -28,7 +29,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from llm import PROFILES  # noqa: E402  (путь к backend задаётся выше)
+from llm import PROFILES, DEFAULT_PHONE_MODEL  # noqa: E402
 
 DEFAULT_URL = "http://127.0.0.1:11434"
 
@@ -58,10 +59,18 @@ def available(url: str) -> list[str] | None:
         return None
 
 
-def pull(model: str) -> bool:
+def phone_model() -> str:
+    from dotenv import dotenv_values
+    values = dotenv_values(ROOT / '.env.docker')
+    # Honor the same ENV override as Compose without copying any credentials.
+    return os.getenv('PHONE_LLM_MODEL') or values.get('PHONE_LLM_MODEL') or DEFAULT_PHONE_MODEL
+
+
+def pull(model: str, url: str = DEFAULT_URL) -> bool:
     print(f"  загрузка модели {model} — это единоразово и занимает несколько минут")
     try:
-        result = subprocess.run(["ollama", "pull", model], check=False)
+        result = subprocess.run(["ollama", "pull", model], check=False,
+                                env={**os.environ, 'OLLAMA_HOST': url})
     except FileNotFoundError:
         print("  команда ollama не найдена в PATH")
         return False
@@ -99,16 +108,17 @@ def main() -> None:
         print("  и занятие пойдёт на детерминированных ответах.")
         sys.exit(1)
 
-    # Ollama называет модели с тегом; 'qwen3:4b' и 'qwen3:4b-instruct' — разные.
-    if any(name == model or name.startswith(model + "-") for name in models):
-        print("Модель уже загружена.")
-        return
-    print("Модель ещё не загружена. Есть:", ", ".join(models) or "(пусто)")
-    if args.check:
+    # Exact tags: qwen3:4b and qwen3:4b-instruct are different weights.
+    required = list(dict.fromkeys([model, phone_model()]))
+    missing = [name for name in required if name not in models]
+    print('Модели авторинга и телефона:', ', '.join(required))
+    if missing and args.check:
+        print('Не установлены:', ', '.join(missing))
         sys.exit(1)
-    if not pull(model):
-        print("Не удалось загрузить модель.")
-        sys.exit(1)
+    for name in missing:
+        if not pull(name, url):
+            print("Не удалось загрузить модель.")
+            sys.exit(1)
     print("Готово. Проверьте /api/v1/health — там появится выбранная модель.")
 
 

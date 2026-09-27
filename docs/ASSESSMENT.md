@@ -2,6 +2,13 @@
 
 ## Three distinct results
 
+For prepared DDS cards the 30-second check is issuance-to-open, as clarified in
+the Q&A; acceptance/refusal is a separate decision check. The DDS reviewer can
+also check teacher-authored `brief_keywords` and `result_keywords` against the
+accepted duty briefing and closing comment. A manual notification is not evidence
+of that briefing. These literal checks remain deterministic; a teacher may override
+the final result with the audited expert decision below.
+
 1. `evaluation` is the existing immutable rubric-based field score and timing.
 2. `policy_result` checks teacher-defined thresholds and ordered actions, once on
    completion. No policy is retroactively applied to old attempts.
@@ -157,3 +164,12 @@ real 112 data, or live student grading was used for verification.
 
 Сценарии без `dds_expectation` разбор решений не получают, поэтому прежние
 занятия продолжают оцениваться как раньше.
+
+Для готовой карточки с `owner_service` ожидания ДДС теперь создаются по
+умолчанию, если преподаватель не задал их явно. `dds_review.score_percent`
+становится итоговым автоматическим баллом действий в отчёте преподавателя,
+статистике и адаптивном подборе; порог `pass_score_percent` сравнивается с
+этим баллом. Экспертное решение по-прежнему имеет приоритет. Проверки включают
+решение о приёме/отказе не позднее 30 секунд от выдачи, обработку за 3 минуты и полноту
+завершения. Вынужденная остановка преподавателем сохраняет невыполненные
+пункты как ошибки.

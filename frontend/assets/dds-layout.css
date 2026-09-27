@@ -1,0 +1,184 @@
+/* Saved DDS card follows the supplied DDS screenshots, not the 112 input form. */
+.dds-mode .card-columns{grid-template-columns:minmax(0,45fr) minmax(0,55fr);padding-right:0}
+.dds-mode .left-column,.dds-mode .right-column{min-width:0}
+.dds-mode.readonly .address-block{grid-column:1;grid-row:1;padding:8px;align-self:start}
+.dds-mode.readonly .description-block{grid-column:1;grid-row:2;min-height:180px}
+.dds-mode.readonly .right-column{grid-column:2;grid-row:1 / span 2;align-self:start}
+.dds-mode .identity-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.dds-mode .identity,.dds-mode .flags{min-height:40px;padding:5px 8px}
+.dds-mode .identity input,.dds-mode .identity select{font-size:12px}
+.dds-mode .phone-field input{font-size:16px}
+.dds-mode .phone-row{min-height:65px}
+.dds-mode .phone-row .timer strong{font-size:23px}
+.dds-mode .card-footer{min-height:66px;align-items:center;position:relative}
+.dds-mode .card-footer>span:first-child{padding:15px 8px}
+.dds-mode .card-footer .services{max-width:none;max-height:none;overflow:visible;flex:1;min-width:0;flex-wrap:wrap;align-self:stretch}
+.dds-mode .service-tile,.dds-mode .service-tile[open]{position:static;flex:0 0 112px;min-width:0;max-width:112px;padding:5px 8px;background:#48565f}
+.dds-mode .service-tile summary{gap:3px;padding-top:12px;position:relative}
+.dds-mode .service-tile summary::after{content:'⌃';position:absolute;top:-3px;left:45%;font-size:12px}
+.dds-mode .service-tile summary small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dds-mode .service-tile summary .service-status{display:block;font-size:11px;color:#fff}
+.dds-mode .own-badge{display:none}
+.dds-mode .service-tile.own-service{outline:0;background:#48565f}
+.dds-mode .service-tile.foreign-service{opacity:1}
+.dds-mode .service-tile-history{position:absolute;left:8px;bottom:100%;width:min(520px,calc(100% - 16px));max-height:240px;overflow:auto;background:#1483be;color:white;padding:12px;z-index:8;border:0;box-shadow:0 -2px 8px #0002}
+.dds-mode .service-tile-history p{font-size:12px;line-height:1.5}
+.dds-mode .service-edit{color:white;position:relative;float:right;padding:0 4px;border:0;font-size:16px}
+.dds-mode .service-edit{position:absolute;right:0;top:-3px}
+.dds-mode .service-tile summary strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px}
+.dds-mode .card-footer>button{font-size:11px;padding:7px;max-width:110px}
+.dds-mode .card-footer .square{font-size:22px;padding:4px 8px}
+.dds-mode.readonly .identity select{display:none}
+.dds-mode.readonly .identity input{width:100%;border:0}
+.dds-mode.readonly .description-block textarea{border:0}
+.dds-mode.readonly .survey{min-height:0;flex:none;background:var(--paper)}
+.dds-mode.readonly .classification{padding:8px 10px}
+.dds-mode.readonly .coordinate-controls{position:absolute;right:8px;top:6px;border:0;margin:0;padding:0}
+.dds-mode.readonly .coordinate-controls>.coordinate-fields,.dds-mode.readonly .coordinate-controls>small,.dds-mode.readonly .coordinate-title>span{display:none}
+.dds-mode.readonly .situation-update{background:transparent;border:0;padding:4px 0}
+.dds-mode.readonly .situation-update small{color:#303638;font-weight:bold}
+.dds-mode.readonly #characters{display:none}
+.dds-mode.readonly #classification+small{display:none}
+.dds-mode .footer-spacer{display:none}
+.dds-mode #saveState{display:none}
+.dds-mode #incidentState{max-width:130px}
+.dds-mode #responseSection{display:none;position:absolute;bottom:76px;left:8px;right:8px;z-index:9;padding:10px;background:#48565f;color:white;max-height:60vh;overflow:auto;box-shadow:0 -4px 20px #0003}
+.dds-mode.response-open #responseSection{display:block}
+.dds-mode #responseSection>table{display:none}
+.dds-mode #responseSection h2{margin:0 40px 8px 0}
+#closeResponsePanel{float:right;color:inherit;font-size:18px}
+.card-panel:not(.dds-mode) #closeResponsePanel{display:none}
+.card-panel:not(.dds-mode) #cardResponseTools{display:none}
+.dds-mode .response-input{flex-wrap:wrap}
+.dds-mode .response-input input,.dds-mode .response-input select{color:#303638;-webkit-text-fill-color:#303638}
+.dds-mode .response-input input{min-width:150px}
+.dds-mode .response-input #responseComment{flex:3}
+.dds-mode #crewForm{display:flex;gap:8px;flex-wrap:wrap}
+.dds-mode #crewForm label{display:flex;flex-direction:column;gap:4px}
+/* Reference DDS screen: dense header, broad work surface, services anchored below. */
+body:has(.dds-mode:not([hidden])) .workspace-head{min-height:0;margin-top:4px;grid-template-columns:minmax(0,1fr) minmax(420px,1fr)}
+body:has(.dds-mode:not([hidden])) .search-block{padding:4px 10px}
+body:has(.dds-mode:not([hidden])) .search-block>label{font-size:18px}
+body:has(.dds-mode:not([hidden])) .console-meta{height:42px}
+body:has(.dds-mode:not([hidden])) .console-meta #clock{font-size:28px}
+.dds-mode .card-footer .services{flex-wrap:wrap-reverse;align-content:flex-start;align-items:stretch}
+.dds-mode .service-tile{border-right:1px solid #cad0d3;min-height:64px}
+.dds-mode .service-tile-history{font-weight:normal;text-align:left}
+.dds-mode.readonly .description-block{background:var(--paper)}
+.dds-mode.readonly .type-chip{background:#303638;color:#fff;font-weight:bold;padding:6px 10px}
+.dds-mode.readonly .classification{border-top:8px solid var(--base);background:var(--paper)}
+.dds-mode .response-tools{display:flex;gap:6px;flex-wrap:wrap}
+.dds-mode .response-tools button{white-space:normal}
+.dds-mode #incidentState{position:absolute;bottom:100%;right:8px;max-width:none;background:var(--base);color:#303638;padding:3px 6px;font-size:10px}
+.dds-mode #processed,.dds-mode #finish{max-width:76px;padding:5px;font-size:10px}
+.dds-mode .card-footer>button.square{padding:4px;font-size:20px}
+.dds-mode .arm-extra-flags{min-height:26px;padding:3px 8px;gap:12px}
+.dds-mode .identity,.dds-mode .flags{min-height:34px}
+.dds-mode .address-line{overflow-wrap:anywhere;line-height:1.45;padding-right:38px}
+.dds-mode .address-note textarea{width:100%;overflow-wrap:anywhere}
+.dds-mode .service-tile summary strong{display:block}
+.dds-mode .service-tile-history span{display:block;overflow-wrap:anywhere}
+.dds-mode .service-tile-history{max-height:min(40vh,320px)}
+.dds-mode #responseSection{bottom:var(--dds-footer-height,76px)}
+/* The customer's pencil opens a compact status/order/comment strip. Additional
+   training tools remain available from the separate footer action button. */
+.dds-mode.response-compact #responseSection{left:8%;right:8%;padding:4px 36px 4px 4px;background:#fff;color:#303638;box-shadow:0 0 0 100vmax #0005,0 4px 18px #0004;overflow:visible}
+.dds-mode.response-compact #responseSection>h2,.dds-mode.response-compact #crewSection,
+.dds-mode.response-compact .response-tools,.dds-mode.response-compact #notificationHistory,
+.dds-mode.response-compact #responseSection>h3{display:none}
+.dds-mode.response-compact #responseService{display:none}
+.dds-mode.response-compact .response-input{display:flex;flex-wrap:nowrap;margin:0;gap:4px}
+.dds-mode.response-compact .response-input input,.dds-mode.response-compact .response-input select{height:28px;min-width:0;padding:4px;border:0;border-bottom:1px solid #aab2b7;font-size:12px}
+.dds-mode.response-compact #responseStatus{flex:1.2}
+.dds-mode.response-compact #responseOrderNumber{flex:1}
+.dds-mode.response-compact #addResponse{height:28px;background:#fff;color:#48565f;border:1px solid #aab2b7;padding:0 8px}
+.dds-mode.response-compact #closeResponsePanel{position:absolute;right:4px;top:4px;height:28px;padding:0 7px;color:#48565f}
+.dds-mode.response-compact #responseHint{margin:0;font-size:11px}
+.dds-mode.readonly .flags{flex-wrap:wrap;align-content:center;justify-content:flex-start;gap:5px 10px}
+.dds-mode.readonly .flags label{display:inline-flex;flex:0 0 auto;white-space:nowrap}
+.dds-mode.readonly .flags input:disabled{display:none}
+@media(min-width:1151px){
+ /* Customer DDS: caller, injury flags and card flags share one strip. */
+ .dds-mode #cardForm{display:grid;grid-template-columns:minmax(0,45fr) minmax(0,22fr) minmax(0,33fr);grid-template-rows:auto minmax(0,1fr) auto;row-gap:8px}
+ .dds-mode .identity-row{display:contents}
+ .dds-mode .identity{grid-column:1;grid-row:1;margin-right:8px}
+ .dds-mode .flags{grid-column:2;grid-row:1;gap:4px;font-size:11px}
+ .dds-mode .arm-extra-flags{grid-column:3;grid-row:1;justify-content:flex-start;margin-left:8px}
+ .dds-mode .arm-extra-flags #registrationInfo{display:none}
+ .dds-mode .card-columns{grid-column:1 / -1;grid-row:2}
+ .dds-mode .card-footer{grid-column:1 / -1;grid-row:3}
+ .dds-mode .identity-row{flex-shrink:0}
+ .dds-mode.readonly .card-columns{grid-template-rows:auto minmax(180px,1fr);overflow:auto}
+ .dds-mode.readonly .left-column{overflow:visible}
+ .dds-mode .description-block textarea{resize:none}
+ .dds-mode.readonly .description-block{height:min(350px,50vh);align-self:start}
+}
+.dds-mode.readonly #surveyOptions{display:flex;flex-wrap:wrap;gap:4px;padding:6px 10px}
+.dds-mode.readonly .survey-row,.dds-mode.readonly .survey-row .options{display:contents}
+.dds-mode.readonly .survey-row>span{display:none}
+.dds-mode.readonly .survey-value{font-weight:bold}
+.dds-mode.readonly .survey-value:not(:last-child)::after{content:' / '}
+@media(max-width:760px){
+ body:has(.dds-mode:not([hidden])) .workspace-head{grid-template-columns:minmax(0,1fr)}
+ .dds-mode .card-columns{grid-template-columns:minmax(0,1fr)}
+ .dds-mode.readonly .address-block,.dds-mode.readonly .description-block,.dds-mode.readonly .right-column{grid-column:auto;grid-row:auto}
+ .dds-mode .card-footer{flex-wrap:wrap}
+ .dds-mode .card-footer .services{flex-basis:80%}
+ .dds-mode #responseSection{position:fixed;bottom:12px;max-height:75vh}
+}
+/* The reference's narrow call control, three telephone cells and incident summary. */
+.card-ident-actions{display:none}
+#correctionEvidence:empty{display:none}
+@media(min-width:1151px){
+ .dds-mode .phone-row{grid-template-columns:clamp(220px,16vw,280px) repeat(3,minmax(0,1fr)) clamp(160px,10.5vw,200px) 44px 90px;gap:8px}
+ .dds-mode .phone-field{position:relative;padding-left:42px}
+ .dds-mode .phone-field::before{content:'☎';position:absolute;left:0;top:0;bottom:0;width:34px;background:var(--base);color:#737d82;display:flex;align-items:flex-start;justify-content:center;padding-top:14px;font-size:23px}
+ .dds-mode .phone-row .phone-field span::after{display:none}
+ .dds-mode .card-ident{padding:8px 6px}
+ .dds-mode .card-ident strong{font-size:clamp(12px,.75vw,14px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .dds-mode .card-ident small{font-size:10px}
+ .dds-mode .timer{padding:8px 1px;display:flex;align-items:center;justify-content:center}
+ .dds-mode .phone-row .timer strong{font-size:11px;white-space:nowrap}
+ .dds-mode .timer small{display:none}
+ .dds-mode .card-ident-actions{display:flex;flex-direction:column;gap:4px;background:transparent;padding:0}
+ .dds-mode .card-ident-actions button{background:#303638;color:#fff;border:0;font-size:10px;flex:1;padding:2px 0}
+ .dds-mode .card-ident-actions button.active{background:#1483be}
+ .dds-mode .card-ident-actions button:disabled{opacity:1}
+ .dds-mode .card-footer{height:64px;min-height:64px;flex-wrap:nowrap}
+ .dds-mode .card-footer .services{width:min(832px,calc(100vw - 560px));max-width:none;height:64px;min-height:64px;flex:0 1 auto;align-self:flex-end;align-content:flex-start;flex-wrap:wrap-reverse;overflow:visible}
+ .dds-mode .service-tile,.dds-mode .service-tile[open]{position:relative;flex-basis:104px;max-width:104px;min-height:64px;height:64px}
+ .dds-mode .service-tile-history{left:0;bottom:100%;width:min(520px,55vw)}
+ .dds-mode #routingInfo{margin-left:auto}
+ .dds-mode.readonly .address-block{padding:6px 8px}
+ .dds-mode.readonly .address-block>.muted{display:none}
+ .dds-mode.readonly .address-line{font-weight:bold;border:0;padding:3px 0;min-height:0;font-size:13px}
+ .dds-mode.readonly .address-note{font-size:0;margin-top:2px}
+ .dds-mode.readonly .address-note textarea{font-size:12px;line-height:1.35;border:0;min-height:28px;resize:none}
+ .dds-mode.readonly .description-block{height:min(350px,calc(100vh - 460px));min-height:180px;overflow:auto}
+ .dds-mode.response-compact #responseSection{left:max(8px,6vw);right:auto;width:min(1050px,calc(100% - max(16px,6vw)));max-height:calc(100vh - 100px)}
+ .dds-mode.response-compact #responseStatus,.dds-mode.response-compact #responseOrderNumber,.dds-mode.response-compact #responseComment{flex:1 1 0;min-width:0}
+ .dds-mode.response-compact #addResponse{flex:0 0 28px;padding:0}
+ .dds-mode.response-compact #linkedCards{display:none}
+ .dds-mode.response-compact #responseHint{color:#48565f}
+ .dds-mode.response-compact #responseHint:empty{display:none}
+}
+@media(min-width:1151px) and (max-width:1450px){
+ .dds-mode #cardForm{grid-template-columns:minmax(0,45fr) minmax(0,28fr) minmax(0,27fr)}
+}
+/* On a narrow DDS card, keep the journal controls in separate rows. */
+@media(max-width:760px){
+ body:has(.dds-mode:not([hidden])) .workspace-head{display:block}
+ body:has(.dds-mode:not([hidden])) .search-block{display:none}
+ body:has(.dds-mode:not([hidden])) .console-meta{display:grid;grid-template-columns:minmax(0,1fr) auto 106px;gap:6px;min-height:48px;height:auto;padding:4px 8px}
+ body:has(.dds-mode:not([hidden])) .console-meta>div:first-child{min-width:0}
+ body:has(.dds-mode:not([hidden])) #today,
+ body:has(.dds-mode:not([hidden])) #operatorSeat{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ body:has(.dds-mode:not([hidden])) #operatorSeat{margin-top:2px}
+ body:has(.dds-mode:not([hidden])) #clock{font-size:24px;white-space:nowrap}
+ body:has(.dds-mode:not([hidden])) .create-card{display:flex;align-items:center;justify-content:center;width:106px;height:38px;margin:0;padding:0;border-width:2px;outline-offset:-4px;font-size:0;line-height:0}
+ body:has(.dds-mode:not([hidden])) .create-card br{display:none}
+ body:has(.dds-mode:not([hidden])) .create-card::after{content:'Новая карточка';font-size:11px;line-height:1.1}
+ body:has(.dds-mode:not([hidden])) nav{display:flex;gap:2px;height:auto;padding:0 4px 4px}
+ body:has(.dds-mode:not([hidden])) nav button{flex:1 1 54px;min-width:0;padding:2px 3px}
+ body:has(.dds-mode:not([hidden])) nav .nav-note{display:none}
+}

@@ -1,5 +1,41 @@
 # Architecture
 
+Live dialogue has a separate local `PHONE_LLM_MODEL` from the authoring profile.
+Both use the existing Ollama adapter with CPU-only `num_gpu=0`; no new service.
+Phone requests use context4096, at most120 output tokens, bounded recent history
+and the original scenario/current report facts. Oversized input fails to the
+existing grounded fallback rather than silently dropping facts. All system
+instructions, including role repair, are retained. Fifteen seconds bounds model
+wait including a 112 role retry, but not speech recognition/synthesis/playback.
+Startup warms the actual configured host/model/options; weights stay resident.
+
+Silero synthesis uses a bounded per-event-loop/model warm process pool (default
+two workers, two CPU threads each). It remains inside Voice, not a service split.
+Workers are returned before playback consumes PCM; cancellation replaces only the
+owned worker. An 8 MiB/128-entry memory-only LRU avoids repeated phrase inference.
+The gateway closes the pool explicitly. Uvicorn remains single-worker.
+
+26 September: call recovery reads durable terminal snapshots from the existing
+Voice ChatStore; no new persistence system or PostgreSQL change. ARI reconnects
+with bounded backoff. Backend-owned redial preserves the logical session/briefing;
+the last saved answer can be replayed, but unreceived audio cannot be recovered.
+Prepared Card recipient_affiliations explicitly bind area/district/department to
+destinations; rules merge their provenance with the existing local directory.
+No invented geographic inference or external directory lookup is introduced.
+
+Document ingestion stays in Backend: bounded extraction/OCR on save, revision-local
+JSON passages and lexical retrieval with local morphology. No external AI ingestion,
+vector database, broker or new service. Tesseract is a bounded local subprocess.
+Material mutations run in FastAPI's worker pool and recheck revision/quota before
+writing after extraction. Speech workers use UTF-8 and model-local paths on Windows.
+
+Local territorial routing is a bounded, explicitly approved file-based directory
+inside Backend, not a new service or database. Matching uses exact existing Card
+address/object fields; future issued cards freeze recipients. No external lookup.
+Manual grammar checks reuse the deterministic module without changing grades.
+Material/workstation XML imports are client-side previews followed by the existing
+validated JSON save APIs; they never create roles or bypass publication checks.
+
 ## Security extensions and test directory decision
 
 Request audit remains Backend middleware; files are on the existing operations
@@ -69,8 +105,9 @@ classifier routing and assessment. Workspace enforces lesson filters and freezes
 metadata with scenario snapshots. `materials.py` stores teacher-owned reference
 metadata/text and opaque file BLOBs in the same SQLite process, with group-scoped
 publication, revision checks and bounded uploads. Frontend uses the existing
-authenticated JSON proxy; attachment downloads are binary Blobs. No extraction,
-RAG, new service or automatic LLM ingestion. See CURRICULUM.md for boundaries.
+authenticated JSON proxy; attachment downloads are binary Blobs. Bounded extraction,
+OCR and source-linked retrieval run inside Backend on save; no new service is used.
+See CUSTOMER_FIXES_2026-09-23.md for current limits.
 
 `service_workflow.py` separates incident/response states from training lifecycle.
 Card saves preserve notified services and append resolved routing selections.
@@ -107,7 +144,7 @@ three feature levels retain the source workbook's ordering. Frontend filters
 dependent choices locally; Backend validates the selected record and canonicalizes
 its final type. Original cards remain readable. No inference is used to invent
 service-routing rules from ambiguous spreadsheet columns. `routing.py` evaluates
-the explicitly mapped core columns N:AB using card flags, without an LLM or new
+the mapped full-v2 columns N:CU using card flags, without an LLM or new
 service. Preview is pure; card saves freeze its provenance and rules version.
 Suggestions do not replace the student's selection or contact real agencies.
 
@@ -160,7 +197,8 @@ login throttling and audit in the same SQLite database. Bootstrap creates only t
 first admin; admin creates teacher/student accounts. Blocking revokes sessions.
 Frontend reads the HttpOnly SameSite=Strict cookie and injects `X-User-Session`
 alongside its service Bearer token; it never trusts a browser-supplied identity header.
-The loopback HTTP deployment does not yet provide TLS, MFA or password recovery.
+Native loopback may use HTTP; the deployment TLS profile supplies HTTPS/internal TLS.
+MFA is not imposed by the clarified scope; password recovery remains administrative.
 
 `learning.py` owns teacher groups, memberships and assignments. New sessions freeze
 student/teacher/group/assignment ownership. Student routes enforce owner identity;

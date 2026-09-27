@@ -47,6 +47,8 @@ services:
       # локальный Ollama на хосте, внешние сервисы контуру запрещены.
       LLM_PROFILE: ${LLM_PROFILE:-mock}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      PHONE_LLM_MODEL: ${PHONE_LLM_MODEL:-qwen3:4b-instruct-2507-q4_K_M}
+      PHONE_LLM_THREADS: ${PHONE_LLM_THREADS:-6}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
     volumes:
@@ -108,7 +110,7 @@ services:
   voice:
     <<: *runtime
     image: trainer112-voice:dev
-    mem_limit: ${VOICE_MEMORY_MB:-2048}m
+    mem_limit: ${VOICE_MEMORY_MB:-4096}m
     cpus: ${VOICE_CPUS:-2}
     build:
       context: ./voice
@@ -136,6 +138,8 @@ services:
       STT_PROVIDER: ${STT_PROVIDER:-mock}
       TTS_PROVIDER: ${TTS_PROVIDER:-mock}
       TTS_SPEAKER: ${TTS_SPEAKER:-baya}
+      TTS_WORKERS: ${TTS_WORKERS:-2}
+      TTS_THREADS_PER_WORKER: ${TTS_THREADS_PER_WORKER:-2}
       STT_FALLBACK_PROVIDER: ${STT_FALLBACK_PROVIDER:-}
       TTS_FALLBACK_PROVIDER: ${TTS_FALLBACK_PROVIDER:-}
       TTS_FALLBACK_VOICE: ${TTS_FALLBACK_VOICE:-}

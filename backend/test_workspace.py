@@ -164,7 +164,7 @@ def test_ai_review_only_after_finish_and_cached(client, monkeypatch):
     s = create(client)
     url = '/api/v1/student/sessions/'+s['id']
     calls = []
-    async def fake_review(card, scenario, rubric):
+    async def fake_review(card, scenario, rubric, corrections=None, materials=None):
         calls.append((card, scenario, rubric))
         return {'status': 'ready', 'provider': 'mock', 'model': 'test', 'summary': 'Разбор', 'findings': [], 'limitations': []}
     monkeypatch.setattr(workspace, 'review_card', fake_review)

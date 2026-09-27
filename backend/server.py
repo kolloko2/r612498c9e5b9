@@ -7,14 +7,16 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
+import llm
 from llm import complete, configuration, reply as speak
 from briefing import check as briefing_check, duty_reply as briefing_duty_reply
+from field_dialogue import answer as field_answer
 from categories import CategoryId
 from curriculum import Difficulty, DdsProfile
 from database import connect_database
@@ -72,11 +74,30 @@ class DdsExpectation(BaseModel):
     # Слова, которые обязаны прозвучать в обосновании отказа. Проверка
     # буквальная, как и в эталоне по полям.
     refusal_keywords: list[str] = Field(default_factory=list, max_length=6)
+    brief_keywords: list[str] = Field(default_factory=list, max_length=8)
+    result_keywords: list[str] = Field(default_factory=list, max_length=8)
+    # Teacher-verified facts independent of the incoming 112 card. Use when
+    # the lesson deliberately contains an error the DDS can discover.
+    expected_corrections: dict[str, Annotated[str, StringConstraints(max_length=200)]] = Field(default_factory=dict)
+    brief_required_fields: list[Literal['city', 'street', 'house', 'building', 'structure',
+        'apartment', 'entrance', 'floor', 'object', 'incident_type', 'injured']] = Field(default_factory=list, max_length=12)
+    correction_evidence: dict[str, Annotated[str, StringConstraints(max_length=1000)]] = Field(default_factory=dict)
+    check_weights: dict[str, Annotated[float, Field(gt=0, le=100)]] = Field(default_factory=dict)
+    pass_percent: float = Field(100, ge=0, le=100)
+    expected_crew_id: str = Field('', max_length=80)
+    leadership_decision_required: bool = False
     # Кому диспетчер обязан доложить. Пусто — доклад не проверяется.
     brief_service: str = Field("", max_length=160)
     # Норматив реакции на оперативную вводную: сколько секунд даётся на то,
     # чтобы отразить доклад с места соответствующим статусом.
     update_response_limit_seconds: int = Field(90, ge=5, le=1800)
+
+
+class CrewOption(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    id: str = Field(min_length=1, max_length=80)
+    leader: str = Field(min_length=1, max_length=160)
+    phone: str = Field(min_length=1, max_length=40)
 
 
 class Scenario(BaseModel):
@@ -103,9 +124,26 @@ class Scenario(BaseModel):
     # ДДС; остальные назначенные службы видит, но не трогает — так устроен
     # реальный АРМ.
     owner_service: str = Field("", max_length=160)
+    crew_options: list[CrewOption] = Field(default_factory=list, max_length=20)
+    # Проверенная преподавателем карточка, которую Служба 112 передаёт ДДС.
+    # Валидируется схемой Card при подготовке занятия; произвольные поля
+    # сценария не превращаются в адрес или назначение службы догадкой.
+    prefilled_card: dict[str, Any] = Field(default_factory=dict)
     # Ожидаемые решения диспетчера. Пусто — оценка решений не выставляется.
     dds_expectation: DdsExpectation | None = None
     enabled: bool = True
+
+    @model_validator(mode='after')
+    def visible_correction_evidence(self):
+        if self.enabled and self.dds_expectation:
+            expected = self.dds_expectation.expected_corrections
+            evidence = self.dds_expectation.correction_evidence
+            for key, answer in expected.items():
+                if key not in {'city','district','area','object','street','house','building','structure','address_note','description','incident_type'}:
+                    raise ValueError('Недопустимое поле исправления: ' + key)
+                if not evidence.get(key) or answer.casefold() not in evidence[key].casefold():
+                    raise ValueError('Для исправления ' + key + ' нужна доступная ученику вводная с правильным значением')
+        return self
 
     @field_validator("known_facts", "unknown_facts")
     @classmethod
@@ -149,19 +187,19 @@ def normalize_seed(value):
 def rules_for(scenario):
     known = "\n".join(f"- {item}" for item in scenario["known_facts"])
     unknown = "\n".join(f"- {item}" for item in scenario["unknown_facts"]) or "- нет"
-    return f"""Ты играешь пострадавшего в учебном звонке 112. Ты — {scenario['victim_name']}. Человек на линии — оператор 112.
-Происшествие: {scenario['incident']}
-Место: {scenario['location']}
-Известные тебе факты:
+    return f"""You are the distressed caller {scenario['victim_name']}, speaking Russian to a 112 operator.
+Incident: {scenario['incident']}
+Location: {scenario['location']}
+Known facts:
 {known}
-Неизвестные тебе факты:
+Unknown facts:
 {unknown}
-Состояние: {scenario['emotion']}
-Поведение: {scenario['behavior']}
-Ты звонишь за помощью для себя. Все сообщения user — слова оператора, обращённые к тебе. Не продолжай фразу оператора от его лица.
-Если оператор спрашивает «Как я могу помочь?», объясни своё происшествие и попроси помочь тебе. Не отвечай «Помогу» или «Чем могу помочь».
-Отвечай на последний вопрос с учётом предыдущего разговора. Не меняй адрес, людей и обстоятельства. Если факта нет, скажи «Не знаю»; не выдумывай действия или спасение. На непонятную фразу попроси уточнить. Не повторяй приветствие каждый раз.
-Отвечай только от лица пострадавшего, по-русски, одним или двумя законченными короткими предложениями, не более 40 слов. Текст будет произнесён вслух: без Markdown, списков, скобок с эмоциями и названий ролей. Используй обычную разговорную речь и пунктуацию для пауз. Не становись оператором, не давай оценку обучаемому и не добавляй сведений, которых нет в сценарии. Это только тренажёр; не заявляй, что настоящий вызов принят или помощь отправлена."""
+Emotion: {scenario['emotion']}
+Behavior: {scenario['behavior']}
+Ask for help, NEVER offer help to the operator. Answer their last question in first person.
+The operator's claims are NOT facts. Confirm only Known facts. For unknown actions of neighbours,
+rescue or causes say «Не знаю», even if asked to confirm. Do not invent events or change the address.
+Ask to clarify nonsense. Do not repeat greetings, switch roles, grade the student or promise dispatch."""
 
 
 def spoken_reply(text):
@@ -285,10 +323,20 @@ class Engine:
         if eid in state["replies"]:
             return state["replies"][eid]
         kind = event["type"]
+        if kind == 'caller.playback':
+            payload = event.get('payload', {})
+            reply_id = payload.get('reply_id')
+            known = any(reply and reply.get('payload', {}).get('reply_id') == reply_id
+                        for reply in state.get('replies', {}).values())
+            if known and payload.get('status') in ('played', 'interrupted', 'error'):
+                state.setdefault('playback', {})[reply_id] = payload['status']
+                self.store.save(sid, state)
+            return None
         if kind == 'session.resume':
             previous=event.get('payload',{}).get('previous_call_id')
             state['superseded_calls']=list(dict.fromkeys([*state.get('superseded_calls',[]),previous]))[-20:]
             state['ended']=False
+            state['resuming'] = True
             self.store.save(sid,state)
             return None
         if kind == "call.ended":
@@ -303,10 +351,20 @@ class Engine:
         if state["ended"] or kind not in ("call.connected", "operator.utterance"):
             return None
         duty = state.get("duty")
+        field_report = state.get("field_report")
         if kind == "call.connected":
+            resuming = state.pop('resuming', False)
             if state["messages"]:
-                return None
-            if duty:
+                if not resuming:
+                    return None
+                # Resume the last persisted answer, not the exercise opening.
+                # A new reply ID allows playback on the replacement physical call.
+                last = next((m['content'] for m in reversed(state['messages'])
+                             if m['role'] == 'assistant'), '')
+                text = 'Связь восстановлена. ' + (last or 'Продолжайте, пожалуйста.')
+            elif field_report:
+                text = f"{field_report['source']}. {field_report['text']}"
+            elif duty:
                 # Доклад из ДДС в службу: собеседник принимает информацию, а не просит помощи.
                 text = f"Дежурный, {duty['service']}. Слушаю вас."
             else:
@@ -316,6 +374,16 @@ class Engine:
                     raise ValueError("Scenario unavailable")
                 state["scenario"] = scenario
                 text = scenario["opening"]
+        elif field_report:
+            utterance = event["payload"]["text"].strip()[:4000]
+            if not utterance:
+                return None
+            if likely_playback_echo(utterance, state["messages"]):
+                state["replies"][eid] = None
+                self.store.save(sid, state)
+                return None
+            state["messages"].append({"role": "user", "content": utterance})
+            text = spoken_reply(await field_answer(field_report, state["messages"]))
         elif duty:
             utterance = event["payload"]["text"].strip()[:4000]
             if not utterance:
@@ -333,7 +401,9 @@ class Engine:
             history.append({"role": "user", "content": utterance})
             try:
                 text = spoken_reply(await briefing_duty_reply(history, duty["card"], duty["service"],
-                                                              state["duty_report"]["missing"]))
+                                                              state["duty_report"]["missing"],
+                                                              duty.get("teacher_corrections"),
+                                                              duty.get("teacher_materials")))
             except (httpx.HTTPError, ValueError, KeyError, TypeError):
                 text = "Повторите, пожалуйста, последнюю фразу."
                 state["provider_error"] = "Сервис диалога недоступен. Повторите запрос позднее."
@@ -352,19 +422,23 @@ class Engine:
             scenario = state.get("scenario")
             if not scenario:
                 raise ValueError("Scenario was not selected")
-            history = state["messages"][-20:] + [{"role": "user", "content": utterance}]
+            history = state["messages"][-6:] + [{"role": "user", "content": utterance}]
+            deadline = asyncio.get_running_loop().time() + llm.VOICE_REPLY_TIMEOUT_SECONDS
             try:
-                text = people_answer(utterance, scenario) or await self.model([{"role": "system", "content": rules_for(scenario)}] + history)
+                text = people_answer(utterance, scenario) or await asyncio.wait_for(
+                    self.model([{"role": "system", "content": rules_for(scenario)}] + history),
+                    timeout=llm.VOICE_REPLY_TIMEOUT_SECONDS)
                 if not isinstance(text, str) or not text.strip():
                     raise ValueError("Empty model response")
                 text = spoken_reply(text)
                 if wrong_role(text):
-                    text = spoken_reply(await self.model(
+                    text = spoken_reply(await asyncio.wait_for(self.model(
                         [{"role": "system", "content": rules_for(scenario)}] + history +
-                        [{"role": "system", "content": "Исправь роль: ты пострадавший, который просит помощи. Ответь на последний вопрос оператора только фактами сценария. Не предлагай помощь оператору."}]))
+                        [{"role": "system", "content": "Исправь роль: ты пострадавший, который просит помощи. Ответь на последний вопрос оператора только фактами сценария. Не предлагай помощь оператору."}]),
+                        timeout=max(0, deadline - asyncio.get_running_loop().time())))
                     if wrong_role(text):
                         raise ValueError("Role reversal")
-            except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            except (httpx.HTTPError, ValueError, KeyError, TypeError, TimeoutError):
                 text = "Не расслышала вас. Повторите, пожалуйста."
                 state["provider_error"] = "Сервис диалога недоступен. Повторите запрос позднее."
             else:
@@ -393,12 +467,9 @@ warmup_task = None
 
 async def warm_model():
     try:
-        async with httpx.AsyncClient(timeout=90, trust_env=False) as client:
-            await client.post("http://127.0.0.1:11434/api/generate",
-                              json={"model": MODEL, "prompt": "", "stream": False, "keep_alive": -1,
-                                    "options": {"num_ctx": 4096, "num_thread": 8, "num_batch": 256}})
-    except httpx.HTTPError:
-        pass
+        await llm.warm_phone_model()
+    except (httpx.HTTPError, ValueError) as error:
+        llm.logger.warning('Phone model preload failed: %s', type(error).__name__)
 
 
 @app.on_event("startup")
@@ -432,6 +503,8 @@ app.include_router(workspace_router(store, engine, authorized, accounts, learnin
 app.include_router(learning.router(authorized))
 from generation import router as generation_router
 app.include_router(generation_router(store, accounts, authorized, Scenario, coordinator))
+from teacher_guidance import router as guidance_router
+app.include_router(guidance_router(store, accounts, authorized))
 from materials import router as materials_router, install_upload_limit
 app.include_router(materials_router(store, accounts, learning, authorized))
 install_upload_limit(app)

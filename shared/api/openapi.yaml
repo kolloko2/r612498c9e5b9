@@ -2,7 +2,12 @@ openapi: 3.1.0
 info:
   title: 112 AI Trainer REST API
   version: 0.3.0
-  description: Backend scenario API and Voice Gateway API on separate ports.
+  description: Backend scenario API and Voice Gateway API on separate ports. Initial
+    DDS 103 completion with the explicit no-brigade comment and no assigned crew counts
+    as receipt and bypasses future brigade/report gates. This exception does not bypass
+    teacher expected crew or result assessment. Territorial routing uses explicit
+    address abbreviations and 20 source-tagged teaching rules by default; it does
+    not infer unknown addresses or claim an official directory.
 servers:
 - url: http://127.0.0.1:8000/api/v1
   description: Scenario backend
@@ -11,6 +16,110 @@ servers:
 security:
 - bearerAuth: []
 paths:
+  /student/sessions/{sid}/briefings/{bid}/recover:
+    post:
+      summary: Resume an owned interrupted SIP briefing without clearing its transcript
+      description: Three attempts within 30 seconds, confirmed transport failure or service_restart only. Active calls and stale expected IDs return the current briefing. Normal hangup does not redial.
+      parameters:
+      - {name: sid, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: bid, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: expected_call_id, in: query, required: true, schema: {type: string, format: uuid}}
+      - {name: X-User-Session, in: header, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Current or resumed briefing with recovery state and call history}
+        '404': {description: Briefing or durable call snapshot not found}
+        '409': {description: Closed lesson or briefing}
+        '503': {description: Voice unavailable; no assumed recovery}
+  /student/grammar/preview:
+    post:
+      summary: Grammar Preview
+      operationId: grammar_preview_api_v1_student_grammar_preview_post
+      parameters:
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrammarPreview'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /instructor/grammar/preview:
+    post:
+      summary: Grammar Preview
+      operationId: grammar_preview_api_v1_instructor_grammar_preview_post
+      parameters:
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrammarPreview'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /student/inbox/poll:
+    post:
+      summary: Poll Inbox
+      operationId: poll_inbox_api_v1_student_inbox_poll_post
+      parameters:
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
   /health:
     get:
       security: []
@@ -549,6 +658,8 @@ paths:
   /student/sessions/{sid}/services:
     post:
       summary: Service
+      description: Update own DDS; the first accepted/refused decision closes the
+        30-second receipt clock.
       operationId: service_api_v1_student_sessions__sid__services_post
       parameters:
       - name: sid
@@ -4069,6 +4180,281 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - bearerAuth: []
+  /student/sessions/{sid}/open:
+    post:
+      summary: Open Card
+      description: Record opening the incoming DDS row; receipt is confirmed by a
+        primary status.
+      operationId: open_card_api_v1_student_sessions__sid__open_post
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /instructor/corrections:
+    get:
+      summary: Listing
+      operationId: listing_api_v1_instructor_corrections_get
+      parameters:
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+    post:
+      summary: Add
+      operationId: add_api_v1_instructor_corrections_post
+      parameters:
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Correction'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /instructor/corrections/{cid}/disable:
+    post:
+      summary: Disable
+      operationId: disable_api_v1_instructor_corrections__cid__disable_post
+      parameters:
+      - name: cid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cid
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /student/sessions/{sid}/progress:
+    post:
+      summary: Request Progress
+      operationId: request_progress_api_v1_student_sessions__sid__progress_post
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /student/sessions/{sid}/crew:
+    post:
+      summary: Assign Crew
+      operationId: assign_crew_api_v1_student_sessions__sid__crew_post
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignCrew'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /student/sessions/{sid}/updates/{update_id}/call:
+    post:
+      summary: Call Field Report
+      operationId: call_field_report_api_v1_student_sessions__sid__updates__update_id__call_post
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: update_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Update Id
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /student/sessions/{sid}/updates/{update_id}/confirm:
+    post:
+      summary: Confirm Field Report
+      operationId: confirm_field_report_api_v1_student_sessions__sid__updates__update_id__confirm_post
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: update_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Update Id
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
 components:
   securitySchemes:
     bearerAuth:
@@ -4236,6 +4622,16 @@ components:
           maxLength: 160
           title: Owner Service
           default: ''
+        crew_options:
+          items:
+            $ref: '#/components/schemas/CrewOption'
+          type: array
+          maxItems: 20
+          title: Crew Options
+        prefilled_card:
+          additionalProperties: true
+          type: object
+          title: Prefilled Card
         dds_expectation:
           anyOf:
           - $ref: '#/components/schemas/DdsExpectation'
@@ -4535,6 +4931,21 @@ components:
           type: array
           maxItems: 100
           title: Services
+        service_phones:
+          additionalProperties:
+            type: string
+            maxLength: 40
+          type: object
+          title: Service Phones
+        recipient_affiliations:
+          type: object
+          description: Explicit author-provided territorial and departmental destinations; DDS students cannot modify these.
+          propertyNames:
+            enum: [area, district, department]
+          additionalProperties:
+            type: string
+            minLength: 1
+            maxLength: 160
       additionalProperties: false
       type: object
       title: Card
@@ -5096,6 +5507,16 @@ components:
           maxLength: 160
           title: Owner Service
           default: ''
+        crew_options:
+          items:
+            $ref: '#/components/schemas/CrewOption'
+          type: array
+          maxItems: 20
+          title: Crew Options
+        prefilled_card:
+          additionalProperties: true
+          type: object
+          title: Prefilled Card
         dds_expectation:
           anyOf:
           - $ref: '#/components/schemas/DdsExpectation'
@@ -5246,6 +5667,16 @@ components:
           maxLength: 160
           title: Owner Service
           default: ''
+        crew_options:
+          items:
+            $ref: '#/components/schemas/CrewOption'
+          type: array
+          maxItems: 20
+          title: Crew Options
+        prefilled_card:
+          additionalProperties: true
+          type: object
+          title: Prefilled Card
         dds_expectation:
           anyOf:
           - $ref: '#/components/schemas/DdsExpectation'
@@ -5491,6 +5922,16 @@ components:
           maxLength: 1500
           title: Learning Objectives
           default: ''
+        mode:
+          type: string
+          pattern: ^(dds|caller)$
+          title: Mode
+          default: caller
+        owner_service:
+          type: string
+          maxLength: 160
+          title: Owner Service
+          default: ''
       additionalProperties: false
       type: object
       required:
@@ -5640,7 +6081,7 @@ components:
           default: ''
         file_base64:
           type: string
-          maxLength: 6990508
+          maxLength: 34952536
           title: File Base64
           default: ''
         remove_attachment:
@@ -5711,7 +6152,7 @@ components:
           default: ''
         file_base64:
           type: string
-          maxLength: 6990508
+          maxLength: 34952536
           title: File Base64
           default: ''
         remove_attachment:
@@ -5837,6 +6278,9 @@ components:
           - card.forwarded
           - call.requested
           - session.finished
+          - crew.assigned
+          - situation.update
+          - field_report.call_started
           title: Event Type
         service:
           type: string
@@ -6225,6 +6669,10 @@ components:
       title: RecipientSettings
     PublishRequest:
       properties:
+        new_revision:
+          type: boolean
+          default: false
+          description: Publish a fresh copy when scenario or rubric differs; preserve the previous scenario and teacher edits.
         draft_ids:
           items:
             type: string
@@ -6277,6 +6725,11 @@ components:
           type: string
           format: uuid
           title: Message Id
+        crew_id:
+          type: string
+          maxLength: 160
+          title: Crew Id
+          default: ''
         service:
           type: string
           maxLength: 160
@@ -6504,6 +6957,70 @@ components:
           type: array
           maxItems: 6
           title: Refusal Keywords
+        brief_keywords:
+          items:
+            type: string
+          type: array
+          maxItems: 8
+          title: Brief Keywords
+        result_keywords:
+          items:
+            type: string
+          type: array
+          maxItems: 8
+          title: Result Keywords
+        expected_corrections:
+          additionalProperties:
+            type: string
+            maxLength: 200
+          type: object
+          title: Expected Corrections
+        brief_required_fields:
+          items:
+            type: string
+            enum:
+            - city
+            - street
+            - house
+            - building
+            - structure
+            - apartment
+            - entrance
+            - floor
+            - object
+            - incident_type
+            - injured
+          type: array
+          maxItems: 12
+          title: Brief Required Fields
+        correction_evidence:
+          additionalProperties:
+            type: string
+            maxLength: 1000
+          type: object
+          title: Correction Evidence
+        check_weights:
+          additionalProperties:
+            type: number
+            maximum: 100.0
+            exclusiveMinimum: 0.0
+          type: object
+          title: Check Weights
+        pass_percent:
+          type: number
+          maximum: 100.0
+          minimum: 0.0
+          title: Pass Percent
+          default: 100
+        expected_crew_id:
+          type: string
+          maxLength: 80
+          title: Expected Crew Id
+          default: ''
+        leadership_decision_required:
+          type: boolean
+          title: Leadership Decision Required
+          default: false
         brief_service:
           type: string
           maxLength: 160
@@ -6530,3 +7047,110 @@ components:
         места, доложил ли дежурному и записал ли результат перед закрытием работ.
 
         Все проверки выводятся из журнала событий карточки и воспроизводимы.'
+    Correction:
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          title: Request Id
+        profile:
+          type: string
+          maxLength: 30
+          title: Profile
+          default: general
+        situation:
+          type: string
+          maxLength: 500
+          minLength: 5
+          title: Situation
+        incorrect:
+          type: string
+          maxLength: 500
+          minLength: 3
+          title: Incorrect
+        correct:
+          type: string
+          maxLength: 700
+          minLength: 3
+          title: Correct
+      additionalProperties: false
+      type: object
+      required:
+      - request_id
+      - situation
+      - incorrect
+      - correct
+      title: Correction
+    AssignCrew:
+      properties:
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+        crew_id:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Crew Id
+        decision_by:
+          type: string
+          enum:
+          - dispatcher
+          - leadership
+          title: Decision By
+        decision_note:
+          type: string
+          maxLength: 500
+          title: Decision Note
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - message_id
+      - crew_id
+      - decision_by
+      title: AssignCrew
+    CrewOption:
+      properties:
+        id:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Id
+        leader:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Leader
+        phone:
+          type: string
+          maxLength: 40
+          minLength: 1
+          title: Phone
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - leader
+      - phone
+      title: CrewOption
+    GrammarPreview:
+      properties:
+        card:
+          $ref: '#/components/schemas/Card'
+        comment:
+          type: string
+          maxLength: 1000
+          title: Comment
+          default: ''
+        text:
+          anyOf:
+          - type: string
+            maxLength: 100000
+          - type: 'null'
+          title: Text
+      additionalProperties: false
+      type: object
+      required:
+      - card
+      title: GrammarPreview

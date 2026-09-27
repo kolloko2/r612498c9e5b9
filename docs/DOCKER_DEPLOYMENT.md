@@ -2,7 +2,7 @@
 
 This block packages Frontend, Backend, Voice and Asterisk as separate images in
 one Compose project. PostgreSQL 16 is the deployment database. The LLM is served
-by a local Ollama on the host (`OLLAMA_URL`, default profile `qwen3:4b` on CPU) —
+by a local Ollama on the host (`OLLAMA_URL`, current standard profile `qwen3:8b`) —
 this is the isolated-contour acceptance configuration. OpenRouter is retained as a
 development code path only; it requires Internet and is off in delivery.
 
@@ -97,10 +97,11 @@ are not automated. Test actual two-way audio on the target network.
 
 ## Voice readiness is not inferred
 
-Default `PIPELINE_MODE=spike`, `TOPOLOGY_VERIFIED=false`: real SIP/ARI infrastructure
-with a test-tone media probe, NOT a conversational AI caller. This is intentional:
-there are no speech model files on this machine and the previous installation was
-on another host. Mock STT/TTS are never described as real speech recognition.
+Fresh preparation defaults to `PIPELINE_MODE=spike`, `TOPOLOGY_VERIFIED=false`:
+real SIP/ARI infrastructure with a test-tone media probe. The current workstation
+has installed Vosk/GigaAM/Silero models and uses verified conversation mode.
+A fresh host must receive the model files and pass the media check before enabling
+conversation mode. Mock STT/TTS are never described as real speech recognition.
 
 Follow the live media spike in voice/README.md, using the internal Voice URL from
 within the Compose network. Only after capture/playback isolation and headset audio

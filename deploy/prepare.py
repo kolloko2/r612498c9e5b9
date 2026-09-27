@@ -34,6 +34,8 @@ def settings(source):
         # docs/LOCAL_MODEL.md; 'mock' в LLM_PROVIDER отключает модель целиком.
         'OLLAMA_URL': previous.get('OLLAMA_URL') or 'http://host.docker.internal:11434',
         'LLM_PROFILE': previous.get('LLM_PROFILE') or 'standard',
+        'PHONE_LLM_MODEL': previous.get('PHONE_LLM_MODEL') or 'qwen3:4b-instruct-2507-q4_K_M',
+        'PHONE_LLM_THREADS': previous.get('PHONE_LLM_THREADS') or '6',
         'WEB_BIND_ADDRESS': '127.0.0.1',
         'ALLOWED_ORIGINS': 'http://127.0.0.1:3000,http://localhost:3000',
         'COOKIE_SECURE': 'false',

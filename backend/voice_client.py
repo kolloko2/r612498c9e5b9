@@ -33,5 +33,9 @@ async def request(path: str, method: str = "GET", body=None):
                                             headers={"Authorization": "Bearer " + token}, json=body)
             response.raise_for_status()
             return response.json()
+    except httpx.HTTPStatusError as error:
+        if error.response.status_code in (404, 409):
+            raise HTTPException(error.response.status_code, 'Звонок не найден или линия занята') from None
+        raise HTTPException(503, 'Голосовой модуль недоступен. Проверьте Voice и назначенный учебный SIP-номер.') from None
     except httpx.HTTPError:
         raise HTTPException(503, "Голосовой модуль недоступен. Проверьте Voice и назначенный учебный SIP-номер.")

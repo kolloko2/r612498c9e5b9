@@ -81,7 +81,7 @@ async function serve(page,role){
   await teacher.locator('#lessonPlaces input[data-place-student-id]').fill('АРМ-7');
   await teacher.locator('#lessonPlaces select[data-target-student-id]').selectOption('test_case');
   await teacher.locator('#lessonParallel').fill('2');await teacher.locator('#lessonAdaptive').check();
-  await teacher.locator('#lessonUnlimited').check();await teacher.locator('#lessonForm button').click();
+  await teacher.locator('#lessonUnlimited').check();await teacher.getByRole('button',{name:'Подготовить занятие'}).click();
   await expect(teacher.getByRole('button',{name:'Начать',exact:true})).toBeVisible();if(createdBody.cards_per_student!==null||createdBody.category_ids.length!==2)throw Error('Invalid lesson payload');
   if(createdBody.difficulty!=='basic'||createdBody.dds_profile!=='general')throw Error('Curriculum filters not submitted');
   if(createdBody.parallel_cards!==2||createdBody.adaptive_difficulty!==true)throw Error('Multitasking options not submitted');
@@ -89,7 +89,7 @@ async function serve(page,role){
   if(createdBody.student_scenarios['student-test']!=='test_case')throw Error('Addressed task not submitted');
   await teacher.getByRole('button',{name:'Начать',exact:true}).click();await expect(teacher.locator('#lessons')).toContainText('Идёт');
   await teacher.getByRole('button',{name:'Отчёт и участники'}).click();await expect(teacher.locator('#lessonReportContent')).toContainText('Студент');await teacher.locator('#closeLessonReport').click();
-  await teacher.getByRole('button',{name:'Завершить всем'}).click();await expect(teacher.locator('#lessons')).toContainText('Завершено');
+  await teacher.getByRole('button',{name:'Завершить всем'}).click();await teacher.locator('#stopLessonDialog textarea').fill('Практика завершена');await teacher.locator('#stopLessonDialog button[type="submit"]').click();await expect(teacher.locator('#lessons')).toContainText('Завершено');
   if(errors.length)throw Error(errors.join('\n'));console.log('Lesson browser flow: PASS (mock HTTP, student + teacher)');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

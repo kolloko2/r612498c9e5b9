@@ -1,19 +1,49 @@
-"""Owner-scoped reference library. Attachments are opaque, never executed or sent to AI."""
+"""Owner-scoped reference library with bounded, teacher-approved AI excerpts."""
 import base64
 import binascii
 import io
 import json
+import re
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from uuid import UUID, uuid4
 from zipfile import ZipFile, BadZipFile
 
+from pypdf import PdfReader
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from material_text import extract, retrieve
 from curriculum import Difficulty, DdsProfile, DIFFICULTIES, PROFILES
 
-MAX_FILE = 5 * 1024 * 1024
+MAX_FILE = 25 * 1024 * 1024
+
+
+def material_context(store, teacher_id: str | None, profile: str = 'general',
+                     group_id: str | None = None, query: str = '') -> list[dict]:
+    """Retrieve task-relevant passages across all published, scoped materials."""
+    if not teacher_id:
+        return []
+    try:
+        rows = store.db.execute(
+            "SELECT body FROM materials WHERE teacher_id=? "
+            "ORDER BY json_text(body,'updated_at') DESC", (teacher_id,)).fetchall()
+    except Exception:
+        return []
+    documents = []
+    for row in rows:
+        item = json.loads(row[0])
+        if not item.get('published') or item.get('dds_profile') not in ('general', profile):
+            continue
+        if group_id and group_id not in item.get('group_ids', []):
+            continue
+        if '_passages' not in item:
+            # Old documents remain usable without expensive OCR inside a call.
+            item['_passages'], _ = extract(None, '', item.get('body', ''))
+        documents.append(item)
+    return retrieve(documents, query)
 
 
 def install_upload_limit(app):
@@ -23,8 +53,8 @@ def install_upload_limit(app):
             chunks, size = [], 0
             async for chunk in request.stream():
                 size += len(chunk)
-                if size > 8 * 1024 * 1024:
-                    return JSONResponse({'detail': 'Запрос превышает 8 МиБ'}, status_code=413)
+                if size > 36 * 1024 * 1024:
+                    return JSONResponse({'detail': 'Запрос превышает 36 МиБ'}, status_code=413)
                 chunks.append(chunk)
             request._body = b''.join(chunks)
         return await call_next(request)
@@ -40,7 +70,7 @@ class MaterialWrite(BaseModel):
     group_ids: list[UUID] = Field(default_factory=list, max_length=100)
     published: bool = False
     filename: str = Field(default='', max_length=180)
-    file_base64: str = Field(default='', max_length=6990508)
+    file_base64: str = Field(default='', max_length=34952536)
     remove_attachment: bool = False
 
 
@@ -59,14 +89,14 @@ def attachment(body):
     if not name or PurePosixPath(name).name != name or any(c in name for c in '\\:\x00\r\n'):
         raise HTTPException(422, 'Некорректное имя файла')
     ext = PurePosixPath(name).suffix.lower()
-    if ext not in ('.pdf', '.txt', '.docx'):
-        raise HTTPException(422, 'Допустимы PDF, TXT (UTF-8) и DOCX')
+    if ext not in ('.pdf', '.txt', '.docx', '.xlsx'):
+        raise HTTPException(422, 'Допустимы PDF, TXT (UTF-8), DOCX и XLSX')
     try:
         raw = base64.b64decode(body.file_base64, validate=True)
     except (ValueError, binascii.Error):
         raise HTTPException(422, 'Некорректный файл') from None
     if not raw or len(raw) > MAX_FILE:
-        raise HTTPException(422, 'Размер файла: от 1 байта до 5 МиБ')
+        raise HTTPException(422, 'Размер файла: от 1 байта до 25 МиБ')
     if ext == '.pdf' and not raw.startswith(b'%PDF-'):
         raise HTTPException(422, 'Файл не похож на PDF')
     if ext == '.txt':
@@ -76,17 +106,18 @@ def attachment(body):
                 raise ValueError()
         except (ValueError, UnicodeError):
             raise HTTPException(422, 'TXT должен содержать текст UTF-8') from None
-    if ext == '.docx':
+    if ext in ('.docx', '.xlsx'):
         try:
             with ZipFile(io.BytesIO(raw)) as archive:
                 infos = archive.infolist()
                 names = {i.filename for i in infos}
-                if not {'[Content_Types].xml', 'word/document.xml'} <= names or len(infos) > 1000 or sum(i.file_size for i in infos) > 20 * 1024 * 1024:
+                main = 'word/document.xml' if ext == '.docx' else 'xl/workbook.xml'
+                if not {'[Content_Types].xml', main} <= names or len(infos) > 2000 or sum(i.file_size for i in infos) > 100 * 1024 * 1024:
                     raise ValueError()
                 if any('vbaproject' in i.filename.lower() or i.flag_bits & 1 for i in infos):
                     raise ValueError()
         except (BadZipFile, ValueError):
-            raise HTTPException(422, 'Некорректный или неподдерживаемый DOCX') from None
+            raise HTTPException(422, 'Некорректный или неподдерживаемый документ Office') from None
     return raw
 
 
@@ -112,7 +143,9 @@ def router(store, accounts, learning, authorize):
         return value, row[2]
 
     def present(value, raw=None, detail=False, student_view=False):
-        result = dict(value)
+        result = {k:v for k,v in value.items() if not k.startswith('_')}
+        if not detail and result.get('extraction'):
+            result['extraction'] = {k:v for k,v in result['extraction'].items() if k != 'preview'}
         if not detail:
             result.pop('body', None)
         else:
@@ -135,14 +168,22 @@ def router(store, accounts, learning, authorize):
         if not body.body and raw is None:
             raise HTTPException(422, 'Добавьте текст или файл методички')
         usage = store.db.execute('SELECT COUNT(*),COALESCE(SUM(length(attachment)),0) FROM materials WHERE teacher_id=? AND id!=?', (user['id'], old['id'] if old else '')).fetchone()
-        if usage[0] >= 100 or usage[1] + len(raw or b'') > 50 * 1024 * 1024:
-            raise HTTPException(409, 'Лимит преподавателя: 100 материалов и 50 МиБ файлов')
+        if usage[0] >= 100 or usage[1] + len(raw or b'') > 500 * 1024 * 1024:
+            raise HTTPException(409, 'Лимит преподавателя: 100 материалов и 500 МиБ файлов')
         at = datetime.now(timezone.utc).isoformat()
         value = {**body.model_dump(mode='json', exclude={'file_base64', 'remove_attachment', 'revision'}),
                  'id': old['id'] if old else str(uuid4()), 'teacher_id': user['id'],
                  'filename': filename if raw else '', 'file_size': len(raw or b''), 'group_ids': groups,
                  'revision': old['revision'] + 1 if old else 1, 'created_at': old['created_at'] if old else at, 'updated_at': at}
+        value['_passages'], value['extraction'] = extract(raw, filename, body.body)
         with store.db:
+            if old:
+                latest = store.db.execute('SELECT body FROM materials WHERE id=?', (old['id'],)).fetchone()
+                if not latest or json.loads(latest[0])['revision'] != old['revision']:
+                    raise HTTPException(409, 'Материал изменился во время обработки файла. Перечитайте актуальную версию.')
+            usage = store.db.execute('SELECT COUNT(*),COALESCE(SUM(length(attachment)),0) FROM materials WHERE teacher_id=? AND id!=?', (user['id'], value['id'])).fetchone()
+            if usage[0] >= 100 or usage[1] + len(raw or b'') > 500 * 1024 * 1024:
+                raise HTTPException(409, 'Лимит преподавателя: 100 материалов и 500 МиБ файлов')
             store.db.execute('INSERT INTO materials VALUES (?,?,?,?) ON CONFLICT (id) DO UPDATE SET teacher_id=excluded.teacher_id,body=excluded.body,attachment=excluded.attachment', (value['id'], user['id'], json.dumps(value, ensure_ascii=False), raw))
         return present(value, raw, detail=True)
 
@@ -160,7 +201,7 @@ def router(store, accounts, learning, authorize):
         return [present(json.loads(r[0])) for r in rows]
 
     @api.post('/api/v1/instructor/materials', status_code=201)
-    async def create(body: MaterialWrite, user=Depends(teacher)):
+    def create(body: MaterialWrite, user=Depends(teacher)):
         return save(body, user)
 
     @api.get('/api/v1/instructor/materials/{mid}')
@@ -169,7 +210,7 @@ def router(store, accounts, learning, authorize):
         return present(value, raw, detail=True)
 
     @api.put('/api/v1/instructor/materials/{mid}')
-    async def update(mid: UUID, body: MaterialUpdate, user=Depends(teacher)):
+    def update(mid: UUID, body: MaterialUpdate, user=Depends(teacher)):
         value, raw = load(mid, user)
         if value['revision'] != body.revision:
             raise HTTPException(409, 'Материал изменился. Сохраните свой текст отдельно и перечитайте актуальную версию.')

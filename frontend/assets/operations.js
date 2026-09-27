@@ -121,7 +121,7 @@ function applySettings(data,force=false){
  if(!settingsDirty||force){el('backupEnabled').checked=savedSettings.backup_enabled;el('backupHour').value=String(savedSettings.backup_hour_utc);settingsDirty=false;}
  const disabled=!data.enabled;for(const control of el('settingsForm').elements)control.disabled=disabled;el('runBackup').disabled=!backupAllowed();
 }
-function render(data){latestSnapshot=data;renderSummary(data);renderServices(data);renderMetrics(data);renderConfiguration(data);renderBackups(data);renderJobs(data);renderEvents(data);applySettings(data);el('disabledNotice').hidden=data.enabled!==false;el('exportReport').disabled=false;}
+function render(data){latestSnapshot=data;renderSummary(data);renderServices(data);renderMetrics(data);renderConfiguration(data);renderBackups(data);renderJobs(data);renderEvents(data);applySettings(data);el('disabledNotice').hidden=data.enabled!==false;el('exportReport').disabled=false;dispatchEvent(new Event('operations-rendered'));}
 async function loadOperations({announce=false}={}){
  if(pollInFlight||document.hidden)return;pollInFlight=true;if(announce)el('pageStatus').textContent='Обновляем состояние…';
  try{const data=await api('/api/v1/admin/operations');render(data);el('pageStatus').textContent=`Обновлено ${new Date().toLocaleTimeString('ru-RU')}`;el('pageStatus').className='page-status';}

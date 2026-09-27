@@ -57,23 +57,31 @@ class ARIClient:
         url = url.rstrip("/") + "/events?" + urlencode({"app": cfg.ari_app})
         credentials = base64.b64encode(
             f"{cfg.ari_username}:{cfg.ari_password.get_secret_value()}".encode()).decode()
-        try:
-            async with connect(url, additional_headers={"Authorization": f"Basic {credentials}"},
-                               max_size=1024 * 1024, open_timeout=10,
-                               **websocket_ssl_kwargs(url, cfg.internal_ca_file)) as ws:
-                self.ready.set()
-                async for message in ws:
-                    event = json.loads(message)
-                    if event.get("type") == "StasisStart":
-                        channel_id = event.get("channel", {}).get("id")
-                        if channel_id:
-                            self.channel_ready.setdefault(channel_id, asyncio.Event()).set()
-                    await self.on_event(event)
-        except asyncio.CancelledError:
-            raise
-        finally:
-            self.ready.clear()
-            await self.on_disconnect()
+        delay = 1
+        while True:
+            try:
+                async with connect(url, additional_headers={"Authorization": f"Basic {credentials}"},
+                                   max_size=1024 * 1024, open_timeout=10,
+                                   **websocket_ssl_kwargs(url, cfg.internal_ca_file)) as ws:
+                    self.ready.set()
+                    delay = 1
+                    async for message in ws:
+                        event = json.loads(message)
+                        if event.get("type") == "StasisStart":
+                            channel_id = event.get("channel", {}).get("id")
+                            if channel_id:
+                                self.channel_ready.setdefault(channel_id, asyncio.Event()).set()
+                        await self.on_event(event)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # Credentials and event payloads must never reach diagnostics.
+                pass
+            finally:
+                self.ready.clear()
+                await self.on_disconnect()
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 5)
 
     async def close(self):
         if self.task:

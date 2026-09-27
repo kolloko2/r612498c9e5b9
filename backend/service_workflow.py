@@ -55,6 +55,13 @@ def _is_ambulance(service: str) -> bool:
     return isinstance(service, str) and "103" in service
 
 
+def no_brigade_completion(service: str, old: str | None, new: str, comment: str) -> bool:
+    """The source's explicit initial 103 completion, not arbitrary early closure."""
+    return (_is_ambulance(service) and old in (None, '', 'Добавлена', 'Получена службой')
+            and new == 'Работы завершены'
+            and NO_BRIGADE_COMMENT.rstrip('.').casefold() in (comment or '').casefold())
+
+
 def allowed_statuses(service: str, current_status: str | None) -> list[str]:
     """Return canonical statuses reachable in one edit.
 

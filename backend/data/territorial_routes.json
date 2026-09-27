@@ -1,0 +1,258 @@
+{
+  "version": 1,
+  "scope": "20 учебных правил: округа, районы, три адреса билетов и подчинённость по QA №690. Источники в записях. Подписи получателей не являются официальным справочником подразделений или телефонов. area=район, district=округ.",
+  "rules": [
+    {
+      "id": "qa-690-shchukino",
+      "approved": true,
+      "source": "Str1fe, сообщение 690, 21.09.2026: район Щукино и СЗАО. Учебные подписи адресатов.",
+      "match": {
+        "city": "Москва",
+        "area": "Щукино"
+      },
+      "services": [
+        "Район Щукино",
+        "СЗАО"
+      ]
+    },
+    {
+      "id": "qa-690-school",
+      "approved": true,
+      "source": "Str1fe, сообщение 690, 21.09.2026: школа в Щукино — получатель Департамент образования. Объект должен явно называться «Школа».",
+      "match": {
+        "city": "Москва",
+        "area": "Щукино",
+        "object": "Школа"
+      },
+      "services": [
+        "Департамент образования"
+      ]
+    },
+    {
+      "id": "moscow-okrug-1",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/content/files/193fea2d09aaf800ab1d2d67945dd453/Gosdoklad_2021_1810.pdf; учебная маршрутизация по принципу QA №690, не реестр телефонов ДДС.",
+      "match": {
+        "city": "Москва",
+        "district": "ЦАО"
+      },
+      "services": [
+        "ЦАО"
+      ]
+    },
+    {
+      "id": "moscow-okrug-2",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/content/files/193fea2d09aaf800ab1d2d67945dd453/Gosdoklad_2021_1810.pdf; учебная маршрутизация по принципу QA №690, не реестр телефонов ДДС.",
+      "match": {
+        "city": "Москва",
+        "district": "САО"
+      },
+      "services": [
+        "САО"
+      ]
+    },
+    {
+      "id": "moscow-okrug-3",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/content/files/193fea2d09aaf800ab1d2d67945dd453/Gosdoklad_2021_1810.pdf; учебная маршрутизация по принципу QA №690, не реестр телефонов ДДС.",
+      "match": {
+        "city": "Москва",
+        "district": "СВАО"
+      },
+      "services": [
+        "СВАО"
+      ]
+    },
+    {
+      "id": "moscow-okrug-4",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/content/files/193fea2d09aaf800ab1d2d67945dd453/Gosdoklad_2021_1810.pdf; учебная маршрутизация по принципу QA №690, не реестр телефонов ДДС.",
+      "match": {
+        "city": "Москва",
+        "district": "ВАО"
+      },
+      "services": [
+        "ВАО"
+      ]
+    },
+    {
+      "id": "moscow-okrug-5",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/content/files/193fea2d09aaf800ab1d2d67945dd453/Gosdoklad_2021_1810.pdf; учебная маршрутизация по принципу QA №690, не реестр телефонов ДДС.",
+      "match": {
+        "city": "Москва",
+        "district": "ЮВАО"
+      },
+      "services": [
+        "ЮВАО"
+      ]
+    },
+    {
+      "id": "moscow-okrug-6",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/content/files/193fea2d09aaf800ab1d2d67945dd453/Gosdoklad_2021_1810.pdf; учебная маршрутизация по принципу QA №690, не реестр телефонов ДДС.",
+      "match": {
+        "city": "Москва",
+        "district": "ЮАО"
+      },
+      "services": [
+        "ЮАО"
+      ]
+    },
+    {
+      "id": "moscow-okrug-7",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/content/files/193fea2d09aaf800ab1d2d67945dd453/Gosdoklad_2021_1810.pdf; учебная маршрутизация по принципу QA №690, не реестр телефонов ДДС.",
+      "match": {
+        "city": "Москва",
+        "district": "ЮЗАО"
+      },
+      "services": [
+        "ЮЗАО"
+      ]
+    },
+    {
+      "id": "moscow-okrug-8",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/content/files/193fea2d09aaf800ab1d2d67945dd453/Gosdoklad_2021_1810.pdf; учебная маршрутизация по принципу QA №690, не реестр телефонов ДДС.",
+      "match": {
+        "city": "Москва",
+        "district": "ЗАО"
+      },
+      "services": [
+        "ЗАО"
+      ]
+    },
+    {
+      "id": "moscow-okrug-9",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/content/files/193fea2d09aaf800ab1d2d67945dd453/Gosdoklad_2021_1810.pdf; учебная маршрутизация по принципу QA №690, не реестр телефонов ДДС.",
+      "match": {
+        "city": "Москва",
+        "district": "СЗАО"
+      },
+      "services": [
+        "СЗАО"
+      ]
+    },
+    {
+      "id": "moscow-okrug-10",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/content/files/193fea2d09aaf800ab1d2d67945dd453/Gosdoklad_2021_1810.pdf; учебная маршрутизация по принципу QA №690, не реестр телефонов ДДС.",
+      "match": {
+        "city": "Москва",
+        "district": "ЗелАО"
+      },
+      "services": [
+        "ЗелАО"
+      ]
+    },
+    {
+      "id": "moscow-okrug-11",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/content/files/193fea2d09aaf800ab1d2d67945dd453/Gosdoklad_2021_1810.pdf; учебная маршрутизация по принципу QA №690, не реестр телефонов ДДС.",
+      "match": {
+        "city": "Москва",
+        "district": "НАО"
+      },
+      "services": [
+        "НАО"
+      ]
+    },
+    {
+      "id": "moscow-okrug-12",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/content/files/193fea2d09aaf800ab1d2d67945dd453/Gosdoklad_2021_1810.pdf; учебная маршрутизация по принципу QA №690, не реестр телефонов ДДС.",
+      "match": {
+        "city": "Москва",
+        "district": "ТАО"
+      },
+      "services": [
+        "ТАО"
+      ]
+    },
+    {
+      "id": "moscow-area-12",
+      "approved": true,
+      "source": "География: https://www.babush.ru/nash_okrug/; получатели — учебные подписи по принципу QA №690.",
+      "match": {
+        "city": "Москва",
+        "area": "Бабушкинский"
+      },
+      "services": [
+        "Район Бабушкинский",
+        "СВАО"
+      ]
+    },
+    {
+      "id": "moscow-area-13",
+      "approved": true,
+      "source": "География: https://dk.mos.ru/map/uao/175/; получатели — учебные подписи по принципу QA №690.",
+      "match": {
+        "city": "Москва",
+        "area": "Нагатинский Затон"
+      },
+      "services": [
+        "Район Нагатинский Затон",
+        "ЮАО"
+      ]
+    },
+    {
+      "id": "moscow-area-14",
+      "approved": true,
+      "source": "География: https://www.mos.ru/upload/documents/files/1430/5_Prilojenie5.pdf; получатели — учебные подписи по принципу QA №690.",
+      "match": {
+        "city": "Москва",
+        "area": "Дмитровский"
+      },
+      "services": [
+        "Район Дмитровский",
+        "САО"
+      ]
+    },
+    {
+      "id": "address-ticket-20-1",
+      "approved": true,
+      "source": "Адресная привязка: https://sovet.babush.ru/all_deputies/butrina_elena_vladimirovna/; учебные получатели, проверка 26.09.2026.",
+      "match": {
+        "city": "Москва",
+        "street": "Олонецкий проезд",
+        "house": "4"
+      },
+      "services": [
+        "Район Бабушкинский",
+        "СВАО"
+      ]
+    },
+    {
+      "id": "address-ticket-05-2",
+      "approved": true,
+      "source": "Адресная привязка: https://domdata.ru/dom/7569782; учебные получатели, проверка 26.09.2026.",
+      "match": {
+        "city": "Москва",
+        "street": "Коломенская набережная",
+        "house": "18"
+      },
+      "services": [
+        "Район Нагатинский Затон",
+        "ЮАО"
+      ]
+    },
+    {
+      "id": "address-ticket-22-1",
+      "approved": true,
+      "source": "Адресная привязка: https://marshala-vasilevskogo-b.seles.io/ru; учебные получатели, проверка 26.09.2026.",
+      "match": {
+        "city": "Москва",
+        "street": "Маршала Василевского",
+        "house": "13",
+        "building": "3"
+      },
+      "services": [
+        "Район Щукино",
+        "СЗАО"
+      ]
+    }
+  ]
+}

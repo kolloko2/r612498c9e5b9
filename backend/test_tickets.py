@@ -101,6 +101,21 @@ def test_publish_rejects_unknown_and_duplicate_drafts(booklet):
     assert client.post(BASE + '/publish', headers=h, json={'draft_ids': []}).status_code == 422
 
 
+def test_revision_preserves_teacher_copy_and_is_repeatable(booklet):
+    client = booklet['client']; h = booklet['headers']['teacher1']
+    body = {'draft_ids': ['ticket-01-1'], 'new_revision': True}
+    old = client.post(BASE + '/publish', headers=h, json=body).json()['published'][0]['scenario_id']
+    scenario = booklet['store'].scenario(old)
+    scenario['description'] = 'Правка преподавателя, которую нельзя терять'
+    with booklet['store'].db:
+        booklet['store'].db.execute('UPDATE scenarios SET body=? WHERE id=?', (json.dumps(scenario), old))
+    new = client.post(BASE + '/publish', headers=h, json=body).json()['published'][0]
+    assert new['created'] and new['scenario_id'] != old
+    assert booklet['store'].scenario(old)['description'] == scenario['description']
+    repeated = client.post(BASE + '/publish', headers=h, json=body).json()['published'][0]
+    assert repeated['scenario_id'] == new['scenario_id'] and not repeated['created']
+
+
 def test_missing_catalog_degrades_to_empty(tmp_path):
     catalog = load_catalog(tmp_path / 'absent.json')
     assert catalog['drafts'] == [] and catalog['metadata']['drafts'] == 0
@@ -136,3 +151,97 @@ def test_anchors_ignore_short_and_service_words():
     assert _anchors("Пожар в квартире") == ["пожар", "кварти"]
     # Не больше двух опор: каждая лишняя повышает шанс отклонить верный ответ.
     assert len(_anchors("Задымление мусоропровода в жилом доме")) == 2
+
+
+def test_all_96_exercises_have_deliverable_cards_and_complete_dds_cycle():
+    from workspace import prefilled_from_scenario
+    from text_facts import asserted
+    catalog = load_catalog(CATALOG)
+    crews = set()
+    for draft in catalog['drafts']:
+        scenario = Scenario.model_validate({**draft['scenario'], 'enabled': True}).model_dump()
+        card = prefilled_from_scenario(scenario)
+        expectation = scenario['dds_expectation']
+        assert card['description'] == scenario['incident'], draft['id']
+        assert card['address_note'] == scenario['location'], draft['id']
+        assert scenario['owner_service'] in card['services'], draft['id']
+        assert card['service_phones'][scenario['owner_service']], draft['id']
+        assert expectation['brief_service'] == scenario['owner_service'], draft['id']
+        assert expectation['expected_crew_id'] == scenario['crew_options'][0]['id']
+        crews.add(expectation['expected_crew_id'])
+        assert [u['unlocks_status'] for u in scenario['updates']] == [
+            'Начало реагирования', 'Прибытие', 'Проведение работ', 'Работы завершены']
+        schedule = [u['after_seconds'] for u in scenario['updates']]
+        assert schedule == sorted(set(schedule)) and schedule[0] == 40
+        # A literal correct final report must satisfy the private result rubric.
+        assert all(asserted(scenario['updates'][-1]['text'], fact)
+                   for fact in expectation['result_keywords']), draft['id']
+        assert all(card[field] for field in expectation['brief_required_fields'])
+    assert len(crews) == 96
+
+
+def test_booklet_exceptions_do_not_invent_addresses_or_fire():
+    drafts = {item['id']: item['scenario'] for item in load_catalog(CATALOG)['drafts']}
+    assert drafts['ticket-32-3']['category_id'] == 'utilities'
+    assert drafts['ticket-30-3']['owner_service'] == 'Служба 104'
+    assert drafts['ticket-31-3']['dds_profile'] == 'gas'
+    assert drafts['ticket-03-1']['prefilled_card']['city'] == 'Королёв'
+    assert drafts['ticket-23-2']['prefilled_card']['city'] == 'Зеленоград'
+    assert drafts['ticket-01-3']['prefilled_card']['region'] == 'Волгоградская область'
+    assert drafts['ticket-18-1']['prefilled_card']['city'] == ''
+    assert drafts['ticket-08-3']['prefilled_card']['house'] == ''  # 75к2 is a landmark
+    assert drafts['ticket-02-1']['prefilled_card']['injured'] is False
+    assert drafts['ticket-17-2']['prefilled_card']['injured'] is True
+    assert 'Признаков пожара не обнаружено' in drafts['ticket-17-1']['updates'][-1]['text']
+    assert 'Огонь перекинулся' not in json.dumps(drafts, ensure_ascii=False)
+
+
+def test_rebuilding_exercises_is_reproducible():
+    import sys
+    sys.path.insert(0, str(CATALOG.parents[2] / 'tools'))
+    from import_tickets import build, SOURCE
+    source = json.loads(SOURCE.read_text(encoding='utf-8'))
+    assert build(source, False) == load_catalog(CATALOG)
+
+
+def test_every_exercise_accepts_its_complete_report():
+    from briefing import check
+    from workspace import prefilled_from_scenario
+    labels = {'house': 'дом', 'building': 'корпус', 'structure': 'строение',
+              'apartment': 'квартира', 'entrance': 'подъезд', 'floor': 'этаж'}
+    failures = []
+    for item in load_catalog(CATALOG)['drafts']:
+        scenario = item['scenario']
+        card = prefilled_from_scenario(scenario)
+        selected = scenario['dds_expectation']['brief_required_fields']
+        card['_brief_required_fields'] = selected
+        phrases = ['Пострадавшие есть' if field == 'injured' else
+                   f'{labels.get(field, "")} {card[field]}' for field in selected]
+        result = check('. '.join(phrases), card)
+        if not result['complete']:
+            failures.append((item['id'], result['missing']))
+    assert not failures, failures
+
+
+def test_all_annotations_reference_real_classifier_rows_and_individual_reports():
+    from classifier import resolve
+    from routing import main_services
+    endings = set()
+    for item in load_catalog(CATALOG)['drafts']:
+        scenario = item['scenario']
+        card = scenario['prefilled_card']
+        record = resolve(card['classifier_id'], card['classifier_version'])
+        assert card['classifier_features'] == record['features']
+        assert card['classifier_group'] == record['group_id']
+        assert card['incident_type'] == record['incident_type']
+        primary = main_services(record['main_service'])
+        assert not primary or scenario['owner_service'] in primary
+        endings.add(scenario['updates'][-1]['text'])
+    assert len(endings) == 96
+
+
+def test_negative_medical_classifier_is_not_reversed_in_report():
+    from text_facts import incident_asserted
+    assert incident_asserted('Мужчина без сознания.', 'Без сознания')
+    assert not incident_asserted('Мужчина в сознании.', 'Без сознания')
+    assert not incident_asserted('Мужчина без сознания. Мужчина в сознании.', 'Без сознания')

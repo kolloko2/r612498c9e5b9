@@ -1,5 +1,14 @@
 # Offline regional map
 
+2026-09-23: viewport queries materialize visible IDs before fetching geometry.
+The covering zoom index avoids reading large geometries outside the viewport.
+Overview scales (<14) return at most 4,000 features; detailed scales at most 8,000.
+The query budget is 6 seconds. The client aborts obsolete viewport requests and
+limits GET requests to 12 seconds, retains the last successful geometry on failure,
+and retries session metadata/coverage as well as the viewport. Street labels render
+after all geometry so road strokes cannot erase letters. No external map dependency
+or change to the application database is introduced.
+
 The former centre-only JSON is superseded by the whole Moscow and Moscow Oblast
 OSM extracts from https://download.openstreetmap.fr/extracts/russia/central_federal_district/.
 The map is no longer hard-coded to a small bounding box. The viewport reads a

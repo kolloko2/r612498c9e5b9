@@ -42,6 +42,8 @@ def test_local_proxy_origin_and_server_token(monkeypatch):
     with TestClient(module.app,base_url='http://127.0.0.1:3000') as client:
         home=client.get('/')
         assert home.status_code==200
+        assert "frame-ancestors 'none'" in home.headers['content-security-policy']
+        assert "frame-ancestors 'self'" in client.get('/map').headers['content-security-policy']
         assert 'test-backend-token' not in home.text
         assert client.post('/api/v1/student/sessions',json={}).status_code==403
         assert client.post('/api/v1/student/sessions',json={},headers={'X-Voice-UI':'1','Origin':'https://untrusted.example'}).status_code==403
@@ -73,7 +75,7 @@ def test_local_proxy_origin_and_server_token(monkeypatch):
         assert client.post('/api/v1/instructor/materials',json=body,headers={'X-Voice-UI':'1'}).status_code==200
         assert json.loads(requests[-1].content)==body
         before=len(requests)
-        assert client.post('/api/v1/instructor/materials',content=iter([b'x'*1024*1024]*9),headers={'X-Voice-UI':'1'}).status_code==413
+        assert client.post('/api/v1/instructor/materials',content=iter([b'x'*1024*1024]*37),headers={'X-Voice-UI':'1'}).status_code==413
         assert len(requests)==before
 
 

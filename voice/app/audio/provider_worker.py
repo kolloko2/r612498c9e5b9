@@ -87,9 +87,13 @@ def tts(model_path):
 def silero_tts(model_path):
     import numpy as np
     import torch
+    import os
 
-    torch.set_num_threads(4)
-    model = torch.package.PackageImporter(model_path).load_pickle("tts_models", "model")
+    torch.set_num_threads(max(1, min(8, int(os.getenv('SILERO_CPU_THREADS', '2')))))
+    # Python opens Unicode Windows paths correctly; PyTorch's native filename
+    # loader can fail when the installation directory contains Cyrillic.
+    with open(model_path, 'rb') as model_file:
+        model = torch.package.PackageImporter(model_file).load_pickle("tts_models", "model")
     model.to(torch.device("cpu"))
     print("READY", flush=True)
     for line in sys.stdin.buffer:
@@ -108,5 +112,12 @@ def silero_tts(model_path):
 
 
 if __name__ == "__main__":
+    # Native speech libraries on Windows may not accept non-ASCII absolute
+    # paths. Each worker is isolated: Python can enter the model directory and
+    # pass its short local filename to those libraries without copying models.
+    import os
+    from pathlib import Path
+    model = Path(sys.argv[2]).resolve()
+    os.chdir(model.parent)
     {"stt": stt, "sherpa-stt": sherpa_stt, "tts": tts,
-     "silero-tts": silero_tts}[sys.argv[1]](sys.argv[2])
+     "silero-tts": silero_tts}[sys.argv[1]](model.name)

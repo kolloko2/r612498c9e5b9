@@ -77,8 +77,8 @@ async def local_only(request, call_next):
             chunks, size = [], 0
             async for chunk in request.stream():
                 size += len(chunk)
-                if size > 8 * 1024 * 1024:
-                    return JSONResponse({'detail': 'Запрос превышает 8 МиБ'}, status_code=413)
+                if size > 36 * 1024 * 1024:
+                    return JSONResponse({'detail': 'Запрос превышает 36 МиБ'}, status_code=413)
                 chunks.append(chunk)
             request._body = b''.join(chunks)
         response = await call_next(request)
@@ -86,7 +86,8 @@ async def local_only(request, call_next):
         USER_SESSION.reset(context)
     response.headers['Cache-Control'] = 'no-store'
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'"
+    ancestors = "'self'" if request.url.path == '/map' else "'none'"
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors " + ancestors
     return response
 
 async def gateway(path, method='GET', body=None):
@@ -105,7 +106,7 @@ async def dialogue(path, method='GET', body=None, params=None):
         r = await app.state.dialogue_client.request(method, DIALOGUE + '/api/v1/' + path,
                                                     headers={'Authorization': 'Bearer ' + DIALOGUE_TOKEN,
                                                              'X-User-Session': USER_SESSION.get()},
-                                                    json=body, params=params)
+                                                    json=body, params=params, timeout=240 if path.startswith('instructor/materials') else 65)
     except httpx.HTTPError:
         raise HTTPException(503, 'Сервис сценариев недоступен')
     if r.status_code >= 400:

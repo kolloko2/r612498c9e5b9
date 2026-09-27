@@ -5,6 +5,30 @@ from dds_review import review
 SERVICE = "Служба 101"
 
 
+def test_ambulance_without_brigade_does_not_require_future_reports():
+    from dds_review import unfinished
+    value = card([event(1, 'service.updated', '2026-09-18T10:00:00+00:00',
+                       service='Служба 103', status='Работы завершены',
+                       comment='Завершение работ без бригады.')],
+                 expectation_service='Служба 103', unlocks={'later': 'Прибытие'})
+    value['crew_options'] = [{'id': '17'}]
+    value['processed_at'] = '2026-09-18T10:00:01+00:00'
+    result = review(value, {'should_accept': True})
+    assert verdict(result, 'acceptance')['passed'] is True
+    assert not any(check['id'].startswith('update:') for check in result['checks'])
+    assert unfinished(value, {'should_accept': True}) == []
+    # A teacher explicitly expecting a brigade still detects a wrong decision.
+    result = review(value, {'should_accept': True, 'expected_crew_id': '17'})
+    assert verdict(result, 'crew_choice')['passed'] is False
+
+
+def test_other_service_cannot_use_ambulance_exception():
+    value = card([event(1, 'service.updated', '2026-09-18T10:00:00+00:00',
+                       service=SERVICE, status='Работы завершены',
+                       comment='Завершение работ без бригады.')])
+    assert verdict(review(value, {'should_accept': True}), 'acceptance')['passed'] is False
+
+
 def event(seq, kind, at, **detail):
     return {"seq": seq, "type": kind, "at": at, "detail": detail}
 
@@ -100,13 +124,72 @@ def test_briefing_and_its_facts_are_checked():
     silent = card([])
     assert verdict(review(silent, expectation), "briefing")["passed"] is False
 
-    lost = card([], notifications=[{"service": SERVICE, "comment": "Докладываю, пожар в квартире"}])
+    sent = [event(1, 'notification.recorded', '2026-09-18T10:00:00+00:00',
+                  service=SERVICE, source='briefing', message_id='report-1')]
+    lost = card(sent, notifications=[{"service": SERVICE, "message_id": "report-1",
+                                      "comment": "Докладываю, пожар в квартире"}])
     facts = verdict(review(lost, expectation), "briefing_facts")
-    assert facts["passed"] is False and "улица" in facts["detail"]
+    assert facts["passed"] is False and "Улица" in facts["detail"]
 
-    full = card([], notifications=[{"service": SERVICE,
-                                    "comment": "Берзарина, дом 21, пожар в квартире"}])
+    full = card(sent, notifications=[{"service": SERVICE, "message_id": "report-1",
+                                      "comment": "Берзарина, дом 21, пожар в квартире"}])
     assert verdict(review(full, expectation), "briefing_facts")["passed"] is True
+    manual = card([], notifications=full['notifications'])
+    assert verdict(review(manual, expectation), 'briefing')['passed'] is False
+
+
+def test_scenario_facts_are_checked_in_brief_and_result():
+    events = [event(1, 'notification.recorded', '2026-09-18T10:00:00+00:00',
+                    service=SERVICE, source='briefing', message_id='report-1'),
+              event(2, 'service.updated', '2026-09-18T10:10:00+00:00',
+                    service=SERVICE, status='Работы завершены', comment='Работы закончены')]
+    value = card(events, notifications=[{'service': SERVICE, 'message_id': 'report-1',
+                                         'comment': 'Берзарина, дом 210, пожар в квартире'}])
+    expectation = {'should_accept': True, 'brief_service': SERVICE,
+                   'brief_keywords': ['пострадавший'], 'result_keywords': ['ликвидировано']}
+    result = review(value, expectation)
+    assert verdict(result, 'briefing_facts')['passed'] is False
+    assert verdict(result, 'result')['passed'] is False
+
+
+def test_edited_card_cannot_rewrite_briefing_reference():
+    sent = [event(1, 'notification.recorded', '2026-09-18T10:00:00+00:00',
+                  service=SERVICE, source='briefing', message_id='report-2')]
+    value = card(sent, notifications=[{'service': SERVICE, 'message_id': 'report-2',
+                                      'comment': 'Берзарина, дом 99, пожар в квартире'}])
+    value['initial_card'] = dict(value['card'])
+    value['card']['house'] = '99'
+    assert verdict(review(value, {'should_accept': True, 'brief_service': SERVICE}), 'briefing_facts')['passed'] is False
+
+
+def test_teacher_verified_correction_is_used_for_card_and_briefing():
+    sent = [event(1, 'notification.recorded', '2026-09-18T10:00:00+00:00',
+                  service=SERVICE, source='briefing', message_id='report-3')]
+    value = card(sent, notifications=[{'service': SERVICE, 'message_id': 'report-3',
+                                      'comment': 'Берзарина, дом 22, пожар в квартире'}])
+    value['initial_card'] = dict(value['card'])
+    value['card']['house'] = '22'
+    result = review(value, {'should_accept': True, 'brief_service': SERVICE,
+                            'expected_corrections': {'house': '22'}})
+    assert verdict(result, 'correction:house')['passed'] is True
+    assert verdict(result, 'briefing_facts')['passed'] is True
+
+
+def test_crew_choice_and_leadership_are_assessed():
+    value = card([
+        event(1, 'service.updated', '2026-09-18T10:00:00+00:00',
+              service=SERVICE, status='Принята'),
+        event(2, 'crew.assigned', '2026-09-18T10:01:00+00:00',
+              id='Наряд 17'),
+        event(3, 'service.updated', '2026-09-18T10:02:00+00:00',
+              service=SERVICE, status='Начало реагирования')])
+    value['crew_options'] = [{'id': 'Наряд 17'}]
+    value['assigned_crew'] = {'id': 'Наряд 17', 'decision_by': 'leadership',
+                              'decision_note': 'Руководитель смены разрешил выезд'}
+    result = review(value, {'should_accept': True, 'expected_crew_id': 'Наряд 17',
+                            'leadership_decision_required': True})
+    assert all(verdict(result, key)['passed'] for key in
+               ('crew_assignment', 'crew_choice', 'leadership_decision'))
 
 
 def test_score_counts_only_judged_checks():
