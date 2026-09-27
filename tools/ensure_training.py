@@ -2,8 +2,8 @@
 
 Обучение проходит по IP-телефону: доклады бригаде и начальнику смены
 произносятся голосом. Ученикам из --phones назначается их учебный номер;
-группа, где у кого-то нет номера, получает занятие без телефона, а номера
-преподаватель задаёт кнопкой «Настроить IP-телефоны». Если обучение уже идёт,
+группа, где у кого-то нет номера, получает подготовленное занятие: номера
+преподаватель задаёт кнопкой «Настроить IP-телефоны» и запускает его. Если обучение уже идёт,
 оно начинается заново (прежние результаты остаются в отчётах).
 
     python tools/ensure_training.py --base-url https://127.0.0.1:3000 --password <пароль> \\
@@ -68,10 +68,14 @@ def main() -> None:
         if voice:
             body["sip_extensions"] = {uid: phones[uid] for uid in members}
         _, lesson = teacher.call("POST", "/instructor/lessons", body)
-        teacher.call("POST", f"/instructor/lessons/{lesson['id']}/start")
+        # Обучение голосовое: без номеров занятие остаётся подготовленным, пока
+        # преподаватель не задаст их кнопкой «Настроить IP-телефоны» и не запустит.
+        if voice:
+            teacher.call("POST", f"/instructor/lessons/{lesson['id']}/start")
         covered |= members
         created.add(lesson["id"])
-        print(f"{group['title']}: обучение {'по IP-телефону' if voice else 'без телефона — задайте номера'}")
+        print(f"{group['title']}: " + ("обучение по IP-телефону запущено" if voice else
+                                         "обучение подготовлено — задайте IP-телефоны и запустите"))
     # Прежние обучающие занятия в других группах — дубли: у учеников уже есть новое.
     for item in teacher.call("GET", "/instructor/lessons")[1]:
         if item["title"] == TITLE and item["state"] != "finished" and item["id"] not in created:
