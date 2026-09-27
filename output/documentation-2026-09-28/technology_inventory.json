@@ -1,7 +1,7 @@
 {
   "date": "2026-09-27",
-  "commit": "9fb10f8eee0402f3fd09fc63f0a7b7126d1f616d",
-  "profile": "local CPU; no external AI provider",
+  "commit": "v1.0",
+  "profile": "local models on CPU or GPU (LLM_DEVICE); no external AI provider",
   "python_packages": {
     "backend": [
       {

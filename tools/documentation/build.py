@@ -164,7 +164,7 @@ def build(src, idx):
     for text,style in [('112 AI Trainer','Title'),('Тренажёр диспетчера ДДС','Subtitle'),(meta['Название'],'Title'),(meta['Обозначение'],None)]:
         p=para(d,text,style);p.alignment=WD_ALIGN_PARAGRAPH.CENTER;p.paragraph_format.first_line_indent=Cm(0)
     para(d)
-    for text in ('Программная версия 9fb10f8', 'Разработчик и ответственный за документацию', AUTHOR, '28.09.2026'):
+    for text in ('Программная версия v1.0', 'Разработчик и ответственный за документацию', AUTHOR, '28.09.2026'):
         p=para(d,text);p.alignment=WD_ALIGN_PARAGRAPH.CENTER;p.paragraph_format.first_line_indent=Cm(0)
     p=para(d);p.alignment=WD_ALIGN_PARAGRAPH.CENTER;p.paragraph_format.first_line_indent=Cm(0)
     # Keep the supplied PNG unchanged; crop only its displayed white margins in Word.

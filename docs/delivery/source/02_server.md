@@ -41,7 +41,7 @@ Ollama не имеет публичного пользовательского �
 ```text
 git clone https://github.com/kolloko2/112-ai-trainer.git
 cd 112-ai-trainer
-git checkout 9fb10f8
+git checkout v1.0
 python -m venv .venv
 ```
 

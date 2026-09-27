@@ -43,7 +43,7 @@ if args.package:
         rows.append(f'<tr><td>{html.escape(item["title"])}</td><td><a href="{pdf}">PDF</a></td><td><a href="{doc}">DOCX</a></td><td>{counts[doc]}</td></tr>')
     page='''<!doctype html><html lang="ru"><meta charset="utf-8"><title>112 AI Trainer — документация</title>
     <style>body{font:17px Georgia,serif;max-width:1000px;margin:48px auto;color:#202830;background:#fff;padding:0 24px}h1{font-size:28px}table{border-collapse:collapse;width:100%}td,th{padding:13px;border-bottom:1px solid #ccd1d6;text-align:left}a{color:#16496a}p{line-height:1.6}</style>
-    <h1>112 AI Trainer</h1><p>Эксплуатационная и сопроводительная документация. Версия программы 9fb10f8. Редакция 28 сентября 2026 года.</p>
+    <h1>112 AI Trainer</h1><p>Эксплуатационная и сопроводительная документация. Версия программы v1.0. Редакция 28 сентября 2026 года.</p>
     <p>Начните с руководства для жюри. Для установки откройте руководство сервера, затем инструкцию рабочего места. Пример адреса сервера в документах — 192.168.10.10; замените его адресом своей площадки.</p>
     <table><tr><th>Документ</th><th>Чтение</th><th>Редактирование</th><th>Страниц</th></tr>'''+''.join(rows)+'''</table>
     <p>Дополнения: <a href="technology_inventory.json">версии библиотек</a>, <a href="measurements.json">измерения</a>, <a href="sources.md">источники</a>, <a href="SHA256SUMS.txt">контрольные суммы</a>.</p>

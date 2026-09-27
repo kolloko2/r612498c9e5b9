@@ -50,3 +50,7 @@ output/112_AI_Trainer_Видео_*.zip
 output/videos-*/
 output/Сценарий_видеообзора_интерфейса.docx
 output/documentation-*/~$*
+
+# Временные файлы Office
+~$*
+**/~$*

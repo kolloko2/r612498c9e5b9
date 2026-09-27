@@ -2,42 +2,51 @@
   "date": "2026-09-27",
   "cpu": "AMD Ryzen 5 5600",
   "ram_gb": 32,
-  "gpu_used": false,
   "model": "qwen3:4b-instruct-2507-q4_K_M",
-  "generation_ms": [
-    3470,
-    6004,
-    6370,
-    8283,
-    9239
-  ],
-  "output_tokens": [
-    36,
-    45,
-    48,
-    64,
-    61
-  ],
-  "turn_latency_ms": [
-    5022,
-    7118,
-    7331,
-    9559,
-    10731
-  ],
+  "full_voice_lesson": {
+    "generation_ms": [
+      3470,
+      6004,
+      6370,
+      8283,
+      9239
+    ],
+    "output_tokens": [
+      36,
+      45,
+      48,
+      64,
+      61
+    ],
+    "turn_latency_ms": [
+      5022,
+      7118,
+      7331,
+      9559,
+      10731
+    ],
+    "assessment": {
+      "percent": 91.67,
+      "checks_passed": 11,
+      "checks_total": 12,
+      "critical_errors": 0
+    }
+  },
+  "device_comparison_s": {
+    "gpu_rtx_5060_ti": [
+      0.4,
+      0.48
+    ],
+    "cpu_6_threads": [
+      1.85,
+      3.22
+    ],
+    "rule_based_turn": 0.2
+  },
   "tests": {
-    "backend_passed": 355,
-    "backend_skipped": 3,
+    "backend_passed": 363,
+    "browser_scenarios_passed": 12,
     "voice_passed": 56
   },
-  "source": "docs/CPU_PHONE_2026-09-27.md",
-  "scope": "Single full lesson; not a concurrency certification",
-  "assessment": {
-    "percent": 91.67,
-    "checks_passed": 11,
-    "checks_total": 12,
-    "duration_seconds": 355,
-    "limit_seconds": 350,
-    "script_overall_passed": false
-  }
+  "source": "docs/CPU_PHONE_2026-09-27.md, docs/LOCAL_MODEL.md"
 }
