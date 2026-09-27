@@ -1,5 +1,17 @@
 # 112 AI Trainer
 
+Команда **NKDL** · ЛЦТ-2026, задача № 9 «Учебный симулятор подготовки диспетчеров экстренных служб по вызовам от системы 112».
+
+| Материал | Где |
+| --- | --- |
+| Прототип | https://212.22.78.93 (преподаватель `prepod`, ученики `kursant1`, `kursant2`, пароль `Trener112-2026`) |
+| Презентация | [output/presentation/NKDL_112_AI_Trainer.pdf](output/presentation/NKDL_112_AI_Trainer.pdf) · [PPTX](output/presentation/NKDL_112_AI_Trainer.pptx) |
+| Документация | [руководство для жюри и комплект DOCX/PDF](output/documentation-2026-09-28/) · [исходники](docs/delivery/README.md) |
+| Быстрый запуск | [docs/БЫСТРЫЙ-ЗАПУСК.md](docs/БЫСТРЫЙ-ЗАПУСК.md) |
+| Архитектура и API | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/API_CONTRACT.md](docs/API_CONTRACT.md) · [OpenAPI](shared/api/openapi.yaml) |
+
+Начать знакомство: войти учеником и открыть занятие «Обучение: первое занятие ДДС с подсказками» — наставник на экране проведёт через всю смену диспетчера.
+
 Практический режим ДДС: кнопка «Практика с подсказками» ведёт по сохранённым
 действиям, а завершение показывает невыполненные условия. Первое упражнение
 `tools/data/dds_guided_practice.json` включает четыре доклада и оценку фактов
