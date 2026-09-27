@@ -223,3 +223,12 @@ def test_voice_briefing_reads_report_from_the_conversation(sip_reporting):
     assert any(call['path'].endswith('/hangup') for call in c['voice'].calls)
     session = client.get('/api/v1/student/sessions/' + card['id'], headers=h).json()
     assert 'Лесная' in session['notifications'][-1]['comment']
+
+
+def test_spoken_numbers_count_as_address():
+    """STT пишет числа словами: «дом двенадцать» засчитывается как дом 12."""
+    from briefing import check
+    card = {'street': 'Учебная', 'house': '12', 'incident_type': 'Повреждение трубы водоснабжения'}
+    report = check('москва улица учебная дом двенадцать повреждение трубы водоснабжения', card)
+    assert 'Дом' not in report['missing']
+    assert 'Дом' in check('улица учебная дом тринадцать', card)['missing']

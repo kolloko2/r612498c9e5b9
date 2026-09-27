@@ -30,7 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 import llm
-from text_facts import asserted, incident_asserted
+from text_facts import asserted, incident_asserted, spoken_numbers_to_digits
 from teacher_guidance import examples as guidance_examples, initialize as initialize_guidance
 from materials import material_context
 from voice_client import request as voice_request
@@ -82,7 +82,8 @@ def now() -> str:
 
 
 def normalize(text: str) -> str:
-    return re.sub(r'\s+', ' ', (text or '').casefold().replace('ё', 'е')).strip()
+    # Распознавание речи пишет числа словами: «дом двенадцать» == «дом 12».
+    return spoken_numbers_to_digits(re.sub(r'\s+', ' ', (text or '').casefold().replace('ё', 'е')).strip())
 
 
 def contains_fact(spoken: str, value: str) -> bool:
