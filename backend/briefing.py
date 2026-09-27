@@ -50,7 +50,7 @@ Do not give medical/operational orders or grade the student. Unknown casualties 
 
 # Мужской и женский голос назначаются по службе, чтобы собеседники различались
 # на слух.
-FEMALE_VOICE, MALE_VOICE = 'baya', 'aidar'
+FEMALE_VOICE, MALE_VOICE, CREW_VOICE = 'baya', 'aidar', 'eugene'
 
 
 class StartBriefing(BaseModel):
@@ -107,14 +107,25 @@ def required_facts(card: dict) -> list[dict]:
             for key in selected if key in labels and card.get(key)]
 
 
+HEDGE_BEFORE = re.compile(r'(?:то\s+ли|примерно|около|где[\s-]*то|вроде|кажется|наверное|возможно)\s*(?:дом\s*)?$')
+HEDGE_AFTER = re.compile(r'^\s*,?\s*(?:или|либо|то\s+ли|возможно|может\s+быть|наверное|/)\s*(?:же\s*)?(?:дом\s*|квартира\s*|корпус\s*)?[0-9]')
+
+
+def ambiguous(spoken: str, start: int, end: int) -> bool:
+    """«Дом 10 или 11», «примерно 10»: номер назван неоднозначно и не засчитывается."""
+    return bool(HEDGE_BEFORE.search(spoken[max(0, start - 30):start].rstrip(' ,'))
+                or HEDGE_AFTER.search(spoken[end:end + 30]))
+
+
 def check(transcript: str, card: dict) -> dict:
     """Check explicit address components and asserted facts, including negation."""
     spoken = normalize(transcript)
     checks = []
     labels = {'building':r'корпус(?:а|е)?|корп\.?', 'structure':r'строени[ея]|стр\.?',
               'apartment':r'квартир[аеуы]?|кв\.?', 'entrance':r'подъезд[ае]?', 'floor':r'этаж[ае]?'}
-    for fact in required_facts(card):
-        value = normalize(fact['expected'])
+    alternatives = card.get('_source_values') or {}
+
+    def stated(fact, value):
         if fact['id'] == 'incident_type':
             passed = incident_asserted(spoken, value)
         elif fact['id'] == 'injured':
@@ -123,11 +134,14 @@ def check(transcript: str, card: dict) -> dict:
             # A repeated number must identify the right address component.
             pattern = r'(?:' + labels[fact['id']] + r')\s*(?:номер\s*)?' + re.escape(value) + r'(?!\w)'
             matches = list(re.finditer(pattern, spoken))
-            passed = bool(matches) and all(asserted(spoken, match.group()) for match in matches)
+            passed = bool(matches) and all(asserted(spoken, match.group()) and
+                                           not ambiguous(spoken, match.start(), match.end()) for match in matches)
         elif fact['id'] == 'house':
-            stated = re.findall(r'\bдом(?:а|е)?\s*(?:номер\s*)?([0-9]+[а-яa-z]?(?:[/\-][0-9]+)?)', spoken)
-            if stated:
-                passed = all(number == value for number in stated) and asserted(spoken, value)
+            found = list(re.finditer(r'\bдом(?:а|е)?\s*(?:номер\s*)?([0-9]+[а-яa-z]?(?:[/\-][0-9]+)?)', spoken))
+            numbers = [match.group(1) for match in found]
+            if numbers:
+                passed = (all(number == value for number in numbers) and asserted(spoken, value)
+                          and not any(ambiguous(spoken, match.start(), match.end()) for match in found))
             else:
                 # Accept the common "улица, 12" shorthand, but not a building,
                 # apartment or floor number occurring elsewhere in the report.
@@ -135,11 +149,20 @@ def check(transcript: str, card: dict) -> dict:
                 for match in re.finditer(r'(?<!\w)' + re.escape(value) + r'(?!\w)', spoken):
                     prefix = spoken[:match.start()].rstrip(' ,')
                     street = card.get('street', '')
-                    if street and asserted(prefix[-len(street)-15:], street):
+                    if street and asserted(prefix[-len(street)-15:], street) \
+                            and not ambiguous(spoken, match.start(), match.end()):
                         if not re.search(r'\b(?:корпус|корп|строение|стр|квартира|кв|этаж|подъезд)\.?$', prefix):
                             passed = True
         else:
             passed = asserted(spoken, value)
+        return passed
+
+    for fact in required_facts(card):
+        # До звонка бригады диспетчер знает только карточку 112: засчитывается
+        # и её значение, и уточнённое бригадой.
+        passed = stated(fact, normalize(fact['expected']))
+        if not passed and alternatives.get(fact['id']):
+            passed = stated(fact, normalize(str(alternatives[fact['id']])))
         checks.append({**fact, 'passed':passed})
     missing = [item['label'] for item in checks if not item['passed']]
     return {'checks':checks, 'missing':missing, 'complete':not missing and bool(checks),
@@ -150,7 +173,7 @@ def reference_card(value: dict, expectation: dict | None = None) -> dict:
     """Freeze source facts while allowing teacher-verified corrections."""
     source = value.get('initial_card') or value['card']
     corrections = (expectation or value.get('dds_expectation') or {}).get('expected_corrections') or {}
-    return {**source, '_brief_required_fields': (expectation or value.get('dds_expectation') or {}).get('brief_required_fields', []), **{key: answer for key, answer in corrections.items()
+    return {**source, '_source_values': {key: source[key] for key in corrections if source.get(key)}, '_brief_required_fields': (expectation or value.get('dds_expectation') or {}).get('brief_required_fields', []), **{key: answer for key, answer in corrections.items()
                        if key in {'city', 'district', 'area', 'object', 'street',
                                   'house', 'building', 'structure', 'address_note',
                                   'description', 'incident_type'} and isinstance(answer, str)}}
@@ -308,7 +331,8 @@ def router(store, accounts, authorize, learning=None, voice=None):
                     'message_id': str(body.message_id), 'service': body.service,
                     'destination': body.destination, 'phone': body.phone,
                     'transport': body.transport, 'call_id': None,
-                    'state': 'open', 'started_at': now(), 'voice': duty_voice(body.service),
+                    'state': 'open', 'started_at': now(),
+                    'voice': CREW_VOICE if body.crew_id else duty_voice(body.service),
                     'messages': [] if body.transport == 'sip' else [{'role': 'assistant', 'content': opening, 'at': now()}],
                     'report': check('', reference_card(value)), 'simulated': True}
         if body.transport == 'sip':
@@ -409,7 +433,8 @@ def router(store, accounts, authorize, learning=None, voice=None):
         spoken = ' '.join(m['content'] for m in briefing['messages'] if m['role'] == 'user')
         briefing['report'] = check(spoken, reference_card(value))
         reply = await duty_reply([{'role': m['role'], 'content': m['content']} for m in briefing['messages']],
-                                 value['card'], briefing['service'], briefing['report']['missing'],
+                                 {k: v for k, v in reference_card(value).items() if not k.startswith('_')},
+                                 briefing['service'], briefing['report']['missing'],
                                  guidance_examples(store, value.get('teacher_id'), value.get('dds_profile', 'general')),
                                  material_context(store, value.get('teacher_id'), value.get('dds_profile', 'general'),
                                                   value.get('group_id'), query=value['card'].get('incident_type', '') + ' ' + value['card'].get('description', '')))
@@ -442,7 +467,10 @@ def router(store, accounts, authorize, learning=None, voice=None):
         record = {'message_id': briefing['message_id'], 'service': briefing['service'],
                   'destination': briefing['destination'] or briefing['service'],
                   'phone': briefing['phone'], 'recipient': body.recipient,
-                  'comment': spoken_report(briefing)}
+                  'comment': spoken_report(briefing),
+                  # Бригада или вышестоящий начальник: разные адресаты доклада.
+                  'crew_id': briefing.get('crew_id', ''),
+                  'counterpart': 'crew' if briefing.get('crew_id') else 'superior'}
         with store.db:
             row = store.db.execute('SELECT body FROM workspace WHERE id=?', (str(sid),)).fetchone()
             card = json.loads(row[0])

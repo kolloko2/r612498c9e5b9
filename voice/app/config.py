@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     preroll_ms: int = Field(200, ge=100, le=1000)
     utterance_limit_s: int = Field(30, ge=1, le=120)
     echo_guard_ms: int = Field(1400, ge=200, le=5000)
+    # Перебивание: речь оператора громче эха динамика и дольше barge_in_ms
+    # останавливает ответ собеседника. 0 — полудуплекс без перебивания.
+    barge_in_ms: int = Field(400, ge=0, le=2000)
+    barge_in_threshold: float = Field(0.05, gt=0, lt=1)
 
     @model_validator(mode="after")
     def validate_live(self):

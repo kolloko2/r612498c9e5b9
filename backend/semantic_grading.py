@@ -146,3 +146,49 @@ async def review(evaluation: dict) -> dict:
 
 
 __all__ = ["review", "reviewable", "REVIEWABLE_FIELDS", "MAX_REVIEWS"]
+
+
+MAX_DDS_FACTS = 6
+
+
+async def review_dds(result: dict, expectation: dict) -> dict:
+    """Смысловая доводка проверок ДДС: «починили трубу» может передавать «повреждение устранено».
+
+    Смотрит только непрошедшие проверки фактов, у которых есть текст ученика.
+    Каждый недостающий факт проверяется отдельно; проверка засчитывается, только
+    если переданы все. Балл может только вырасти, решение видно преподавателю.
+    """
+    from dds_review import rescore
+    if not isinstance(result, dict):
+        return result
+    config = llm.configuration()
+    if config["provider"] == "mock" or not config["configured"]:
+        return result
+    budget = MAX_DDS_FACTS
+    granted = 0
+    for check in result.get("checks", []):
+        if check.get("passed") is not False or not check.get("missing") or not str(check.get("actual", "")).strip():
+            continue
+        if len(check["missing"]) > budget:
+            break
+        conveyed = True
+        for fact in check["missing"]:
+            budget -= 1
+            try:
+                same, _ = await asyncio.wait_for(_same_meaning(check["actual"], [fact]), timeout=TIMEOUT_SECONDS)
+            except Exception as error:
+                LOGGER.warning("Смысловая проверка ДДС пропущена: %s: %s", type(error).__name__, error)
+                same = False
+            if not same:
+                conveyed = False
+                break
+        if conveyed:
+            check.update(passed=True, granted_by="model",
+                         detail=f"Засчитано по смыслу: «{check['actual'][:160]}» передаёт "
+                                f"{', '.join(check['missing'])}. Преподаватель может отменить это решение.")
+            granted += 1
+    if granted:
+        rescore(result, expectation)
+        result["semantic_review"] = {"granted_checks": granted, "provider": config["provider"],
+                                     "model": config["model"]}
+    return result

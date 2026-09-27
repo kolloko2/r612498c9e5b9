@@ -42,6 +42,11 @@ async def health(request: Request):
     stt_model = Path(settings.stt_model) if settings.stt_model else None
     stt_final_model = Path(settings.stt_final_model) if settings.stt_final_model else None
     tts_voice = Path(settings.tts_voice) if settings.tts_voice else None
+    # Без файлов модели речь так же недоступна, как без библиотеки.
+    speech_broken = speech_broken or (
+        (settings.stt_provider in ("vosk", "hybrid") and not (stt_model and stt_model.is_dir()))
+        or (settings.stt_provider == "hybrid" and stt_final_model and not stt_final_model.exists())
+        or (settings.tts_provider in ("silero", "piper") and not (tts_voice and tts_voice.is_file())))
     tts_fallback_voice = Path(settings.tts_fallback_voice) if settings.tts_fallback_voice else None
     return JSONResponse({
         "status": "ok" if ready and not speech_broken else "degraded",
@@ -79,4 +84,6 @@ async def health(request: Request):
             "minimum_retention_days": request.app.state.security_audit.minimum_retention_days,
             "automatic_deletion": False,
         },
-    }, status_code=200 if ready else 503)
+    # 503 делает контейнер unhealthy: Docker и кабинет администратора видят,
+    # что звонок не состоится, а не только то, что процесс запущен.
+    }, status_code=200 if ready and not speech_broken else 503)

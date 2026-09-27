@@ -77,7 +77,7 @@ function renderStats(data){stats=data;summaryInto(el('summary'),data.summary);co
 }
 function statLine(label,value){const line=node('div',undefined,'stat-line');line.append(node('span',label),node('strong',value));return line;}
 async function loadStats(){const path=role==='teacher'?`/api/v1/instructor/statistics${el('groupFilter').value?'?group_id='+encodeURIComponent(el('groupFilter').value):''}`:'/api/v1/student/statistics';renderStats(await api(path));}
-function evidenceText(key,data){const item=(data.evidence||[]).find(value=>value.key===key);if(!item)return key;if(item.kind==='scenario_performance')return `Сценарий ${item.scenario_id}: ${item.attempts} попыток, средний балл ${pct(item.average_score)}`;return `${item.label||'Ошибка'}: ${item.error_count} из ${item.eligible_attempts} (${item.rate_percent}%), версия ${item.configuration_revision}`;}
+function evidenceText(key,data){const item=(data.evidence||[]).find(value=>value.key===key);if(!item)return key;if(item.kind==='scenario_performance')return `Сценарий ${item.scenario_id}: ${item.attempts} попыток, средний балл ${pct(item.average_score)}`;return `${item.kind==='dds'?'Действие ДДС · ':''}${item.label||'Ошибка'}: ${item.error_count} из ${item.eligible_attempts} (${item.rate_percent}%)${item.kind==='dds'?'':', версия '+item.configuration_revision}`;}
 const heatClass=rate=>rate>=80?'heat-80':rate>=60?'heat-60':rate>=40?'heat-40':rate>=20?'heat-20':'heat-0';
 function renderHeatmap(map){
  const head=el('heatmapHead'),body=el('heatmapBody');head.replaceChildren();body.replaceChildren();

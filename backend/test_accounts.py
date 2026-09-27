@@ -118,8 +118,37 @@ def test_validation_and_missing_session_have_no_fallback(setup):
         "username": "bad name", "password": "long-enough-password", "display_name": "Name", "role": "student"
     }).status_code == 422
     assert client.post("/api/v1/admin/users", headers=headers, json={
-        "username": "teacher1", "password": "long-enough-password", "display_name": "Name", "role": "admin"
+        "username": "teacher1", "password": "long-enough-password", "display_name": "Name", "role": "root"
     }).status_code == 422
     with pytest.raises(HTTPException) as exc:
         _accounts.current("")
     assert exc.value.status_code == 401
+
+
+def test_admin_manages_roles_admins_and_access_policy(setup):
+    accounts, client = setup
+    root = bootstrap(client)
+    h = {"X-User-Session": root["session_token"]}
+    created = client.post("/api/v1/admin/users", headers=h, json={
+        "username": "second.admin", "password": "another secure password",
+        "display_name": "Второй", "role": "admin"})
+    assert created.status_code == 201 and created.json()["role"] == "admin"
+    uid = created.json()["id"]
+    # Нельзя сменить свою роль; другого администратора можно понизить, пока остаётся root.
+    assert client.patch(f"/api/v1/admin/users/{root['user']['id']}/role", headers=h,
+                        json={"role": "teacher"}).status_code == 409
+    changed = client.patch(f"/api/v1/admin/users/{uid}/role", headers=h, json={"role": "teacher"})
+    assert changed.status_code == 200 and changed.json()["role"] == "teacher"
+    assert client.patch(f"/api/v1/admin/users/{root['user']['id']}", headers=h,
+                        json={"active": False}).status_code == 409
+    policy = client.get("/api/v1/admin/policy", headers=h).json()
+    assert policy["failure_limit"] == 5 and policy["session_hours"] == 8
+    saved = client.put("/api/v1/admin/policy", headers=h, json={**policy, "failure_limit": 3,
+                                                                 "log_level": "WARNING"})
+    assert saved.status_code == 200 and accounts.policy().failure_limit == 3
+    assert client.put("/api/v1/admin/policy", headers=h, json={**policy, "session_hours": 48}).status_code == 422
+    for _ in range(3):
+        client.post("/api/v1/auth/login", json={"username": "second.admin", "password": "wrong password here"})
+    # После трёх ошибок по новой политике вход заблокирован даже с верным паролем.
+    assert client.post("/api/v1/auth/login", json={"username": "second.admin",
+                                                   "password": "another secure password"}).status_code == 401

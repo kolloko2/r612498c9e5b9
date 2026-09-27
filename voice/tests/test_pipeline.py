@@ -39,6 +39,22 @@ async def start_call(tmp_path, **kwargs):
     return manager, runtime, request
 
 
+async def test_operator_speech_interrupts_bot(tmp_path):
+    manager, runtime, _ = await start_call(tmp_path, echo_guard_ms=200)
+    try:
+        await wait_for(lambda: runtime.playback.active)
+        # Речь оператора дольше порога перебивания останавливает ответ бота
+        # и распознаётся как обычная реплика.
+        for frame in [pcm16(np.full(320, 0.2))] * 40 + [SILENCE] * 40:
+            runtime.mock_input.put_nowait(frame)
+        await wait_for(lambda: any(e["type"] == "operator.utterance" for e in read_events(runtime)))
+        chat = runtime.manager.chat.get(runtime.context.call_id)
+        assert any(m['status'] == 'interrupted' for m in chat['messages'] if m['role'] != 'me')
+        assert not runtime.barge_open
+    finally:
+        await manager.close()
+
+
 async def test_bot_playback_cannot_create_automatic_dialogue(tmp_path):
     manager, runtime, _ = await start_call(tmp_path, echo_guard_ms=200)
     try:

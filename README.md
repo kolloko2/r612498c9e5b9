@@ -78,7 +78,7 @@ python tools/seed_demo.py --base-url http://127.0.0.1:3000 --admin <логин> 
 ## Проверки
 
 ```bash
-cd backend && python -m pytest -q            # 368 тестов Backend
+cd backend && python -m pytest -q            # 376 тестов Backend
 python -m pytest -q deploy                   # эксплуатация и Asterisk
 cd voice && python -m pytest -q              # голосовой модуль
 node frontend/test_arm_browser.cjs           # браузерные сценарии (Playwright), также test_*_browser.cjs

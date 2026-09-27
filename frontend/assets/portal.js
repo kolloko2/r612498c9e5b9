@@ -146,14 +146,21 @@ function empty(container,text){container.replaceChildren(node('p',text,'empty'))
 function button(text,action){const item=node('button',text);item.type='button';item.addEventListener('click',action);return item;}
 function field(label,value){const wrap=node('div');wrap.append(node('dt',label),node('dd',value===undefined||value===null||value===''?'—':value));return wrap;}
 
+let me=null;
+async function loadPolicy(){const policy=await api('/api/v1/admin/policy');el('policySession').value=policy.session_hours;el('policyFailures').value=policy.failure_limit;el('policyLock').value=policy.lock_seconds;el('policyRetention').value=policy.audit_retention_days;el('policyLogLevel').value=policy.log_level;}
+el('policyForm').addEventListener('submit',event=>{event.preventDefault();act(async()=>{await api('/api/v1/admin/policy','PUT',{session_hours:+el('policySession').value,failure_limit:+el('policyFailures').value,lock_seconds:+el('policyLock').value,audit_retention_days:+el('policyRetention').value,log_level:el('policyLogLevel').value});await loadPolicy();},'Политика сохранена');});
 async function loadAdmin(){
+ await loadPolicy();
  const users=await api('/api/v1/admin/users');const container=el('users');container.replaceChildren();
  if(!users.length){empty(container,'Пользователей пока нет');return;}
  for(const user of users){
   const card=node('article',undefined,'card'),head=node('div',undefined,'card-head'),title=node('div');
   title.append(node('h3',user.display_name),node('p',`${user.username} · ${roleNames[user.role]||user.role}`));
   head.append(title,node('span',user.active?'Активен':'Доступ закрыт',`badge${user.active?'':' off'}`));card.append(head);
-  if(user.role!=='admin'){const actions=node('div',undefined,'card-actions');actions.append(button(user.active?'Закрыть доступ':'Восстановить доступ',()=>act(async()=>{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),'PATCH',{active:!user.active});await loadAdmin();},'Состояние пользователя изменено')));card.append(actions);}
+  {const actions=node('div',undefined,'card-actions'),role=document.createElement('select');role.setAttribute('aria-label','Роль пользователя '+user.username);
+   for(const [value,label] of Object.entries(roleNames))role.add(new Option(label,value,false,value===user.role));
+   role.disabled=user.id===me?.id;role.onchange=()=>act(async()=>{try{await api('/api/v1/admin/users/'+encodeURIComponent(user.id)+'/role','PATCH',{role:role.value});}finally{await loadAdmin();}},'Роль изменена: права действуют со следующего входа');
+   actions.append(role);if(user.id!==me?.id)actions.append(button(user.active?'Закрыть доступ':'Восстановить доступ',()=>act(async()=>{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),'PATCH',{active:!user.active});await loadAdmin();},'Состояние пользователя изменено')));card.append(actions);}
   if(user.role!=='admin'){const directoryForm=node('form',undefined,'stack'),directoryName=document.createElement('input');directoryName.placeholder='Логин в LDAP / AD';directoryName.setAttribute('aria-label','Логин в LDAP / AD');directoryName.required=true;directoryName.pattern='[a-zA-Z0-9][a-zA-Z0-9_.-]{2,39}';directoryName.maxLength=40;const submit=node('button','Связать с каталогом');directoryForm.append(directoryName,submit);directoryForm.onsubmit=event=>{event.preventDefault();if(!confirm('Разрешить владельцу этой учётной записи LDAP входить в выбранный профиль?'))return;act(async()=>{await api('/api/v1/admin/users/'+encodeURIComponent(user.id)+'/directory','POST',{username:directoryName.value});directoryName.value='';},'Связь с каталогом сохранена');};card.append(directoryForm);}
   container.append(card);
  }
@@ -317,4 +324,4 @@ el('closeSession').addEventListener('click',()=>el('sessionDialog').close());
 el('sessionDialog').addEventListener('close',()=>{openSessionId=null;sessionRequestVersion++;});
 el('refreshSessions').addEventListener('click',()=>act(async()=>{await loadSessions();await loadLessons();}));
 
-act(async()=>{const me=await api('/api/v1/auth/me');el('identity').textContent=`${me.display_name} · ${roleNames[me.role]||me.role}`;const panel=el(`${me.role}Panel`);if(!panel){throw Error('Для этой роли кабинет не настроен');}panel.hidden=false;if(me.role==='admin')await loadAdmin();else if(me.role==='teacher')await loadTeacher();else await loadStudent();});
+act(async()=>{me=await api('/api/v1/auth/me');el('identity').textContent=`${me.display_name} · ${roleNames[me.role]||me.role}`;const panel=el(`${me.role}Panel`);if(!panel){throw Error('Для этой роли кабинет не настроен');}panel.hidden=false;if(me.role==='admin')await loadAdmin();else if(me.role==='teacher')await loadTeacher();else await loadStudent();});

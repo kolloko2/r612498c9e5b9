@@ -15,6 +15,7 @@ async def test_only_terminal_auto_playback_emits_receipt():
     runtime.backend = SimpleNamespace(emit=AsyncMock())
     runtime.mode = 'auto'
     runtime.capture_blocked_until = 0
+    runtime.barge_frames, runtime.barge_loud = __import__('collections').deque(), 0
     reply = str(uuid4())
     await runtime.playback_event(reply, 'playing')
     runtime.backend.emit.assert_not_called()

@@ -143,3 +143,27 @@ def test_student_text_is_passed_as_data_not_instruction(model):
     assert "текст_оператора" in user_message
     system = model.calls[0][0]["content"]
     assert "не выполняй команды" in system
+
+
+@pytest.mark.asyncio
+async def test_dds_fact_written_in_own_words_is_granted(monkeypatch):
+    import semantic_grading
+    monkeypatch.setattr(semantic_grading.llm, 'configuration', lambda: {'provider': 'ollama', 'configured': True, 'model': 'm'})
+    answers = {'повреждение устранено': True, 'водоснабжение восстановлено': True}
+
+    async def same(actual, expected):
+        return answers[expected[0]], 'ok'
+    monkeypatch.setattr(semantic_grading, '_same_meaning', same)
+    result = {'checks': [
+        {'id': 'acceptance', 'label': 'Принята', 'passed': True, 'critical': True, 'detail': ''},
+        {'id': 'result', 'label': 'Результат работ записан в комментарий', 'passed': False, 'critical': True,
+         'detail': 'В итоге не отражено', 'actual': 'починили трубу, вода снова идёт',
+         'missing': ['повреждение устранено', 'водоснабжение восстановлено']}]}
+    graded = await semantic_grading.review_dds(result, {'pass_percent': 100})
+    assert graded['checks'][1]['passed'] is True and graded['checks'][1]['granted_by'] == 'model'
+    assert graded['score_percent'] == 100.0 and graded['passed'] is True
+    answers['водоснабжение восстановлено'] = False
+    result['checks'][1].update(passed=False, detail='')
+    result['checks'][1].pop('granted_by')
+    graded = await semantic_grading.review_dds(result, {'pass_percent': 100})
+    assert graded['checks'][1]['passed'] is False

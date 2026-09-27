@@ -15,7 +15,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocke
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 import llm
 from llm import complete, configuration, reply as speak
-from briefing import check as briefing_check, duty_reply as briefing_duty_reply, SUPERIOR_TITLE
+from briefing import check as briefing_check, duty_reply as briefing_duty_reply, SUPERIOR_TITLE, CREW_VOICE
 from field_dialogue import answer as field_answer, crew_speech, report_speech
 from categories import CategoryId
 from curriculum import Difficulty, DdsProfile
@@ -448,6 +448,9 @@ class Engine:
         state["messages"].append({"role": "assistant", "content": text})
         state["seq"] += 1
         payload = {"reply_id": str(uuid4()), "text": text, "should_interrupt": False}
+        speaker = (state.get("duty") or {}).get("voice") or (CREW_VOICE if state.get("field_report") else None)
+        if speaker:
+            payload["voice_style"] = {"speaker": speaker}
         if kind == "operator.utterance":
             payload["utterance_id"] = str(UUID(event["payload"]["utterance_id"]))
         reply = {"event_id": str(uuid4()), "seq": state["seq"], "session_id": sid,

@@ -496,8 +496,10 @@ bootstrap and login do not require a user token; others require `X-User-Session`
 | POST | `/auth/bootstrap` | First admin only, `{username,password,display_name}`, 201 `{user,session_token}` |
 | POST | `/auth/login` | `{username,password}` → `{user,session_token}`; throttled failures 429 |
 | GET / POST | `/auth/me` / `/auth/logout` | Current public user / revoke current token (204) |
-| GET / POST | `/admin/users` | Admin list / create teacher or student |
-| PATCH | `/admin/users/{uid}` | Admin `{active}`; cannot block admin, blocking revokes tokens |
+| GET / POST | `/admin/users` | Admin list / create admin, teacher or student |
+| PATCH | `/admin/users/{uid}` | Admin `{active}`; cannot block oneself or the last active admin, blocking revokes tokens |
+| PATCH | `/admin/users/{uid}/role` | Admin `{role}`; not own role, keeps at least one admin, revokes the user's tokens |
+| GET / PUT | `/admin/policy` | Access and logging policy: `session_hours` 1–24, `failure_limit` 3–10, `lock_seconds` 30–3600, `audit_retention_days` 7–3650, `log_level` |
 | GET | `/instructor/students` | Teacher: active student IDs, names and usernames |
 | GET / POST | `/instructor/groups` | Own groups / create `{title}` |
 | POST | `/instructor/groups/{gid}/members` | Own group: `{student_id}` |

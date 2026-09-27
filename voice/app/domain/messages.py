@@ -15,6 +15,8 @@ class EventEnvelope(BaseModel):
 
 class VoiceStyle(BaseModel):
     emotion: str | None = None
+    # Голос собеседника: начальник смены, бригада и заявитель звучат по-разному.
+    speaker: str | None = Field(None, pattern=r'^[a-z_]{1,32}$')
     rate: float = Field(1, ge=0.5, le=2)
     intensity: float = Field(0.5, ge=0, le=1)
 

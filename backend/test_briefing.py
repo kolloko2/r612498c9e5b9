@@ -232,3 +232,14 @@ def test_spoken_numbers_count_as_address():
     report = check('москва улица учебная дом двенадцать повреждение трубы водоснабжения', card)
     assert 'Дом' not in report['missing']
     assert 'Дом' in check('улица учебная дом тринадцать', card)['missing']
+
+
+def test_hedged_address_number_is_not_accepted():
+    from briefing import check
+    card = {'street': 'Учебная', 'house': '10', 'apartment': '5', 'incident_type': 'Прорыв трубы'}
+    assert check('улица Учебная, дом 10, квартира 5, прорыв трубы', card)['complete']
+    for spoken in ('улица Учебная, дом 10 или 11, квартира 5, прорыв трубы',
+                   'Учебная 10 либо 12, квартира 5, прорыв трубы',
+                   'Учебная, примерно дом 10, квартира 5, прорыв трубы',
+                   'Учебная, дом 10, квартира 5 или 6, прорыв трубы'):
+        assert not check(spoken, card)['complete'], spoken

@@ -74,3 +74,21 @@ def test_operational_reports_start_after_assignment_not_receipt():
     assert 5 <= update_elapsed(value, crew_report) < 7
     del value['updates_anchor']
     assert update_elapsed(value, crew_report) >= 100
+
+
+def test_next_report_waits_until_previous_is_reflected():
+    """Доклады бригады не идут подряд: следующий — после статуса по предыдущему и паузы."""
+    from workspace import report_due, REPORT_GAP_SECONDS
+    start = datetime.now(timezone.utc) - timedelta(seconds=600)
+    planned = [{'id': 'go', 'after_seconds': 10, 'unlocks_status': 'Начало реагирования'},
+               {'id': 'there', 'after_seconds': 20, 'unlocks_status': 'Прибытие'}]
+    value = {'created_at': start.isoformat(), 'owner_service': 'Деп. ЖКХ', 'events': [
+        {'type': 'situation.update', 'at': (start + timedelta(seconds=15)).isoformat(), 'detail': {'id': 'go'}}]}
+    assert report_due(value, planned[0], planned)
+    assert not report_due(value, planned[1], planned)  # статус по «выехали» ещё не поставлен
+    just_now = datetime.now(timezone.utc) - timedelta(seconds=REPORT_GAP_SECONDS // 2)
+    value['events'].append({'type': 'service.updated', 'at': just_now.isoformat(),
+                            'detail': {'service': 'Деп. ЖКХ', 'status': 'Начало реагирования'}})
+    assert not report_due(value, planned[1], planned)  # пауза ещё не прошла
+    value['events'][-1]['at'] = (datetime.now(timezone.utc) - timedelta(seconds=REPORT_GAP_SECONDS + 1)).isoformat()
+    assert report_due(value, planned[1], planned)

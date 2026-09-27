@@ -18,11 +18,11 @@ from routing import preview, service_catalog
 from evaluation import (DEFAULT_RESPONSE_LIMIT_SECONDS, DEFAULT_TIME_LIMIT_SECONDS,
                         Rubric, evaluate)
 from grammar import analyze as grammar_report
-from semantic_grading import review as semantic_review
+from semantic_grading import review as semantic_review, review_dds as semantic_review_dds
 from dds_review import review as dds_decision_review, unfinished as unfinished_dds
 from voice_client import request as voice_request
 from adaptive import attempt_view, recommend
-from ai_review import review as review_card
+from ai_review import review as review_card, review_dds as review_dds_actions
 from llm import configuration
 from field_dialogue import report_context
 from teacher_guidance import examples as guidance_examples, initialize as initialize_guidance
@@ -307,19 +307,21 @@ class ErrorReport(BaseModel):
 def correction_evidence_visible(value: dict) -> bool:
     """Правильные сведения ДДС узнаёт из звонка бригады с места.
 
-    Уточнение становится доступно после оперативного доклада бригады или
-    запроса обстановки у старшего. В сценарии без бригады и докладов
-    источником остаётся вводная, доступная после приёма карточки.
+    Уточнение становится доступно только после полученного доклада бригады:
+    начатый, но не прослушанный звонок и запрос хода работ без нового
+    доклада его не открывают. Если докладов в сценарии нет, источник —
+    ответ старшего на запрос обстановки; без бригады — вводная после приёма.
     """
     if value.get('exercise_mode') != 'actions':
         return True
-    for event in value.get('events', []):
-        if event.get('type') in ('progress.requested', 'field_report.call_started'):
-            return True
-        if event.get('type') == 'situation.update' and event.get('detail', {}).get('unlocks_status'):
-            return True
-    if value.get('planned_unlocks') or value.get('crew_options'):
+    events = value.get('events', [])
+    if any(event.get('type') == 'situation.update' and event.get('detail', {}).get('unlocks_status')
+           for event in events):
+        return True
+    if value.get('planned_unlocks'):
         return False
+    if value.get('crew_options'):
+        return any(event.get('type') == 'progress.requested' for event in events)
     return bool(value.get('accepted_at'))
 
 
@@ -446,6 +448,39 @@ def update_elapsed(value: dict, item: dict) -> float:
         if not anchor:
             return -1
     return (datetime.now(timezone.utc) - datetime.fromisoformat(anchor)).total_seconds()
+
+
+REPORT_GAP_SECONDS = 20
+
+
+def report_due(value: dict, item: dict, planned: list[dict]) -> bool:
+    """Доклад бригады поступает по сценарию, но не раньше, чем отражён предыдущий.
+
+    Следующий доклад приходит не раньше REPORT_GAP_SECONDS после того, как
+    диспетчер поставил статус по предыдущему: доклады не наваливаются подряд.
+    """
+    if update_elapsed(value, item) < item['after_seconds']:
+        return False
+    owner = value.get('owner_service')
+    if not item.get('unlocks_status') or not owner:
+        return True
+    earlier = [other for other in planned if other.get('unlocks_status')
+               and other['after_seconds'] < item['after_seconds']]
+    if not earlier:
+        return True
+    previous = max(earlier, key=lambda other: other['after_seconds'])
+    events = value.get('events', [])
+    delivered = next((event['at'] for event in events if event['type'] == 'situation.update'
+                      and event['detail'].get('id') == previous['id']), None)
+    if not delivered:
+        return False
+    reflected = next((event['at'] for event in events if event['type'] == 'service.updated'
+                      and event['detail'].get('service') == owner
+                      and event['detail'].get('status') == previous['unlocks_status']
+                      and event['at'] >= delivered), None)
+    if not reflected:
+        return False
+    return (datetime.now(timezone.utc) - datetime.fromisoformat(reflected)).total_seconds() >= REPORT_GAP_SECONDS
 
 
 def apply_default_norms(value: dict) -> None:
@@ -617,7 +652,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             pending_reports = [{'id': item['id'], 'source': item['source'],
                                 'call_id': (value.get('field_report_calls') or {}).get(item['id'], {}).get('call_id')}
                                for item in (state.get('scenario') or {}).get('updates', [])
-                               if item['id'] not in delivered and update_elapsed(value, item) >= item['after_seconds']]
+                               if item['id'] not in delivered
+                               and report_due(value, item, (state.get('scenario') or {}).get('updates', []))]
         return {**student_view(value), 'incident_status': incident_status(value),
                 'allowed_service_statuses': visible_statuses(value),
                 'owner_service': value.get('owner_service', ''),
@@ -1168,7 +1204,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         delivered = {event['detail'].get('id') for event in value['events']
                      if event['type'] == 'situation.update'}
         fresh = [item for item in planned
-                 if item['id'] not in delivered and update_elapsed(value, item) >= item['after_seconds']]
+                 if item['id'] not in delivered and report_due(value, item, planned)]
         if value.get('exercise_mode') == 'actions' and value.get('sip_extension'):
             # The progress fact remains locked until the student hears and
             # acknowledges the separate SIP report from the response team.
@@ -1222,8 +1258,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         planned = (store.load(str(sid)).get('scenario') or {}).get('updates') or []
         delivered = {event['detail'].get('id') for event in value['events'] if event['type'] == 'situation.update'}
         # Only crew progress, never applicant messages or future facts.
-        due = sorted((item for item in planned if item.get('unlocks_status')
-                      and item['after_seconds'] <= update_elapsed(value, item)), key=lambda item: item['after_seconds'])
+        due = sorted((item for item in planned if item.get('unlocks_status') and item['id'] not in delivered
+                      and report_due(value, item, planned)), key=lambda item: item['after_seconds'])
         pending = next((item for item in due if item['id'] not in delivered), None)
         if pending and value.get('sip_extension'):
             result = await call_field_report(sid, pending['id'])
@@ -1270,8 +1306,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         if any(event['type'] == 'situation.update' and event['detail'].get('id') == update_id
                for event in value['events']):
             return public(value)
-        if update_elapsed(value, item) < item['after_seconds']:
-            raise HTTPException(409, 'Доклад ещё не поступил')
+        if not report_due(value, item, planned):
+            raise HTTPException(409, 'Доклад ещё не поступил: сначала отразите предыдущий доклад статусом')
         calls = value.setdefault('field_report_calls', {})
         if update_id in calls:
             previous = calls[update_id]
@@ -1494,6 +1530,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         # основном режиме поля приходят заполненными и ничего не измеряют.
         decisions = dds_decision_review(value, value.get('dds_expectation'))
         if decisions:
+            # Факты, записанные своими словами, засчитываются по смыслу — только в плюс.
+            decisions = await semantic_review_dds(decisions, value.get('dds_expectation') or {})
             value['dds_review'] = decisions
         value["evaluation"]["rubric_revision"] = assessment["revision"]
         finish_event = {'seq': len(value['events']) + 1, 'type': 'session.finished', 'at': value['finished_at'], 'detail': completed_by}
@@ -1883,11 +1921,17 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             state = store.load(str(sid))
             config = configuration()
             try:
-                result = await asyncio.wait_for(review_card(value["card"], state.get("scenario", {}),
-                    state.get("evaluation_rubric", {}).get("rubric"),
-                    guidance_examples(store, value.get('teacher_id'), value.get('dds_profile', 'general')),
-                    material_context(store, value.get('teacher_id'), value.get('dds_profile', 'general'),
-                                     value.get('group_id'), query=value['card'].get('description', '') + ' ' + value['card'].get('incident_type', ''))), timeout=45)
+                guidance = guidance_examples(store, value.get('teacher_id'), value.get('dds_profile', 'general'))
+                materials = material_context(store, value.get('teacher_id'), value.get('dds_profile', 'general'),
+                                             value.get('group_id'), query=value['card'].get('description', '') + ' ' + value['card'].get('incident_type', ''))
+                if value.get('exercise_mode') == 'actions' and value.get('owner_service'):
+                    # В режиме ДДС ученик не заполняет карточку, а ведёт записи о
+                    # реагировании: разбираются они, с цитатами и докладами бригады.
+                    result = await asyncio.wait_for(review_dds_actions(value, value.get('dds_review'),
+                                                                       guidance, materials), timeout=60)
+                else:
+                    result = await asyncio.wait_for(review_card(value["card"], state.get("scenario", {}),
+                        state.get("evaluation_rubric", {}).get("rubric"), guidance, materials), timeout=45)
             except (httpx.HTTPError, ValueError, KeyError, TypeError, asyncio.TimeoutError):
                 result = {"status": "failed", "provider": config["provider"], "model": config["model"],
                           "error": "Не удалось получить проверяемый ИИ-разбор. Можно повторить запрос. Балл и карточка сохранены."}

@@ -141,21 +141,27 @@ def main(args):
             crew = workspace['assigned_crew']
             evidence['steps'].append('accepted_and_crew_assigned')
             (OUT/'live.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2),encoding='utf-8')
-            existing=call(student,'GET',base+'/briefings')
-            brief = next((b for b in existing if b['state']=='accepted'),None) or call(student,'POST',base+'/briefings',{'message_id':str(uuid4()),
-                'service':workspace['owner_service'],'crew_id':crew['id'],
-                'phone':crew['phone'],'destination':crew['leader'],'transport':'sip'})
-            evidence['calls'].append(brief['call_id'])
-            deadline=time.monotonic()+80
-            while time.monotonic()<deadline:
-                brief=next(b for b in call(student,'GET',base+'/briefings') if b['id']==brief['id'])
-                if brief['report']['complete'] and len([m for m in brief['messages'] if m['role']=='assistant'])>=2:
-                    break
-                time.sleep(2)
-            assert brief['report']['complete'], brief
-            evidence['briefing']=brief
-            # Do not hang up while the recipient is still speaking confirmation.
-            wait_playback = """import json,os,ssl,time,urllib.request
+            # Задача бригаде, затем доклад начальнику дежурной смены своей службы.
+            superior_phone=workspace['card']['service_phones'][workspace['owner_service']]
+            for crew_id,phone,destination in ((crew['id'],crew['phone'],crew['leader']),
+                                             ('',superior_phone,'Начальник дежурной смены')):
+                existing=call(student,'GET',base+'/briefings')
+                brief = next((b for b in existing if b['state']=='accepted' and b.get('crew_id','')==crew_id),None) or call(student,'POST',base+'/briefings',{'message_id':str(uuid4()),
+                    'service':workspace['owner_service'],'crew_id':crew_id,
+                    'phone':phone,'destination':destination,'transport':'sip'})
+                if brief['state']=='accepted':
+                    continue
+                evidence['calls'].append(brief['call_id'])
+                deadline=time.monotonic()+80
+                while time.monotonic()<deadline:
+                    brief=next(b for b in call(student,'GET',base+'/briefings') if b['id']==brief['id'])
+                    if brief['report']['complete'] and len([m for m in brief['messages'] if m['role']=='assistant'])>=2:
+                        break
+                    time.sleep(2)
+                assert brief['report']['complete'], brief
+                evidence.setdefault('briefings',[]).append(brief)
+                # Do not hang up while the recipient is still speaking confirmation.
+                wait_playback = """import json,os,ssl,time,urllib.request
 ctx=ssl.create_default_context(cafile=os.environ['INTERNAL_CA_FILE'])
 h={'Authorization':'Bearer '+os.environ['VOICE_API_TOKEN']}
 deadline=time.monotonic()+30
@@ -165,10 +171,10 @@ while time.monotonic()<deadline:
  time.sleep(.5)
 else:raise RuntimeError('Recipient confirmation was not played')
 """.replace('CID',repr(brief['call_id']))
-            docker('exec','trainer112-backend-1','python','-c',wait_playback)
-            call(student,'POST',base+'/briefings/'+brief['id']+'/finish',{
-                'message_id':str(uuid4()),'recipient':crew['leader']})
-            print('Initial voice briefing accepted',flush=True)
+                docker('exec','trainer112-backend-1','python','-c',wait_playback)
+                call(student,'POST',base+'/briefings/'+brief['id']+'/finish',{
+                    'message_id':str(uuid4()),'recipient':destination})
+            print('Voice briefings to crew and superior accepted',flush=True)
             for update in scenario['updates']:
                 if any(u['id']==update['id'] for u in workspace.get('situation_updates',[])):
                     continue

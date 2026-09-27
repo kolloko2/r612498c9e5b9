@@ -58,9 +58,13 @@ def _service_events(value: dict, service: str) -> list[dict]:
 
 
 def _check(check_id: str, label: str, passed: bool | None, detail: str = "",
-           critical: bool = False) -> dict:
-    return {"id": check_id, "label": label, "passed": passed,
-            "detail": detail, "critical": critical}
+           critical: bool = False, actual: str = "", missing: list[str] | None = None) -> dict:
+    result = {"id": check_id, "label": label, "passed": passed,
+              "detail": detail, "critical": critical}
+    if missing:
+        # Текст ученика и недостающие факты — для смысловой доводки моделью.
+        result.update(actual=actual, missing=list(missing))
+    return result
 
 
 def _acceptance(value: dict, expectation: dict, service: str) -> list[dict]:
@@ -143,7 +147,8 @@ def _update_reactions(value: dict, expectation: dict, service: str) -> list[dict
             checks.append(_check(f'update_facts:{update_id}',
                                  f'Обстановка записана при статусе «{status}»', not lost,
                                  'В комментарии не отражено: ' + ', '.join(lost) if lost else
-                                 'Существенные сведения доклада сохранены.', critical=True))
+                                 'Существенные сведения доклада сохранены.', critical=True,
+                                 actual=comment, missing=lost))
     return checks
 
 
@@ -174,6 +179,8 @@ def unfinished(value: dict, expectation: dict | None) -> list[str]:
         skipped = [status for status in CYCLE if status not in statuses]
         if skipped:
             missing.append('статусы цикла: ' + ', '.join(skipped))
+    if expectation.get('brief_service') and not _superior_reports(value, expectation):
+        missing.append('доклад вышестоящему начальнику по телефону')
     if not value.get('processed_at'):
         missing.append('отметка об отработке происшествия')
     delivered = {item.get('detail', {}).get('id') for item in value.get('events', [])
@@ -195,28 +202,46 @@ def _result_recorded(value: dict, service: str, expectation: dict) -> list[dict]
                    len(comment) >= MIN_RESULT_CHARS and not missing,
                    "В итоге не отражено: " + ', '.join(missing) if missing else
                    ("Перед закрытием работ не записан итог." if len(comment) < MIN_RESULT_CHARS else ""),
-                   critical=True)]
+                   critical=True, actual=comment, missing=missing)]
+
+
+def _spoken_reports(value: dict) -> list[dict]:
+    briefing_ids = {item.get('detail', {}).get('message_id') for item in value.get('events', [])
+                    if item.get('type') == 'notification.recorded'
+                    and item.get('detail', {}).get('source') == 'briefing'
+                    and (not value.get('sip_extension') or value.get('exercise_mode') != 'actions'
+                         or item.get('detail', {}).get('transport') == 'sip')}
+    return [item for item in value.get("notifications", [])
+            if item.get('message_id') in briefing_ids]
+
+
+def _superior_reports(value: dict, expectation: dict) -> list[dict]:
+    service = expectation.get("brief_service", "")
+    return [item for item in _spoken_reports(value)
+            if item.get("service") == service and item.get('counterpart') != 'crew']
 
 
 def _briefing(value: dict, expectation: dict) -> list[dict]:
     service = expectation.get("brief_service", "")
     if not service:
         return []
-    briefing_ids = {item.get('detail', {}).get('message_id') for item in value.get('events', [])
-                    if item.get('type') == 'notification.recorded'
-                    and item.get('detail', {}).get('source') == 'briefing'
-                    and (not value.get('sip_extension') or value.get('exercise_mode') != 'actions'
-                         or item.get('detail', {}).get('transport') == 'sip')}
-    reports = [item for item in value.get("notifications", [])
-               if item.get("service") == service and item.get('message_id') in briefing_ids]
+    spoken_reports = _spoken_reports(value)
+    # Вышестоящему начальнику докладывают о происшествии и принятом решении;
+    # бригаде передают задачу. Это разные разговоры и разные проверки.
+    reports = _superior_reports(value, expectation)
+    crew_reports = [item for item in spoken_reports if item.get('counterpart') == 'crew']
     delivered = bool(reports)
-    checks = [_check("briefing", f"Доклад по телефону ({service}) состоялся", delivered,
-                     "Доклад по телефону не передан." if not delivered else "",
-                     critical=True)]
-    if delivered:
+    checks = [_check("briefing", f"Доклад вышестоящему начальнику ({service}) состоялся", delivered,
+                     "Вышестоящему начальнику не доложено: «Доложить по телефону» → своя служба."
+                     if not delivered else "", critical=True)]
+    if value.get('assigned_crew'):
+        checks.append(_check("crew_briefing", "Задача передана бригаде по телефону", bool(crew_reports),
+                             "" if crew_reports else "Бригаде не передан адрес и обстоятельства."))
+    source = reports or crew_reports
+    if source:
         # Факты доклада сверены при его приёме: незавершённый доклад в
         # телефонограмму не попадает, поэтому наличие записи и есть полнота.
-        spoken = (reports[-1].get("comment") or "")
+        spoken = (source[-1].get("comment") or "")
         # A correction to a received card must not rewrite the source facts
         # against which the dispatcher is assessed.
         card = reference_card(value, expectation)
@@ -226,7 +251,7 @@ def _briefing(value: dict, expectation: dict) -> list[dict]:
                     if not asserted(spoken, word))
         checks.append(_check("briefing_facts", "Сведения переданы без потерь", not lost,
                              ("В докладе не прозвучало: " + ", ".join(lost)) if lost else "",
-                             critical=True))
+                             critical=True, actual=spoken, missing=lost))
     return checks
 
 
@@ -243,13 +268,23 @@ def _card_corrections(value: dict, expectation: dict) -> list[dict]:
         if field not in allowed or not isinstance(answer, str):
             continue
         told = [item for item in reports if item.get('field') == field]
+        # «10 или 11» при эталоне «10» — не исправление, а догадка.
         right = any(item.get('correct_value', '').strip().casefold() == answer.strip().casefold()
-                    or _contains(item.get('correct_value', ''), answer) for item in told)
-        checks.append(_check(f'correction:{field}', f'В 112 сообщено об ошибке в поле «{field}»', right,
+                    or (_contains(item.get('correct_value', ''), answer)
+                        and not HEDGE.search(item.get('correct_value', '').casefold())) for item in told)
+        name = FIELD_NAMES.get(field, field)
+        checks.append(_check(f'correction:{field}', f'В 112 сообщено об ошибке в поле «{name}»', right,
                              '' if right else (f'Сообщено неверное значение. Ожидается: {answer}' if told
                                                else f'Ошибка не передана в 112. Ожидается: {answer}'),
                              critical=field in {'street', 'house', 'incident_type'}))
     return checks
+
+
+HEDGE = re.compile(r'\b(?:или|либо|возможно|то ли|примерно|около|вроде|наверное)\b|/|\?')
+FIELD_NAMES = {'city': 'Город', 'district': 'Район', 'area': 'Округ', 'object': 'Объект',
+               'street': 'Улица', 'house': 'Дом', 'building': 'Корпус', 'structure': 'Строение',
+               'apartment': 'Квартира', 'entrance': 'Подъезд', 'address_note': 'Описательный адрес',
+               'description': 'Описание', 'incident_type': 'Тип происшествия'}
 
 
 def _crew_decision(value: dict, expectation: dict) -> list[dict]:
@@ -260,13 +295,13 @@ def _crew_decision(value: dict, expectation: dict) -> list[dict]:
     assigned = next((event for event in events if event.get('type') == 'crew.assigned'), None)
     departure = next((event for event in events if event.get('type') == 'service.updated'
                       and event.get('detail', {}).get('status') == 'Начало реагирования'), None)
-    checks = [_check('crew_assignment', 'Бригада выбрана до начала реагирования',
-                     bool(crew and assigned and (not departure or assigned['seq'] < departure['seq'])),
-                     'Назначьте бригаду перед регистрацией выезда.', critical=True)]
+    assigned_in_time = bool(crew and assigned and (not departure or assigned['seq'] < departure['seq']))
+    checks = [_check('crew_assignment', 'Бригада выбрана до начала реагирования', assigned_in_time,
+                     '' if assigned_in_time else 'Назначьте бригаду перед регистрацией выезда.', critical=True)]
     expected = expectation.get('expected_crew_id')
     if expected:
-        checks.append(_check('crew_choice', 'Выбрана нужная бригада',
-                             crew.get('id') == expected, f'Ожидается: {expected}', critical=True))
+        checks.append(_check('crew_choice', 'Выбрана нужная бригада', crew.get('id') == expected,
+                             '' if crew.get('id') == expected else f'Ожидается: {expected}', critical=True))
     if expectation.get('leadership_decision_required'):
         checks.append(_check('leadership_decision', 'Решение принято руководством',
                              crew.get('decision_by') == 'leadership' and bool(crew.get('decision_note')),
@@ -311,26 +346,25 @@ def review(value: dict, expectation: dict | None) -> dict | None:
             checks.append(_check('completion:' + label, label.capitalize(), False,
                                  'Полный цикл карточки не завершён.', critical=True))
 
+    return rescore({"version": "dds-review-v1", "service": service, "checks": checks,
+                    "note": "Оценка решений по журналу карточки. Содержательную правильность "
+                            "реагирования подтверждает преподаватель."}, expectation)
+
+
+def rescore(result: dict, expectation: dict) -> dict:
+    """Балл, итог и критические ошибки по текущему состоянию проверок."""
+    checks = result["checks"]
     judged = [check for check in checks if check["passed"] is not None]
     for check in judged:
         check['weight'] = expectation.get('check_weights', {}).get(check['id'], 1)
     passed = [check for check in judged if check["passed"]]
     total_weight = sum(check['weight'] for check in judged)
     score = round(sum(check['weight'] for check in passed) * 100 / total_weight, 2) if total_weight else None
-    failed_critical = [check for check in judged
-                       if not check["passed"] and check["critical"]]
-    return {
-        "version": "dds-review-v1",
-        "service": service,
-        "checks": checks,
-        "passed_count": len(passed),
-        "total_count": len(judged),
-        "score_percent": score,
-        "passed": bool(judged) and score >= expectation.get('pass_percent', 100) and not failed_critical,
-        "critical_errors": [check["label"] for check in failed_critical],
-        "note": "Оценка решений по журналу карточки. Содержательную правильность "
-                "реагирования подтверждает преподаватель.",
-    }
+    failed_critical = [check for check in judged if not check["passed"] and check["critical"]]
+    result.update(passed_count=len(passed), total_count=len(judged), score_percent=score,
+                  passed=bool(judged) and score >= expectation.get('pass_percent', 100) and not failed_critical,
+                  critical_errors=[check["label"] for check in failed_critical])
+    return result
 
 
-__all__ = ["review", "REFUSAL_LABELS"]
+__all__ = ["review", "rescore", "REFUSAL_LABELS"]

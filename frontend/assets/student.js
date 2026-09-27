@@ -318,6 +318,15 @@ function renderSituationUpdates(){
  const box=$('situationFeed');
  box.replaceChildren();
  box.hidden=!list.length&&!pending.length;
+ for(const item of list){
+  const line=element('article',undefined,'situation-update');
+  line.append(element('small',`${formatted(item.at)} · ${item.source}`),element('p',item.text));
+  if(item.unlocks_status){
+   const recorded=current.events.some(e=>e.type==='service.updated'&&e.detail?.service===current.owner_service&&e.detail?.status===item.unlocks_status&&e.at>=item.at);
+   line.append(element('small',recorded?'✓ Отражено в статусе своей службы':'Нужно отразить в статусе своей службы и записать существенные сведения в комментарий.'));
+  }
+  box.append(line);
+ }
  for(const item of pending){
   const line=element('article',undefined,'situation-update');
   line.append(element('small',`${item.source} · ожидается телефонный доклад`));
@@ -352,15 +361,6 @@ function renderSituationUpdates(){
      renderSituationUpdates();notify('Проверьте вызов на учебном IP-телефоне.');
     }finally{retry.disabled=false;}
    }));line.append(retry);
-  }
-  box.append(line);
- }
- for(const item of list){
-  const line=element('article',undefined,'situation-update');
-  line.append(element('small',`${formatted(item.at)} · ${item.source}`),element('p',item.text));
-  if(item.unlocks_status){
-   const recorded=current.events.some(e=>e.type==='service.updated'&&e.detail?.service===current.owner_service&&e.detail?.status===item.unlocks_status&&e.at>=item.at);
-   line.append(element('small',recorded?'✓ Отражено в статусе своей службы':'Нужно отразить в статусе своей службы и записать существенные сведения в комментарий.'));
   }
   box.append(line);
  }
@@ -466,7 +466,10 @@ function renderServices() {
   window.ddsFooterObserver.observe($('services').parentElement);
   window.ddsFooterObserver.observe($('services'));
  }
- const opened=new Set([...$('services').querySelectorAll('details[open]')].map(item=>item.dataset.service));
+ // Раскрытые плашки сохраняются только в пределах одной карточки: у разных
+ // карточек службы называются одинаково, и история не должна открываться сама.
+ const opened=renderServices.cardId===current.id?new Set([...$('services').querySelectorAll('details[open]')].map(item=>item.dataset.service)):new Set();
+ renderServices.cardId=current.id;
  $('services').replaceChildren(); $('responseService').replaceChildren();
  for (const service of current.card.services) {
   const tile=element('details',undefined,'service-tile'),summary=element('summary'),state=current.service_states[service]||{};
@@ -668,11 +671,23 @@ $('notificationForm').onsubmit=event=>{event.preventDefault();guarded(async()=>{
 $('openLinks').onclick=()=>{if(dirty){notify('Сначала сохраните карточку',true);return;}if(!current?.revision||current.status==='Завершена')return;$('linkTarget').replaceChildren();const linked=new Set((current.linked_cards||[]).map(v=>v.id));for(const item of sessions)if(item.id!==current.id&&!linked.has(item.id))$('linkTarget').add(new Option(`№ ${item.number} · ${item.card.incident_type||'без типа'} · ${addressText(item.card)}`,item.id));$('addLink').disabled=!$('linkTarget').options.length;$('linksDialog').showModal();};
 $('addLink').onclick=()=>guarded(async()=>{if(dirty)throw Error('Сначала сохраните карточку');const target_id=$('linkTarget').value;if(!target_id)throw Error('Нет доступной карточки для связи');const button=$('addLink');button.disabled=true;try{current=await api(`student/sessions/${current.id}/links`,'POST',{target_id});$('linksDialog').close();renderCard();notify('Ссылка на карточку сохранена');}finally{button.disabled=false;}});
 $('printCard').onclick=()=>{if(dirty){notify('Печатается только сохранённая карточка',true);return;}if(current?.revision)window.print();};
+// Ученику — только человеческий текст: служебные поля событий не показываются.
+function humanValue(value){if(value===null||value===undefined||value==='')return 'не заполнено';if(Array.isArray(value))return value.length?value.map(humanValue).join(', '):'не заполнено';if(typeof value==='boolean')return value?'да':'нет';if(typeof value==='object')return Object.values(value).filter(v=>v!==null&&v!=='').map(humanValue).join(', ')||'не заполнено';return String(value);}
+function eventText(event){const d=event.detail||{};
+ if(event.type==='service.updated')return [d.service,d.status&&`статус «${d.status}»`,d.comment&&`«${d.comment}»`].filter(Boolean).join(' · ');
+ if(event.type==='situation.update')return [d.source,d.text].filter(Boolean).join(': ');
+ if(event.type==='notification.recorded')return [d.service,d.recipient,d.comment].filter(Boolean).join(' · ');
+ if(event.type==='card.saved')return d.changed_fields?.length?`Изменено полей: ${d.changed_fields.length}`:'';
+ if(event.type==='crew.assigned')return [d.id,d.leader].filter(Boolean).join(' · ');
+ if(event.type==='card.error_reported')return [d.field,d.correct_value&&`правильно: ${d.correct_value}`,d.comment].filter(Boolean).join(' · ');
+ if(event.type==='session.finished')return d.reason||'';
+ if(event.type==='card.linked')return d.target_number?`Связана с карточкой № ${d.target_number}`:'';
+ return typeof d.comment==='string'?d.comment:typeof d.text==='string'?d.text:'';}
 function showAudit() {
  if(!current){notify('Сначала откройте карточку');return;}$('auditContent').replaceChildren();
  for(const note of current.teacher_feedback||[]){const item=element('article');item.append(element('strong',`Преподаватель · ${note.teacher_name} · ${formatted(note.at)}`),element('p',note.text));$('auditContent').append(item);}
  if(current.completed_by?.role==='teacher')$('auditContent').append(element('p',`Завершил преподаватель ${current.completed_by.name}: ${current.completed_by.reason}`));
- if(current.unsaved_draft)$('auditContent').append(element('p','Несохранённый черновик не включён в оценку. Он хранится в этой вкладке и доступен в JSON отдельным полем unsaved_draft.'));
+ if(current.unsaved_draft)$('auditContent').append(element('p','Несохранённый черновик не включён в оценку. Он хранится в этой вкладке: восстановите его кнопкой в карточке.'));
  const review=current.ai_review,finished=current.status==='Завершена';
  if(current.exercise_mode==='actions')$('auditContent').append(element('p','Выдана готовая карточка. Действия и изменения фиксируются отдельно.'));
  renderDdsReview();
@@ -687,26 +702,27 @@ function showAudit() {
   if(report?.status==='evaluated'){
    $('auditContent').append(element('p',`${report.score_percent}% · ${report.earned_weight} из ${report.total_weight} баллов по эталону «${report.rubric_title}», версия ${report.rubric_revision}.`));
    const timing=report.timing;$('auditContent').append(element('p',`Время занятия: ${timing.elapsed_seconds} сек. Лимит задания: ${timing.limit_seconds} сек. ${timing.within_limit?'В пределах лимита.':'Лимит превышен.'} Время не включено в балл за поля.`));
-   for(const criterion of report.criteria){const item=element('article');item.append(element('strong',`${criterion.passed?'✓':'Ошибка'} · ${criterion.label} (${criterion.passed?criterion.weight:0}/${criterion.weight})`));item.append(element('p','Ваш ответ: '+JSON.stringify(criterion.actual)));item.append(element('p','Эталон: '+criterion.expected.join(' / ')));if(!criterion.passed)item.append(element('p',criterion.recommendation));$('auditContent').append(item);}
+   for(const criterion of report.criteria){const item=element('article');item.append(element('strong',`${criterion.passed?'✓':'Ошибка'} · ${criterion.label} (${criterion.passed?criterion.weight:0}/${criterion.weight})`));item.append(element('p','Ваш ответ: '+humanValue(criterion.actual)));item.append(element('p','Эталон: '+criterion.expected.join(' / ')));if(!criterion.passed)item.append(element('p',criterion.recommendation));$('auditContent').append(item);}
   }else if(current.dds_review)$('auditContent').append(element('p',`Итог по действиям ДДС: ${current.dds_review.score_percent}% · ${current.dds_review.passed?'зачтено':'не зачтено'}.`));
   else $('auditContent').append(element('p',report?'Оценка не выставлена: при старте занятия эталон не был настроен.':'Это занятие завершено до появления оценивания; пересчёт не выполнялся.'));
   $('auditContent').append(element('h3','Заполненность карточки'));
   const labels={caller_name:'Имя заявителя',street:'Улица',house:'Дом',description:'Описание',incident_type:'Тип происшествия',services:'Службы'};for(const check of current.checks||[])$('auditContent').append(element('p',`${check.passed?'✓':'○'} ${labels[check.field]}: ${check.passed?'заполнено':'не заполнено'}`));
  }else $('auditContent').append(element('p',current.exercise_mode==='actions'&&current.dds_assessment_enabled?'Оценка действий ДДС будет рассчитана после отработки происшествия.':current.assessment_enabled?`Эталон зафиксирован. Лимит занятия: ${current.time_limit_seconds} сек. Правильные ответы откроются после завершения.`:'Для этого занятия эталон не настроен; итоговый балл не будет выставлен.'));
  if(finished){
-  $('auditContent').append(element('h3','ИИ-разбор текста · отдельно от балла'));
+  $('auditContent').append(element('h3',current.exercise_mode==='actions'?'ИИ-разбор ваших записей · отдельно от итога':'ИИ-разбор текста · отдельно от балла'));
   if(!review)$('auditContent').append(element('p','Разбор ещё не запрашивался. Запустите его кнопкой ниже.'));
   else if(review.status==='failed')$('auditContent').append(element('p',review.error));
   else{
    $('auditContent').append(element('p',`${review.provider} / ${review.model} · ${formatted(review.created_at)}`,'subtle'),element('p',review.summary));
-   const kinds={grammar:'Грамматика',clarity:'Ясность формулировки',contradiction:'Возможное противоречие'},names={description:'Описание',address_note:'Описательный адрес',caller_name:'Имя заявителя',street:'Улица',house:'Дом',apartment:'Квартира',incident_type:'Тип происшествия'};
-   for(const finding of review.findings){const block=element('article');block.append(element('strong',`${kinds[finding.kind]||finding.kind} · ${names[finding.field]||finding.field}`),element('p',`В карточке: «${finding.quote}»`),element('p',finding.explanation),element('p',finding.suggestion));for(const ref of finding.references||[])block.append(element('p',`Основание (${ref.id}): ${ref.text}`,'subtle'));$('auditContent').append(block);}
+   const kinds={grammar:'Грамматика',clarity:'Ясность формулировки',contradiction:'Возможное противоречие',omission:'Упущены сведения',inaccuracy:'Сведения искажены',good:'Хорошо'},names={description:'Описание',address_note:'Описательный адрес',caller_name:'Имя заявителя',street:'Улица',house:'Дом',apartment:'Квартира',incident_type:'Тип происшествия'};
+   for(const finding of review.findings){const block=element('article');block.append(element('strong',`${kinds[finding.kind]||finding.kind} · ${finding.record_label||names[finding.field]||finding.field}`),element('p',`Вы написали: «${finding.quote}»`),element('p',finding.explanation),element('p',(finding.kind==='good'?'':'Лучше так: ')+finding.suggestion));for(const ref of finding.references||[])block.append(element('p',`Основание: ${ref.text}`,'subtle'));$('auditContent').append(block);}
+   if(!review.findings.length&&review.status==='ready')$('auditContent').append(element('p','Замечаний к записям нет.','subtle'));
    
   }
  }
  $('auditContent').append(element('h3','Действия в занятии'));
- const types={'session.created':'Создано занятие','card.saved':'Сохранена карточка','card.processed':'Происшествие отработано','card.linked':'Добавлена связь карточки','notification.recorded':'Записана телефонограмма','service.updated':'Статус службы','call.requested':'Запрошен звонок','session.finished':'Завершено занятие','review.completed':'ИИ-разбор сохранён','review.failed':'ИИ-разбор недоступен'};
- for(const event of current.events){const el=element('article');el.append(element('strong',`${formatted(event.at)} · ${types[event.type]||event.type}`));if(Object.keys(event.detail).length)el.append(element('pre',JSON.stringify(event.detail,null,2)));$('auditContent').append(el);}if(!$('auditDialog').open)$('auditDialog').showModal();
+ const types={'session.created':'Создано занятие','card.saved':'Сохранена карточка','card.processed':'Происшествие отработано','card.linked':'Добавлена связь карточки','notification.recorded':'Записана телефонограмма','service.updated':'Статус службы','call.requested':'Запрошен звонок','session.finished':'Завершено занятие','review.completed':'ИИ-разбор сохранён','review.failed':'ИИ-разбор недоступен','card.opened':'Открыта карточка','situation.update':'Доклад бригады','crew.assigned':'Назначена бригада','card.error_reported':'Сообщено об ошибке в 112','progress.requested':'Запрошен ход работ','field_report.call_started':'Звонок бригады','call.failed':'Звонок не состоялся','card.forwarded':'Карточка перенаправлена','card.unproductive':'Непродуктивное обращение','card.reminder_set':'Напоминание','service.vis_added':'Добавлена служба','teacher.feedback':'Комментарий преподавателя'};
+ for(const event of current.events){const el=element('article');el.append(element('strong',`${formatted(event.at)} · ${types[event.type]||'Событие занятия'}`));const text=eventText(event);if(text)el.append(element('p',text));$('auditContent').append(el);}if(!$('auditDialog').open)$('auditDialog').showModal();
 }
 $('requestReview').onclick=()=>guarded(async()=>{
  if(!current||current.status!=='Завершена'||pendingReviews.has(current.id))return;
@@ -714,7 +730,6 @@ $('requestReview').onclick=()=>guarded(async()=>{
  try{const result=await api(`student/sessions/${sid}/ai-review`,'POST');if(current?.id===sid)current=result;}
  finally{pendingReviews.delete(sid);if(current?.id===sid&&$('auditDialog').open)showAudit();}
 });
-$('export').onclick=()=>{const blob=new Blob([JSON.stringify(current,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=element('a');a.href=url;a.download=`training-${current.number}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 $('sipCall').onclick=startSipCall;
 $('clearAddress').onclick=()=>{for(const f of fields)if(address.some(a=>a[0]===f.dataset.field)||f.dataset.field==='address_note')f.value='';markDirty();};
 for(const id of ['create','emptyCreate'])$(id).onclick=()=>guarded(newSession);
@@ -1062,9 +1077,13 @@ $('openBriefing').onclick=()=>{
  if(!current?.revision||current.status==='Завершена')return;
  briefing=null;renderBriefing();
  $('briefingService').replaceChildren();
- for(const service of current.card.services)if(current.exercise_mode!=='actions'||current.card.service_phones?.[service])$('briefingService').add(new Option(service,service));
+ const dds=current.exercise_mode==='actions';
+ for(const service of current.card.services)if(!dds||current.card.service_phones?.[service])$('briefingService').add(new Option(dds&&service===current.owner_service?`${service} · начальник дежурной смены`:service,service));
  if(current.assigned_crew?.phone)$('briefingService').add(new Option(`${current.assigned_crew.id} · ${current.assigned_crew.leader}`,'crew:'+current.assigned_crew.id));
- if(current.assigned_crew?.phone)$('briefingService').value='crew:'+current.assigned_crew.id;
+ // Сначала задача бригаде, затем доклад начальнику смены своей службы.
+ const briefed=(current.notifications||[]).filter(n=>n.counterpart);
+ if(current.assigned_crew?.phone&&!briefed.some(n=>n.counterpart==='crew'))$('briefingService').value='crew:'+current.assigned_crew.id;
+ else if(dds&&current.card.service_phones?.[current.owner_service])$('briefingService').value=current.owner_service;
  if(!$('briefingService').options.length){notify('У получателей нет доступных телефонов',true);return;}
  $('briefingPhone').value=current.card.service_phones?.[$('briefingService').value]||'';
  $('briefingPhone').readOnly=current.exercise_mode==='actions';

@@ -1,10 +1,12 @@
 import asyncio
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from uuid import uuid4
 
 from app.chat import ChatStore
 from app.audio.environment import Environment
-from app.audio.formats import Framer, SAMPLE_RATE, SILENCE, FramePacer
+import numpy as np
+
+from app.audio.formats import FRAME_MS, Framer, SAMPLE_RATE, SILENCE, FramePacer, samples
 from app.audio.latency import TurnMetrics, log_event
 from app.audio.playback import Playback
 from app.audio.recorder import Recorder
@@ -44,6 +46,10 @@ class CallRuntime:
         self.turns = OrderedDict()
         self.playback = None
         self.capture_blocked_until = 0.0
+        # Перебивание: кадры громкой речи во время ответа и признак открытого входа.
+        self.barge_frames = deque(maxlen=max(1, (self.settings.barge_in_ms + self.settings.preroll_ms) // FRAME_MS))
+        self.barge_loud = 0
+        self.barge_open = False
         self.error = None
         self.recording_paths = None
 
@@ -81,12 +87,36 @@ class CallRuntime:
                     # A speakerphone can feed the generated victim voice back into
                     # the microphone. In bot-controlled modes, do not turn that echo
                     # into a new operator turn. Manual mode keeps full duplex STT.
-                    if self.mode != "manual" and (self.playback.active or
+                    if not self.barge_open and self.mode != "manual" and (self.playback.active or
                             asyncio.get_running_loop().time() < self.capture_blocked_until):
+                        if not self.barge_in(frame):
+                            continue
+                        for held in self.barge_frames:
+                            self.input.put_nowait(held)
+                        self.barge_frames.clear()
                         continue
                     self.input.put_nowait(frame)
         except Exception as exc:
             self.fail("audio_backpressure", type(exc).__name__)
+
+    def barge_in(self, frame):
+        """Громкая речь оператора дольше barge_in_ms прерывает ответ собеседника.
+
+        Эхо динамика тише прямой речи в микрофон и отсекается порогом; короткие
+        звуки (кашель, щелчок) не набирают нужной длительности.
+        """
+        if not self.settings.barge_in_ms:
+            return False
+        self.barge_frames.append(frame)
+        rms = float(np.sqrt(np.mean(samples(frame) ** 2)))
+        self.barge_loud = self.barge_loud + 1 if rms >= self.settings.barge_in_threshold else 0
+        if self.barge_loud * FRAME_MS < self.settings.barge_in_ms:
+            return False
+        self.barge_loud = 0
+        self.barge_open = True
+        log_event("voice.barge_in", call_id=str(self.context.call_id))
+        self.spawn(self.stop_playback(), "barge-in")
+        return True
 
     async def emit_error(self, code, detail, **fields):
         log_event("voice.error", call_id=str(self.context.call_id), code=code, detail=detail)
@@ -124,6 +154,9 @@ class CallRuntime:
         self.manager.chat.message(self.context.call_id, reply_id, status=status)
         if self.mode == 'auto' and status in ('played', 'interrupted', 'error'):
             await self.backend.emit('caller.playback', {'reply_id': str(reply_id), 'status': status})
+        if status == "playing":
+            self.barge_frames.clear()
+            self.barge_loud = 0
         if self.mode != "manual" and status in ("playing", "played", "interrupted", "error"):
             guard = self.settings.echo_guard_ms / 1000
             self.capture_blocked_until = max(self.capture_blocked_until,
@@ -225,6 +258,8 @@ class CallRuntime:
             if result.audio:
                 self.stt_input.put_nowait(("audio", utterance_id, result.audio))
             if result.ended:
+                # Реплика, начатая перебиванием, закончена: эхо-защита снова действует.
+                self.barge_open = False
                 self.turns[utterance_id].mark("vad_end_ms")
                 self.stt_input.put_nowait(("end", utterance_id, b""))
                 self.quiet.set()

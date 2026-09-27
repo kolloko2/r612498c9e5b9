@@ -171,7 +171,9 @@ def test_teacher_verified_correction_is_used_for_card_and_briefing():
                    'expected_corrections': {'house': '22'}}
     # ДДС не правит карточку 112, а сообщает об ошибке в 112.
     assert 'Ошибка не передана' in verdict(review(value, expectation), 'correction:house')['detail']
-    value['error_reports'] = [{'field': 'house', 'correct_value': '15', 'source': 'Старший бригады'}]
+    value['error_reports'] = [{'field': 'house', 'correct_value': '15', 'source': 'Старший бригады'},
+                              {'field': 'house', 'correct_value': '22 или 23', 'source': 'Старший бригады'}]
+    # Неверное значение и догадка с альтернативой не засчитываются.
     assert verdict(review(value, expectation), 'correction:house')['passed'] is False
     value['error_reports'].append({'field': 'house', 'correct_value': '22', 'source': 'Старший бригады'})
     result = review(value, expectation)
@@ -230,3 +232,14 @@ def test_card_is_worked_out_only_when_every_cycle_status_is_set():
                           comment='Работы выполнит другая служба')])
     refused['processed_at'] = at
     assert unfinished(refused, {'should_accept': True}) == []
+
+
+def test_briefing_before_correction_accepts_card_value():
+    from briefing import check, reference_card
+    value = {'card': {'street': 'Берзарина', 'house': '20', 'incident_type': 'Пожар в квартире'}}
+    expectation = {'expected_corrections': {'house': '22'}, 'brief_required_fields': ['street', 'house']}
+    card = reference_card(value, expectation)
+    # До прибытия бригады диспетчер знает дом из карточки 112, после — уточнённый.
+    assert check('Берзарина, дом 20', card)['complete']
+    assert check('Берзарина, дом 22', card)['complete']
+    assert not check('Берзарина, дом 21', card)['complete']

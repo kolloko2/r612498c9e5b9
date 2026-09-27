@@ -20,18 +20,51 @@ security:
 paths:
   /student/sessions/{sid}/briefings/{bid}/recover:
     post:
-      summary: Resume an owned interrupted SIP briefing without clearing its transcript
-      description: Three attempts within 30 seconds, confirmed transport failure or service_restart only. Active calls and stale expected IDs return the current briefing. Normal hangup does not redial.
+      summary: Recover
+      operationId: recover_api_v1_student_sessions__sid__briefings__bid__recover_post
       parameters:
-      - {name: sid, in: path, required: true, schema: {type: string, format: uuid}}
-      - {name: bid, in: path, required: true, schema: {type: string, format: uuid}}
-      - {name: expected_call_id, in: query, required: true, schema: {type: string, format: uuid}}
-      - {name: X-User-Session, in: header, required: true, schema: {type: string}}
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: bid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Bid
+      - name: expected_call_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Expected Call Id
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
       responses:
-        '200': {description: Current or resumed briefing with recovery state and call history}
-        '404': {description: Briefing or durable call snapshot not found}
-        '409': {description: Closed lesson or briefing}
-        '503': {description: Voice unavailable; no assumed recovery}
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
   /student/grammar/preview:
     post:
       summary: Grammar Preview
@@ -3932,11 +3965,10 @@ paths:
       description: 'ДДС сообщает в Службу 112 об ошибке в полученной карточке.
 
 
-        Правильные сведения диспетчер узнаёт из
+        Правильные сведения диспетчер узнаёт из звонка бригады, затем звонит по
 
-        звонка бригады, затем звонит по обычному телефону в 112 и сообщает об
-
-        ошибке. Сама карточка 112 при этом не меняется: её поля ведёт 112.'
+        обычному телефону в 112 и сообщает об ошибке. Сама карточка 112 при этом не
+        меняется: её поля ведёт 112.'
       operationId: error_report_api_v1_student_sessions__sid__error_reports_post
       parameters:
       - name: sid
@@ -3979,9 +4011,8 @@ paths:
       description: 'Перенаправление происшествия в другую службу.
 
 
-        Это третье действие диспетчера наряду с приёмом и
-
-        отказом. Технически служба добавляется в карточку, как при ручном
+        Это третье действие диспетчера наряду с приёмом и отказом. Технически служба
+        добавляется в карточку, как при ручном
 
         дополнении списка оповещения, но событие пишется отдельным типом с
 
@@ -4504,6 +4535,101 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - bearerAuth: []
+  /admin/users/{uid}/role:
+    patch:
+      summary: Change Role
+      operationId: change_role_api_v1_admin_users__uid__role_patch
+      parameters:
+      - name: uid
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Uid
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRoleRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /admin/policy:
+    get:
+      summary: Get Policy
+      operationId: get_policy_api_v1_admin_policy_get
+      parameters:
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+    put:
+      summary: Put Policy
+      operationId: put_policy_api_v1_admin_policy_put
+      parameters:
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessPolicy'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
 components:
   securitySchemes:
     bearerAuth:
@@ -4987,14 +5113,17 @@ components:
           type: object
           title: Service Phones
         recipient_affiliations:
-          type: object
-          description: Explicit author-provided territorial and departmental destinations; DDS students cannot modify these.
-          propertyNames:
-            enum: [area, district, department]
           additionalProperties:
             type: string
-            minLength: 1
             maxLength: 160
+            minLength: 1
+          propertyNames:
+            enum:
+            - area
+            - district
+            - department
+          type: object
+          title: Recipient Affiliations
       additionalProperties: false
       type: object
       title: Card
@@ -5404,6 +5533,7 @@ components:
         role:
           type: string
           enum:
+          - admin
           - teacher
           - student
           title: Role
@@ -6067,7 +6197,8 @@ components:
       - source
       - recipient
       title: ErrorReport
-      description: 'Звонок ДДС в Службу 112: в карточке ошибка, правильное значение такое-то.'
+      description: 'Звонок ДДС в Службу 112: в карточке ошибка, правильное значение
+        такое-то.'
     NotificationAction:
       properties:
         message_id:
@@ -6587,6 +6718,7 @@ components:
         kind:
           type: string
           enum:
+          - dds
           - field
           - sequence
           - scenario_performance
@@ -6771,10 +6903,6 @@ components:
       title: RecipientSettings
     PublishRequest:
       properties:
-        new_revision:
-          type: boolean
-          default: false
-          description: Publish a fresh copy when scenario or rubric differs; preserve the previous scenario and teacher edits.
         draft_ids:
           items:
             type: string
@@ -6782,6 +6910,10 @@ components:
           maxItems: 3
           minItems: 1
           title: Draft Ids
+        new_revision:
+          type: boolean
+          title: New Revision
+          default: false
       additionalProperties: false
       type: object
       required:
@@ -7022,9 +7154,9 @@ components:
       description: 'Вводная: новое обстоятельство, приходящее по ходу работы с карточкой.
 
 
-        Тренажёр моделирует полный жизненный цикл происшествия, а не
+        Тренажёр моделирует полный жизненный цикл происшествия, а не заполнение
 
-        заполнение формы. Настоящая работа диспетчера состоит в том, что обстановка
+        формы. Настоящая работа диспетчера состоит в том, что обстановка
 
         меняется: бригада не проехала, появился второй пострадавший, заявитель
 
@@ -7072,13 +7204,16 @@ components:
           maxItems: 8
           title: Result Keywords
         update_keywords:
-          type: object
-          maxProperties: 6
           additionalProperties:
+            items:
+              type: string
+              maxLength: 120
+              minLength: 1
             type: array
             maxItems: 8
-            items: {type: string, minLength: 1, maxLength: 120}
-          description: Private asserted facts required in each operational update status comment.
+          type: object
+          maxProperties: 6
+          title: Update Keywords
         expected_corrections:
           additionalProperties:
             type: string
@@ -7264,3 +7399,56 @@ components:
       required:
       - card
       title: GrammarPreview
+    AccessPolicy:
+      properties:
+        session_hours:
+          type: integer
+          maximum: 24.0
+          minimum: 1.0
+          title: Session Hours
+          default: 8
+        failure_limit:
+          type: integer
+          maximum: 10.0
+          minimum: 3.0
+          title: Failure Limit
+          default: 5
+        lock_seconds:
+          type: integer
+          maximum: 3600.0
+          minimum: 30.0
+          title: Lock Seconds
+          default: 60
+        audit_retention_days:
+          type: integer
+          maximum: 3650.0
+          minimum: 7.0
+          title: Audit Retention Days
+          default: 365
+        log_level:
+          type: string
+          enum:
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+          title: Log Level
+          default: INFO
+      additionalProperties: false
+      type: object
+      title: AccessPolicy
+      description: Политика доступа и журналирования, которую настраивает администратор.
+    UserRoleRequest:
+      properties:
+        role:
+          type: string
+          enum:
+          - admin
+          - teacher
+          - student
+          title: Role
+      additionalProperties: false
+      type: object
+      required:
+      - role
+      title: UserRoleRequest

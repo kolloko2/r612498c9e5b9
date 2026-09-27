@@ -21,11 +21,23 @@
       <form id="userForm" class="form-grid">
         <label>Логин<input id="newUsername" required minlength="3" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,39}"></label>
         <label>Отображаемое имя<input id="newDisplayName" required maxlength="100"></label>
-        <label>Роль<select id="newRole"><option value="teacher">Преподаватель</option><option value="student">Студент</option></select></label>
+        <label>Роль<select id="newRole"><option value="teacher">Преподаватель</option><option value="student">Студент</option><option value="admin">Администратор</option></select></label>
         <label>Пароль<input id="newPassword" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>
         <button class="primary" type="submit">Создать пользователя</button>
       </form>
       <div id="users" class="cards"></div>
+      <section class="panel">
+        <h2>Политика доступа и журналирования</h2>
+        <p>Действует для всех реплик сервера сразу, без перезапуска. Изменения записываются в журнал аудита.</p>
+        <form id="policyForm" class="form-grid">
+          <label>Срок сессии, ч<input id="policySession" type="number" min="1" max="24" required></label>
+          <label>Ошибок входа до блокировки<input id="policyFailures" type="number" min="3" max="10" required></label>
+          <label>Блокировка входа, с<input id="policyLock" type="number" min="30" max="3600" required></label>
+          <label>Хранить журнал аудита, дней<input id="policyRetention" type="number" min="7" max="3650" required></label>
+          <label>Уровень журнала сервера<select id="policyLogLevel"><option value="DEBUG">Отладка</option><option value="INFO">Информация</option><option value="WARNING">Предупреждения</option><option value="ERROR">Только ошибки</option></select></label>
+          <button class="primary" type="submit">Сохранить политику</button>
+        </form>
+      </section>
     </section>
 
     <section id="teacherPanel" hidden>

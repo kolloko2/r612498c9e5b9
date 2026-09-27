@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import hmac
 import re
 import secrets
@@ -55,7 +56,22 @@ class BootstrapRequest(Credentials):
 
 
 class CreateUserRequest(BootstrapRequest):
-    role: Literal["teacher", "student"]
+    role: Literal["admin", "teacher", "student"]
+
+
+class UserRoleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["admin", "teacher", "student"]
+
+
+class AccessPolicy(BaseModel):
+    """Политика доступа и журналирования, которую настраивает администратор."""
+    model_config = ConfigDict(extra="forbid")
+    session_hours: int = Field(SESSION_SECONDS // 3600, ge=1, le=24)
+    failure_limit: int = Field(FAILURE_LIMIT, ge=3, le=10)
+    lock_seconds: int = Field(LOCK_SECONDS, ge=30, le=3600)
+    audit_retention_days: int = Field(365, ge=7, le=3650)
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
 
 class UserActiveRequest(BaseModel):
@@ -109,6 +125,48 @@ class Accounts:
                 )"""
             )
             self.db.execute("CREATE INDEX IF NOT EXISTS account_sessions_user ON account_sessions(user_id)")
+            self.db.execute(
+                "CREATE TABLE IF NOT EXISTS account_policy (id INTEGER PRIMARY KEY, body TEXT NOT NULL)"
+            )
+
+    def policy(self) -> AccessPolicy:
+        # Политика хранится в общей базе: обе реплики Backend читают одно значение.
+        row = self.db.execute("SELECT body FROM account_policy WHERE id=1").fetchone()
+        policy = AccessPolicy.model_validate_json(row[0]) if row else AccessPolicy()
+        logging.getLogger().setLevel(policy.log_level)
+        return policy
+
+    def set_policy(self, policy: AccessPolicy, actor_id: str) -> dict:
+        with self._lock, self.db:
+            self.db.execute(
+                "INSERT INTO account_policy VALUES (1,?) ON CONFLICT (id) DO UPDATE SET body=excluded.body",
+                (policy.model_dump_json(),),
+            )
+            self.db.execute("DELETE FROM account_audit WHERE at < ?",
+                            (int(time.time()) - policy.audit_retention_days * 86400,))
+            self._audit("policy.updated", actor_id)
+        logging.getLogger().setLevel(policy.log_level)
+        return policy.model_dump()
+
+    def set_role(self, uid: str, role: str, actor_id: str) -> dict:
+        with self._lock, self.db:
+            row = self._user_row(uid=uid)
+            if not row:
+                raise HTTPException(404, "Пользователь не найден")
+            if uid == actor_id:
+                raise HTTPException(409, "Свою роль изменить нельзя")
+            if row[3] == "admin" and role != "admin" and self._other_admins(uid) == 0:
+                raise HTTPException(409, "В системе должен остаться хотя бы один администратор")
+            self.db.execute("UPDATE account_users SET role=? WHERE id=?", (role, uid))
+            # Права меняются сразу: действующие сессии со старой ролью закрываются.
+            self.db.execute("DELETE FROM account_sessions WHERE user_id=?", (uid,))
+            self._audit("account.role." + role, uid)
+        return self.get_user(uid)
+
+    def _other_admins(self, uid: str) -> int:
+        return self.db.execute(
+            "SELECT count(*) FROM account_users WHERE role='admin' AND active=1 AND id<>?", (uid,)
+        ).fetchone()[0]
 
     @staticmethod
     def _password_hash(password: str, salt: bytes) -> bytes:
@@ -170,7 +228,7 @@ class Accounts:
         now = int(time.time())
         self.db.execute(
             "INSERT INTO account_sessions VALUES (?,?,?,?)",
-            (token_hash, uid, now + SESSION_SECONDS, now),
+            (token_hash, uid, now + self.policy().session_hours * 3600, now),
         )
         row = self._user_row(uid=uid)
         return {"user": self._public(row), "session_token": token}
@@ -181,7 +239,8 @@ class Accounts:
             "SELECT failures,locked_until FROM account_login_failures WHERE username=?", (username,)
         ).fetchone()
         failures = (row[0] if row and (row[1] == 0 or row[1] > now) else 0) + 1
-        locked_until = now + LOCK_SECONDS if failures >= FAILURE_LIMIT else 0
+        policy = self.policy()
+        locked_until = now + policy.lock_seconds if failures >= policy.failure_limit else 0
         self.db.execute(
             "INSERT INTO account_login_failures VALUES (?,?,?,?) "
             "ON CONFLICT (username) DO UPDATE SET failures=excluded.failures, "
@@ -272,8 +331,8 @@ class Accounts:
             return [self._public(row) for row in rows]
 
     def create_user(self, username: str, password: str, display_name: str, role: str) -> dict:
-        if role not in ("teacher", "student"):
-            raise HTTPException(422, "Допустима роль преподавателя или студента")
+        if role not in ("admin", "teacher", "student"):
+            raise HTTPException(422, "Допустима роль администратора, преподавателя или студента")
         salt = secrets.token_bytes(16)
         password_hash = self._password_hash(password, salt)
         uid = str(uuid4())
@@ -291,13 +350,13 @@ class Accounts:
                 raise
         return self.get_user(uid)
 
-    def set_active(self, uid: str, active: bool) -> dict:
+    def set_active(self, uid: str, active: bool, actor_id: str | None = None) -> dict:
         with self._lock, self.db:
             row = self._user_row(uid=uid)
             if not row:
                 raise HTTPException(404, "Пользователь не найден")
-            if row[3] == "admin" and not active:
-                raise HTTPException(409, "Нельзя блокировать администратора")
+            if row[3] == "admin" and not active and (uid == actor_id or self._other_admins(uid) == 0):
+                raise HTTPException(409, "Нельзя заблокировать себя или последнего администратора")
             self.db.execute("UPDATE account_users SET active=? WHERE id=?", (int(active), uid))
             if not active:
                 self.db.execute("DELETE FROM account_sessions WHERE user_id=?", (uid,))
@@ -338,8 +397,21 @@ class Accounts:
             return self.create_user(body.username, body.password, body.display_name, body.role)
 
         @admin.patch("/users/{uid}")
-        def change_active(uid: str, body: UserActiveRequest, _user: dict = Depends(self.require("admin"))):
-            return self.set_active(uid, body.active)
+        def change_active(uid: str, body: UserActiveRequest, user: dict = Depends(self.require("admin"))):
+            return self.set_active(uid, body.active, user["id"])
+
+        @admin.patch("/users/{uid}/role")
+        def change_role(uid: str, body: UserRoleRequest, user: dict = Depends(self.require("admin"))):
+            return self.set_role(uid, body.role, user["id"])
+
+        @admin.get("/policy")
+        def get_policy(_user: dict = Depends(self.require("admin"))):
+            with self._lock:
+                return self.policy().model_dump()
+
+        @admin.put("/policy")
+        def put_policy(body: AccessPolicy, user: dict = Depends(self.require("admin"))):
+            return self.set_policy(body, user["id"])
 
         combined.include_router(auth)
         combined.include_router(admin)

@@ -6,6 +6,7 @@ explicitly authored simulation facts, separate from the caller's known_facts.
 """
 import re
 from ticket_annotations import ANNOTATED, CHOICES
+from working_facts import WORKING_FACTS
 
 
 # ticket-call | response family | region | locality | street | house
@@ -254,6 +255,7 @@ def complete(draft, call, phones):
                      ['dispatched', 'arrived', 'working', 'done'], schedule, texts, statuses)],
         dds_expectation=dict(should_accept=True, brief_service=owner, expected_crew_id=crew,
                              update_response_limit_seconds=90, result_keywords=[result_fact],
+                             update_keywords={'working': [WORKING_FACTS[key]]},
                              brief_required_fields=[key for key in ('city', 'street', 'house', 'building',
                                                                     'structure', 'apartment', 'entrance', 'floor',
                                                                     'object', 'incident_type', 'injured')
@@ -276,3 +278,14 @@ def complete(draft, call, phones):
         if card.get(field):
             draft['rubric']['criteria'].append(dict(id='address_' + field, label=label, field=field,
                                                     mode='equals', expected=[card[field]], weight=1))
+    # Каждый третий вызов с номером дома — задание на ошибку карточки 112:
+    # в карточке соседний номер, фактический бригада называет по прибытии.
+    # ДДС карточку не правит, а сообщает правильное значение в 112.
+    if draft['call'] == 3 and re.fullmatch(r'\d+', str(card.get('house', ''))):
+        actual = card['house']
+        card['house'] = str(int(actual) + 2)
+        arrived = scenario['updates'][1]
+        arrived['text'] = (f'{crew} прибыла. Место: {landmark}. Фактический номер дома {actual}, '
+                           f'в карточке 112 указан дом {card["house"]}. Приступаем к уточнению обстановки.')
+        scenario['dds_expectation'].update(expected_corrections={'house': actual},
+                                           correction_evidence={'house': arrived['text']})

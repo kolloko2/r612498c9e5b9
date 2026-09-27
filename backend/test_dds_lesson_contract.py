@@ -281,7 +281,10 @@ def test_correct_facts_come_from_the_brigade():
     value['events'].append({'type': 'progress.requested', 'detail': {}})
     assert correction_evidence_visible(value) is True
     value = {'exercise_mode': 'actions', 'planned_unlocks': {'a': 'Прибытие'}, 'events': [
-        {'type': 'situation.update', 'detail': {'id': 'a', 'unlocks_status': 'Прибытие'}}]}
+        {'type': 'progress.requested', 'detail': {}}, {'type': 'field_report.call_started', 'detail': {}}]}
+    # Запрос без нового доклада и непрослушанный звонок не раскрывают эталон.
+    assert correction_evidence_visible(value) is False
+    value['events'].append({'type': 'situation.update', 'detail': {'id': 'a', 'unlocks_status': 'Прибытие'}})
     assert correction_evidence_visible(value) is True
     # Без бригады и докладов источник — вводная после приёма карточки.
     assert correction_evidence_visible({'exercise_mode': 'actions', 'events': []}) is False

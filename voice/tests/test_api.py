@@ -72,3 +72,16 @@ def test_health_reports_missing_speech_library(monkeypatch):
     monkeypatch.setattr(health_module.importlib.util, "find_spec", lambda name: object())
     assert health_module._library_ready("hybrid") is True
     assert health_module._missing("hybrid") is False
+
+
+def test_health_is_unavailable_when_speech_model_files_are_missing(tmp_path):
+    from fastapi.testclient import TestClient
+    from app.config import Settings
+    from app.main import create_app
+
+    settings = Settings(_env_file=None, stt_provider="mock", tts_provider="silero",
+                        tts_voice=str(tmp_path / "missing.pt"),
+                        recording_dir=tmp_path / "rec", outbox_dir=tmp_path / "out")
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/api/v1/health")
+    assert response.status_code == 503 and response.json()["status"] == "degraded"

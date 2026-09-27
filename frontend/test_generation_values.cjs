@@ -13,5 +13,5 @@ test('preview renders nested service phones and booleans as text',()=>{
  assert.equal(context.readableValue([]),'Не задано');
 });
 test('decision expectation has readable labels without raw JSON',()=>{
- assert.deepEqual(Array.from(context.decisionLines({should_accept:true,expected_corrections:{house:'17'}})),['Карточку следует принять: Да','Исправления в карточке: Дом: 17']);
+ assert.deepEqual(Array.from(context.decisionLines({should_accept:true,expected_corrections:{house:'17'}})),['Карточку следует принять: Да','Ошибки карточки 112 для сообщения в 112: Дом: 17']);
 });

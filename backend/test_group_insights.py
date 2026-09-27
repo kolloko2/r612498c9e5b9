@@ -210,3 +210,30 @@ def test_stale_legacy_snapshot_keeps_unknown_participant_count():
     assert hydrated["aggregate"]["participant_count"] is None
     assert any("Число участников старого снимка неизвестно" in item for item in hydrated["limitations"])
     assert not any("Малая выборка" in item for item in hydrated["limitations"])
+
+
+def test_dds_decisions_drive_group_evidence(insights):
+    c = insights
+    base = {"status": "Завершена", "teacher_id": c["users"]["teacher1"]["id"], "exercise_mode": "actions",
+            "group_id": c["group"]["id"], "scenario_id": c["scenario_id"],
+            # Поля готовой карточки не являются навыком ДДС и не должны попасть в выводы.
+            "evaluation": {"score_percent": 100, "criteria": [{"id": "address", "label": "Адрес", "passed": True}]}}
+    samples = [
+        {**base, "id": "dds-1", "dds_review": {"score_percent": 80, "checks": [
+            {"id": "briefing", "label": "Доклад вышестоящему начальнику", "passed": False},
+            {"id": "update_facts:working", "label": "Обстановка записана", "passed": True}]}},
+        {**base, "id": "dds-2", "dds_review": {"score_percent": 60, "checks": [
+            {"id": "briefing", "label": "Доклад вышестоящему начальнику", "passed": False},
+            {"id": "update_facts:working", "label": "Обстановка записана", "passed": False}]}},
+    ]
+    with c["store"].db:
+        for sample in samples:
+            c["store"].db.execute("INSERT INTO workspace VALUES (?,?)", (sample["id"], json.dumps(sample)))
+    learning = Learning(c["store"], Accounts(c["store"]))
+    group = learning._group(c["group"]["id"], c["users"]["teacher1"]["id"])
+    payload = group_insights.aggregate(c["store"], group, c["users"]["teacher1"]["id"])
+    errors = [item for item in payload["evidence"] if item["kind"] != "scenario_performance"]
+    assert [(item["kind"], item["label"], item["error_count"]) for item in errors] == [
+        ("dds", "Доклад вышестоящему начальнику", 2), ("dds", "Обстановка записана", 1)]
+    scenario = next(item for item in payload["evidence"] if item["kind"] == "scenario_performance")
+    assert scenario["average_score"] == 70

@@ -20,6 +20,9 @@ class TTSProvider(Protocol):
     async def close(self): ...
 
 
+SILERO_SPEAKERS = frozenset({'aidar', 'baya', 'eugene', 'kseniya', 'xenia'})
+
+
 class MockTTS:
     """Audible tone, deliberately not presented as synthesized speech."""
 
@@ -177,7 +180,10 @@ class SileroTTS:
     async def synthesize_stream(self, text, voice_style):
         if not self.model:
             raise ValueError('Silero requires TTS_VOICE .pt path')
-        audio = await self.pool().render(text, self.speaker, voice_style.rate)
+        # Голос собеседника из ответа Backend; неизвестное модели имя заменяется
+        # настроенным голосом, чтобы опечатка не ломала разговор.
+        speaker = voice_style.speaker if voice_style.speaker in SILERO_SPEAKERS else self.speaker
+        audio = await self.pool().render(text, speaker, voice_style.rate)
         # Worker is already free: slow playback on one call never blocks synthesis.
         for offset in range(0, len(audio), 16384):
             yield audio[offset:offset + 16384]

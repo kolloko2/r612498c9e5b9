@@ -11,7 +11,7 @@
   "transcribed_at": "2026-09-15"
  },
  "phones": "synthetic",
- "catalog_sha256": "94d62889af6995bc85e7f1e024ba038ac4bcf34f2e02f143b952f1826f25eef0",
+ "catalog_sha256": "b6a0a6f1a61f4da321fcd5a995933a0b1a453a150a00221d12c18c8b4ddabb02",
  "metadata": {
   "tickets": 32,
   "drafts": 96,
@@ -146,6 +146,11 @@
      "result_keywords": [
       "Контейнер потушен"
      ],
+     "update_keywords": {
+      "working": [
+       "контейнер"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "object",
@@ -326,6 +331,11 @@
      "result_keywords": [
       "Драка прекращена"
      ],
+     "update_keywords": {
+      "working": [
+       "драка"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -529,6 +539,11 @@
      "result_keywords": [
       "Ребёнок осмотрен"
      ],
+     "update_keywords": {
+      "working": [
+       "ребёнок"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -713,6 +728,11 @@
      "result_keywords": [
       "Задымление устранено"
      ],
+     "update_keywords": {
+      "working": [
+       "мусоропровод"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -914,6 +934,11 @@
      "result_keywords": [
       "Объяснения сторон переданы"
      ],
+     "update_keywords": {
+      "working": [
+       "конфликт"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -1111,6 +1136,11 @@
      "result_keywords": [
       "Обследование акватории завершено"
      ],
+     "update_keywords": {
+      "working": [
+       "автомобиль"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "object",
@@ -1289,6 +1319,11 @@
      "result_keywords": [
       "Пожар крыши ликвидирован"
      ],
+     "update_keywords": {
+      "working": [
+       "крыша"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -1476,6 +1511,11 @@
      "result_keywords": [
       "Музыка выключена"
      ],
+     "update_keywords": {
+      "working": [
+       "музыка"
+      ]
+     },
      "brief_required_fields": [
       "street",
       "house",
@@ -1659,6 +1699,11 @@
      "result_keywords": [
       "Водитель освобождён"
      ],
+     "update_keywords": {
+      "working": [
+       "водитель"
+      ]
+     },
      "brief_required_fields": [
       "street",
       "incident_type",
@@ -1843,6 +1888,11 @@
      "result_keywords": [
       "Балкон потушен"
      ],
+     "update_keywords": {
+      "working": [
+       "балкон"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -2031,6 +2081,11 @@
      "result_keywords": [
       "Пациентка передана медицинским работникам"
      ],
+     "update_keywords": {
+      "working": [
+       "женщина"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -2225,6 +2280,11 @@
      "result_keywords": [
       "Доступ в квартиру обеспечен"
      ],
+     "update_keywords": {
+      "working": [
+       "квартира"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "building",
@@ -2436,6 +2496,11 @@
      "result_keywords": [
       "Два человека выведены"
      ],
+     "update_keywords": {
+      "working": [
+       "балкон"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -2646,6 +2711,11 @@
      "result_keywords": [
       "Сведения о принятых препаратах переданы"
      ],
+     "update_keywords": {
+      "working": [
+       "женщина"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -2844,6 +2914,11 @@
      "result_keywords": [
       "Рабочий извлечён"
      ],
+     "update_keywords": {
+      "working": [
+       "котлован"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "object",
@@ -3021,6 +3096,11 @@
      "result_keywords": [
       "Автомобиль потушен"
      ],
+     "update_keywords": {
+      "working": [
+       "Фольксваген"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -3201,6 +3281,11 @@
      "result_keywords": [
       "Водитель осмотрен"
      ],
+     "update_keywords": {
+      "working": [
+       "водитель"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -3381,6 +3466,11 @@
      "result_keywords": [
       "Трое мужчин доставлены на берег"
      ],
+     "update_keywords": {
+      "working": [
+       "льдина"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "object",
@@ -3560,6 +3650,11 @@
      "result_keywords": [
       "Водитель с ожогами передан медикам"
      ],
+     "update_keywords": {
+      "working": [
+       "Тойота"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -3741,6 +3836,11 @@
      "result_keywords": [
       "Осмотр завершён"
      ],
+     "update_keywords": {
+      "working": [
+       "заявитель"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -3845,7 +3945,7 @@
      "region": "Москва",
      "city": "Москва",
      "street": "Маршала Соколовского",
-     "house": "1",
+     "house": "3",
      "apartment": "5",
      "entrance": "1",
      "floor": "2",
@@ -3901,7 +4001,7 @@
       "id": "arrived",
       "after_seconds": 100,
       "source": "Старший, Бригада 07-3",
-      "text": "Бригада 07-3 прибыла. Место: Маршала Соколовского. Приступаем к уточнению обстановки.",
+      "text": "Бригада 07-3 прибыла. Место: Маршала Соколовского. Фактический номер дома 1, в карточке 112 указан дом 3. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -3927,6 +4027,11 @@
      "result_keywords": [
       "Ориентировка на пропавшего передана"
      ],
+     "update_keywords": {
+      "working": [
+       "приметы"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -3935,7 +4040,13 @@
       "entrance",
       "floor",
       "incident_type"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "1"
+     },
+     "correction_evidence": {
+      "house": "Бригада 07-3 прибыла. Место: Маршала Соколовского. Фактический номер дома 1, в карточке 112 указан дом 3. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -4132,6 +4243,11 @@
      "result_keywords": [
       "Источник дыма устранён"
      ],
+     "update_keywords": {
+      "working": [
+       "этаж"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -4324,6 +4440,11 @@
      "result_keywords": [
       "Мужчина передан медицинским работникам"
      ],
+     "update_keywords": {
+      "working": [
+       "мужчина"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type"
@@ -4487,6 +4608,11 @@
      "result_keywords": [
       "Мужчина извлечён из воды"
      ],
+     "update_keywords": {
+      "working": [
+       "мужчина"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "building",
@@ -4682,6 +4808,11 @@
      "result_keywords": [
       "Платформа обследована"
      ],
+     "update_keywords": {
+      "working": [
+       "платформа"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "object",
@@ -4851,6 +4982,11 @@
      "result_keywords": [
       "Пациентка передана акушерской службе"
      ],
+     "update_keywords": {
+      "working": [
+       "беременная"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type"
@@ -5004,6 +5140,11 @@
      "result_keywords": [
       "Пострадавший доставлен на берег"
      ],
+     "update_keywords": {
+      "working": [
+       "мужчина"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "object",
@@ -5190,6 +5331,11 @@
      "result_keywords": [
       "Касса потушена"
      ],
+     "update_keywords": {
+      "working": [
+       "касса"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "object",
@@ -5365,6 +5511,11 @@
      "result_keywords": [
       "Женщина осмотрена"
      ],
+     "update_keywords": {
+      "working": [
+       "женщина"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type"
@@ -5446,7 +5597,7 @@
      "region": "Москва",
      "city": "Москва",
      "street": "Проспект Маршала Жукова",
-     "house": "20",
+     "house": "22",
      "building": "2",
      "apartment": "57",
      "entrance": "3",
@@ -5503,7 +5654,7 @@
       "id": "arrived",
       "after_seconds": 100,
       "source": "Старший, Бригада 10-3",
-      "text": "Бригада 10-3 прибыла. Место: Проспект Маршала Жукова. Приступаем к уточнению обстановки.",
+      "text": "Бригада 10-3 прибыла. Место: Проспект Маршала Жукова. Фактический номер дома 20, в карточке 112 указан дом 22. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -5529,6 +5680,11 @@
      "result_keywords": [
       "Дверь открыта"
      ],
+     "update_keywords": {
+      "working": [
+       "квартира"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -5538,7 +5694,13 @@
       "entrance",
       "floor",
       "incident_type"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "20"
+     },
+     "correction_evidence": {
+      "house": "Бригада 10-3 прибыла. Место: Проспект Маршала Жукова. Фактический номер дома 20, в карточке 112 указан дом 22. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -5758,6 +5920,11 @@
      "result_keywords": [
       "Кабина автобуса потушена"
      ],
+     "update_keywords": {
+      "working": [
+       "автобус"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -5952,6 +6119,11 @@
      "result_keywords": [
       "Ребёнок передан медицинским работникам"
      ],
+     "update_keywords": {
+      "working": [
+       "ребёнок"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -6149,6 +6321,11 @@
      "result_keywords": [
       "Заявительница найдена"
      ],
+     "update_keywords": {
+      "working": [
+       "поиск"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "object",
@@ -6330,6 +6507,11 @@
      "result_keywords": [
       "Зал ресторана обследован"
      ],
+     "update_keywords": {
+      "working": [
+       "ресторан"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -6519,6 +6701,11 @@
      "result_keywords": [
       "Пациентка осмотрена"
      ],
+     "update_keywords": {
+      "working": [
+       "женщина"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type"
@@ -6670,6 +6857,11 @@
      "result_keywords": [
       "Пострадавшие переданы медикам"
      ],
+     "update_keywords": {
+      "working": [
+       "мост"
+      ]
+     },
      "brief_required_fields": [
       "street",
       "incident_type",
@@ -6847,6 +7039,11 @@
      "result_keywords": [
       "Очаг в лесопарке ликвидирован"
      ],
+     "update_keywords": {
+      "working": [
+       "деревья"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "object",
@@ -7018,6 +7215,11 @@
      "result_keywords": [
       "Роженица передана акушерской службе"
      ],
+     "update_keywords": {
+      "working": [
+       "роженица"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type"
@@ -7180,6 +7382,11 @@
      "result_keywords": [
       "Мужчина передан медикам"
      ],
+     "update_keywords": {
+      "working": [
+       "мужчина"
+      ]
+     },
      "brief_required_fields": [
       "street",
       "incident_type",
@@ -7355,6 +7562,11 @@
      "result_keywords": [
       "Трава потушена"
      ],
+     "update_keywords": {
+      "working": [
+       "трава"
+      ]
+     },
      "brief_required_fields": [
       "street",
       "incident_type"
@@ -7527,6 +7739,11 @@
      "result_keywords": [
       "Подросток передан медицинской службе"
      ],
+     "update_keywords": {
+      "working": [
+       "подросток"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -7741,6 +7958,11 @@
      "result_keywords": [
       "Ориентировка о похищении передана"
      ],
+     "update_keywords": {
+      "working": [
+       "иномарка"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -7938,6 +8160,11 @@
      "result_keywords": [
       "Лесной очаг ликвидирован"
      ],
+     "update_keywords": {
+      "working": [
+       "участок"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "object",
@@ -8109,6 +8336,11 @@
      "result_keywords": [
       "Пострадавший осмотрен"
      ],
+     "update_keywords": {
+      "working": [
+       "мужчина"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "house",
@@ -8211,7 +8443,7 @@
      "region": "Москва",
      "city": "Москва",
      "street": "Зверенецкая",
-     "house": "22",
+     "house": "24",
      "apartment": "7",
      "entrance": "1",
      "floor": "2",
@@ -8272,7 +8504,7 @@
       "id": "arrived",
       "after_seconds": 120,
       "source": "Старший, Бригада 15-3",
-      "text": "Бригада 15-3 прибыла. Место: Зверенецкая. Приступаем к уточнению обстановки.",
+      "text": "Бригада 15-3 прибыла. Место: Зверенецкая. Фактический номер дома 22, в карточке 112 указан дом 24. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -8298,6 +8530,11 @@
      "result_keywords": [
       "Пострадавшая передана медикам"
      ],
+     "update_keywords": {
+      "working": [
+       "ранение"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -8307,7 +8544,13 @@
       "floor",
       "incident_type",
       "injured"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "22"
+     },
+     "correction_evidence": {
+      "house": "Бригада 15-3 прибыла. Место: Зверенецкая. Фактический номер дома 22, в карточке 112 указан дом 24. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -8513,6 +8756,11 @@
      "result_keywords": [
       "Источник задымления проверен"
      ],
+     "update_keywords": {
+      "working": [
+       "Быково"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type"
@@ -8672,6 +8920,11 @@
      "result_keywords": [
       "Осмотр ребёнка завершён"
      ],
+     "update_keywords": {
+      "working": [
+       "ребёнок"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -8764,7 +9017,7 @@
      "region": "Москва",
      "city": "Москва",
      "street": "Знаменские Садки",
-     "house": "7",
+     "house": "9",
      "building": "2",
      "apartment": "216",
      "entrance": "4",
@@ -8819,7 +9072,7 @@
       "id": "arrived",
       "after_seconds": 100,
       "source": "Старший, Бригада 16-3",
-      "text": "Бригада 16-3 прибыла. Место: Знаменские Садки. Приступаем к уточнению обстановки.",
+      "text": "Бригада 16-3 прибыла. Место: Знаменские Садки. Фактический номер дома 7, в карточке 112 указан дом 9. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -8845,6 +9098,11 @@
      "result_keywords": [
       "Сведения о снотворном переданы медикам"
      ],
+     "update_keywords": {
+      "working": [
+       "женщина"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -8854,7 +9112,13 @@
       "entrance",
       "floor",
       "incident_type"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "7"
+     },
+     "correction_evidence": {
+      "house": "Бригада 16-3 прибыла. Место: Знаменские Садки. Фактический номер дома 7, в карточке 112 указан дом 9. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -9057,6 +9321,11 @@
      "result_keywords": [
       "Проверка сигнализации завершена"
      ],
+     "update_keywords": {
+      "working": [
+       "сигнализация"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -9259,6 +9528,11 @@
      "result_keywords": [
       "Покупатель передан медицинской службе"
      ],
+     "update_keywords": {
+      "working": [
+       "покупатель"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -9366,7 +9640,7 @@
      "region": "Москва",
      "city": "Москва",
      "street": "Дмитровское шоссе",
-     "house": "155",
+     "house": "157",
      "building": "1",
      "caller_name": "Иванова Елена Сергеевна",
      "description": "Избита женщина, около 30 лет, неизвестная, травма головы, кровотечение, Иванова Елена Сергеевна (прохожий), +7 900 000-00-30",
@@ -9425,7 +9699,7 @@
       "id": "arrived",
       "after_seconds": 110,
       "source": "Старший, Бригада 17-3",
-      "text": "Бригада 17-3 прибыла. Место: Дмитровское шоссе. Приступаем к уточнению обстановки.",
+      "text": "Бригада 17-3 прибыла. Место: Дмитровское шоссе. Фактический номер дома 155, в карточке 112 указан дом 157. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -9451,6 +9725,11 @@
      "result_keywords": [
       "Сведения об избиении переданы дежурному"
      ],
+     "update_keywords": {
+      "working": [
+       "женщина"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -9458,7 +9737,13 @@
       "building",
       "incident_type",
       "injured"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "155"
+     },
+     "correction_evidence": {
+      "house": "Бригада 17-3 прибыла. Место: Дмитровское шоссе. Фактический номер дома 155, в карточке 112 указан дом 157. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -9666,6 +9951,11 @@
      "result_keywords": [
       "Участок у пруда обследован"
      ],
+     "update_keywords": {
+      "working": [
+       "пожар"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type"
@@ -9826,6 +10116,11 @@
      "result_keywords": [
       "Мужчина передан медицинской службе"
      ],
+     "update_keywords": {
+      "working": [
+       "мужчина"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -9951,7 +10246,7 @@
      "region": "Москва",
      "city": "Москва",
      "street": "Огородный проезд",
-     "house": "12",
+     "house": "14",
      "caller_name": "Иванова Елена Сергеевна",
      "description": "С улицы слышны крики о помощи, кричит мужчина, Иванова Елена Сергеевна, +7 900 000-00-30",
      "address_note": "Москва, Огородный проезд, дом 12, во дворе (в источнике номер дома 15/19 зачёркнут и рукописно исправлен на 12)",
@@ -10006,7 +10301,7 @@
       "id": "arrived",
       "after_seconds": 120,
       "source": "Старший, Бригада 18-3",
-      "text": "Бригада 18-3 прибыла. Место: Огородный проезд. Приступаем к уточнению обстановки.",
+      "text": "Бригада 18-3 прибыла. Место: Огородный проезд. Фактический номер дома 12, в карточке 112 указан дом 14. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -10032,12 +10327,23 @@
      "result_keywords": [
       "Источник криков установлен"
      ],
+     "update_keywords": {
+      "working": [
+       "двор"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
       "house",
       "incident_type"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "12"
+     },
+     "correction_evidence": {
+      "house": "Бригада 18-3 прибыла. Место: Огородный проезд. Фактический номер дома 12, в карточке 112 указан дом 14. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -10225,6 +10531,11 @@
      "result_keywords": [
       "Поле потушено"
      ],
+     "update_keywords": {
+      "working": [
+       "поле"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type"
@@ -10383,6 +10694,11 @@
      "result_keywords": [
       "Пострадавший передан медицинской службе"
      ],
+     "update_keywords": {
+      "working": [
+       "змея"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type"
@@ -10545,6 +10861,11 @@
      "result_keywords": [
       "Пострадавший с поездной травмой передан"
      ],
+     "update_keywords": {
+      "working": [
+       "пострадавший"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type",
@@ -10715,6 +11036,11 @@
      "result_keywords": [
       "Участники драки разделены"
      ],
+     "update_keywords": {
+      "working": [
+       "драка"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -10906,6 +11232,11 @@
      "result_keywords": [
       "Результаты осмотра переданы"
      ],
+     "update_keywords": {
+      "working": [
+       "женщина"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type"
@@ -10986,7 +11317,7 @@
      "region": "Москва",
      "city": "Москва",
      "street": "Кастанаевская",
-     "house": "42",
+     "house": "44",
      "building": "2",
      "caller_name": "Иванова Елена Сергеевна",
      "description": "Изнасиловали женщину, около 30 лет, травмы, просит вызвать полицию, Иванова Елена Сергеевна, +7 900 000-00-30",
@@ -11043,7 +11374,7 @@
       "id": "arrived",
       "after_seconds": 110,
       "source": "Старший, Бригада 20-3",
-      "text": "Бригада 20-3 прибыла. Место: Кастанаевская. Приступаем к уточнению обстановки.",
+      "text": "Бригада 20-3 прибыла. Место: Кастанаевская. Фактический номер дома 42, в карточке 112 указан дом 44. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -11069,6 +11400,11 @@
      "result_keywords": [
       "Пострадавшая передана профильным специалистам"
      ],
+     "update_keywords": {
+      "working": [
+       "пострадавшая"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -11076,7 +11412,13 @@
       "building",
       "incident_type",
       "injured"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "42"
+     },
+     "correction_evidence": {
+      "house": "Бригада 20-3 прибыла. Место: Кастанаевская. Фактический номер дома 42, в карточке 112 указан дом 44. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -11280,6 +11622,11 @@
      "result_keywords": [
       "Массовая драка прекращена"
      ],
+     "update_keywords": {
+      "working": [
+       "драка"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -11472,6 +11819,11 @@
      "result_keywords": [
       "Пострадавшая осмотрена"
      ],
+     "update_keywords": {
+      "working": [
+       "рука"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type",
@@ -11620,6 +11972,11 @@
      "result_keywords": [
       "Ребёнок освобождён"
      ],
+     "update_keywords": {
+      "working": [
+       "ребёнок"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type"
@@ -11789,6 +12146,11 @@
      "result_keywords": [
       "Конфликт в квартире прекращён"
      ],
+     "update_keywords": {
+      "working": [
+       "конфликт"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -12005,6 +12367,11 @@
      "result_keywords": [
       "Ребёнок передан медицинской службе"
      ],
+     "update_keywords": {
+      "working": [
+       "ребёнок"
+      ]
+     },
      "brief_required_fields": [
       "street",
       "incident_type"
@@ -12170,6 +12537,11 @@
      "result_keywords": [
       "Доступ к человеку обеспечен"
      ],
+     "update_keywords": {
+      "working": [
+       "квартира"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -12381,6 +12753,11 @@
      "result_keywords": [
       "Семейный конфликт прекращён"
      ],
+     "update_keywords": {
+      "working": [
+       "конфликт"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -12598,6 +12975,11 @@
      "result_keywords": [
       "Осмотр уха завершён"
      ],
+     "update_keywords": {
+      "working": [
+       "ухо"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -12706,7 +13088,7 @@
      "region": "Москва",
      "city": "Москва",
      "street": "Домодедовская",
-     "house": "34",
+     "house": "36",
      "building": "1",
      "caller_name": "Степанова Антонина Марковна",
      "description": "Потерялся ребенок 30 минут назад - 5 лет, Степанов Гриша, одет в синюю куртку, желтую шапку, желтые шарф и варежки, синие брюки и черные ботинки, гулял с бабушкой во дворе, Степанова Антонина Марковна, бабушка, +7 900 000-00-30",
@@ -12759,7 +13141,7 @@
       "id": "arrived",
       "after_seconds": 110,
       "source": "Старший, Бригада 23-3",
-      "text": "Бригада 23-3 прибыла. Место: Домодедовская. Приступаем к уточнению обстановки.",
+      "text": "Бригада 23-3 прибыла. Место: Домодедовская. Фактический номер дома 34, в карточке 112 указан дом 36. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -12785,13 +13167,24 @@
      "result_keywords": [
       "Ребёнок найден"
      ],
+     "update_keywords": {
+      "working": [
+       "приметы"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
       "house",
       "building",
       "incident_type"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "34"
+     },
+     "correction_evidence": {
+      "house": "Бригада 23-3 прибыла. Место: Домодедовская. Фактический номер дома 34, в карточке 112 указан дом 36. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -12983,6 +13376,11 @@
      "result_keywords": [
       "Спор о парковке проверен"
      ],
+     "update_keywords": {
+      "working": [
+       "парковка"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -13178,6 +13576,11 @@
      "result_keywords": [
       "Ребёнок с травмой лица осмотрен"
      ],
+     "update_keywords": {
+      "working": [
+       "ребёнок"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -13370,6 +13773,11 @@
      "result_keywords": [
       "Младенец передан медикам"
      ],
+     "update_keywords": {
+      "working": [
+       "младенец"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -13552,6 +13960,11 @@
      "result_keywords": [
       "Нарушение порядка прекращено"
      ],
+     "update_keywords": {
+      "working": [
+       "мужчина"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -13741,6 +14154,11 @@
      "result_keywords": [
       "Левый ряд освобождён"
      ],
+     "update_keywords": {
+      "working": [
+       "столкновение"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -13834,7 +14252,7 @@
      "region": "Московская область",
      "city": "Домодедлво",
      "street": "Текстильщиков",
-     "house": "31",
+     "house": "33",
      "apartment": "5",
      "floor": "1",
      "caller_name": "Титов Игорь Романович",
@@ -13892,7 +14310,7 @@
       "id": "arrived",
       "after_seconds": 100,
       "source": "Старший, Бригада 25-3",
-      "text": "Бригада 25-3 прибыла. Место: Текстильщиков. Приступаем к уточнению обстановки.",
+      "text": "Бригада 25-3 прибыла. Место: Текстильщиков. Фактический номер дома 31, в карточке 112 указан дом 33. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -13918,6 +14336,11 @@
      "result_keywords": [
       "Квартира передана"
      ],
+     "update_keywords": {
+      "working": [
+       "квартира"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -13925,7 +14348,13 @@
       "apartment",
       "floor",
       "incident_type"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "31"
+     },
+     "correction_evidence": {
+      "house": "Бригада 25-3 прибыла. Место: Текстильщиков. Фактический номер дома 31, в карточке 112 указан дом 33. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -14127,6 +14556,11 @@
      "result_keywords": [
       "Повреждение тумбы прекращено"
      ],
+     "update_keywords": {
+      "working": [
+       "тумба"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -14317,6 +14751,11 @@
      "result_keywords": [
       "Средние ряды освобождены"
      ],
+     "update_keywords": {
+      "working": [
+       "столкновение"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -14490,6 +14929,11 @@
      "result_keywords": [
       "Материалы переданы ответственному дежурному"
      ],
+     "update_keywords": {
+      "working": [
+       "смерть"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -14697,6 +15141,11 @@
      "result_keywords": [
       "Проверка коробки завершена"
      ],
+     "update_keywords": {
+      "working": [
+       "коробка"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -14901,6 +15350,11 @@
      "result_keywords": [
       "Въезд в тоннель освобождён"
      ],
+     "update_keywords": {
+      "working": [
+       "столкновение"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -14991,7 +15445,7 @@
      "region": "Москва",
      "city": "Москва",
      "street": "Ленинский проспект",
-     "house": "57",
+     "house": "59",
      "apartment": "28",
      "entrance": "1",
      "floor": "5",
@@ -15055,7 +15509,7 @@
       "id": "arrived",
       "after_seconds": 120,
       "source": "Старший, Бригада 27-3",
-      "text": "Бригада 27-3 прибыла. Место: Ленинский проспект. Приступаем к уточнению обстановки.",
+      "text": "Бригада 27-3 прибыла. Место: Ленинский проспект. Фактический номер дома 57, в карточке 112 указан дом 59. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -15081,6 +15535,11 @@
      "result_keywords": [
       "Повреждённый участок ограждён"
      ],
+     "update_keywords": {
+      "working": [
+       "ванная"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -15089,7 +15548,13 @@
       "entrance",
       "floor",
       "incident_type"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "57"
+     },
+     "correction_evidence": {
+      "house": "Бригада 27-3 прибыла. Место: Ленинский проспект. Фактический номер дома 57, в карточке 112 указан дом 59. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -15294,6 +15759,11 @@
      "result_keywords": [
       "Обращение проверено"
      ],
+     "update_keywords": {
+      "working": [
+       "мужчина"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -15496,6 +15966,11 @@
      "result_keywords": [
       "Участок напротив МИД освобождён"
      ],
+     "update_keywords": {
+      "working": [
+       "столкновение"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -15586,7 +16061,7 @@
      "region": "Москва",
      "city": "Москва",
      "street": "Комсомольская площадь",
-     "house": "5",
+     "house": "7",
      "caller_name": "Орлова Инна Сергеевна",
      "description": "На Ярославском вокзале нет одного крепления на табло с указанием расписания пригородных поездов, есть угроза падения на торговую палатку. Пострадавших нет. Орлова Инна Сергеевна, +7 900 000-00-76",
      "address_note": "Москва, Комсомольская пл, дом 5, платформа пригородного направления №3 (ярославский вокзал)",
@@ -15639,7 +16114,7 @@
       "id": "arrived",
       "after_seconds": 100,
       "source": "Старший, Бригада 28-3",
-      "text": "Бригада 28-3 прибыла. Место: Комсомольская площадь. Приступаем к уточнению обстановки.",
+      "text": "Бригада 28-3 прибыла. Место: Комсомольская площадь. Фактический номер дома 5, в карточке 112 указан дом 7. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -15665,12 +16140,23 @@
      "result_keywords": [
       "Табло закреплено"
      ],
+     "update_keywords": {
+      "working": [
+       "табло"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
       "house",
       "incident_type"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "5"
+     },
+     "correction_evidence": {
+      "house": "Бригада 28-3 прибыла. Место: Комсомольская площадь. Фактический номер дома 5, в карточке 112 указан дом 7. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -15867,6 +16353,11 @@
      "result_keywords": [
       "Проверка предмета завершена"
      ],
+     "update_keywords": {
+      "working": [
+       "коробка"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "object",
@@ -16041,6 +16532,11 @@
      "result_keywords": [
       "Драка водителей прекращена"
      ],
+     "update_keywords": {
+      "working": [
+       "водители"
+      ]
+     },
      "brief_required_fields": [
       "object",
       "incident_type"
@@ -16107,7 +16603,7 @@
      "region": "Москва",
      "city": "Москва",
      "street": "проезд Шокальского",
-     "house": "67",
+     "house": "69",
      "building": "1",
      "apartment": "3",
      "entrance": "1",
@@ -16176,7 +16672,7 @@
       "id": "arrived",
       "after_seconds": 110,
       "source": "Старший, Бригада 29-3",
-      "text": "Бригада 29-3 прибыла. Место: проезд Шокальского. Приступаем к уточнению обстановки.",
+      "text": "Бригада 29-3 прибыла. Место: проезд Шокальского. Фактический номер дома 67, в карточке 112 указан дом 69. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -16202,6 +16698,11 @@
      "result_keywords": [
       "Проверка угрозы завершена"
      ],
+     "update_keywords": {
+      "working": [
+       "квартира"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -16211,7 +16712,13 @@
       "entrance",
       "floor",
       "incident_type"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "67"
+     },
+     "correction_evidence": {
+      "house": "Бригада 29-3 прибыла. Место: проезд Шокальского. Фактический номер дома 67, в карточке 112 указан дом 69. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -16419,6 +16926,11 @@
      "result_keywords": [
       "Ориентировка на Тойоту передана"
      ],
+     "update_keywords": {
+      "working": [
+       "приметы"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -16626,6 +17138,11 @@
      "result_keywords": [
       "Пешеход передан медикам"
      ],
+     "update_keywords": {
+      "working": [
+       "наезд"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -16729,7 +17246,7 @@
      "region": "Москва",
      "city": "ЛМС",
      "street": "",
-     "house": "20",
+     "house": "22",
      "caller_name": "Соколова Вера Ивановна",
      "description": "В частном доме запах газа от трубы на вводе в дом, слышит шум в трубе. Газ магистральный. 03 не требуется, Соколова Вера Ивановна, +7 900 000-00-10",
      "address_note": "НМ, с/п Вороновское, пос. ЛМС, мкр. Солнечный, дом 20",
@@ -16783,7 +17300,7 @@
       "id": "arrived",
       "after_seconds": 120,
       "source": "Старший, Бригада 30-3",
-      "text": "Бригада 30-3 прибыла. Место: Микрорайон Солнечный. Приступаем к уточнению обстановки.",
+      "text": "Бригада 30-3 прибыла. Место: Микрорайон Солнечный. Фактический номер дома 20, в карточке 112 указан дом 22. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -16809,12 +17326,23 @@
      "result_keywords": [
       "Подача газа отключена"
      ],
+     "update_keywords": {
+      "working": [
+       "газопровод"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "house",
       "object",
       "incident_type"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "20"
+     },
+     "correction_evidence": {
+      "house": "Бригада 30-3 прибыла. Место: Микрорайон Солнечный. Фактический номер дома 20, в карточке 112 указан дом 22. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -16991,6 +17519,11 @@
      "result_keywords": [
       "Ориентировка на Мерседес передана"
      ],
+     "update_keywords": {
+      "working": [
+       "Мерседес"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -17168,6 +17701,11 @@
      "result_keywords": [
       "Ориентировка на скрывшийся автомобиль передана"
      ],
+     "update_keywords": {
+      "working": [
+       "наезд"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -17270,7 +17808,7 @@
      "region": "Москва",
      "city": "Москва",
      "street": "Вавилова",
-     "house": "81",
+     "house": "83",
      "building": "1",
      "apartment": "5",
      "entrance": "1",
@@ -17328,7 +17866,7 @@
       "id": "arrived",
       "after_seconds": 100,
       "source": "Старший, Бригада 31-3",
-      "text": "Бригада 31-3 прибыла. Место: Вавилова. Приступаем к уточнению обстановки.",
+      "text": "Бригада 31-3 прибыла. Место: Вавилова. Фактический номер дома 81, в карточке 112 указан дом 83. Приступаем к уточнению обстановки.",
       "unlocks_status": "Прибытие"
      },
      {
@@ -17354,6 +17892,11 @@
      "result_keywords": [
       "Газовое оборудование проверено"
      ],
+     "update_keywords": {
+      "working": [
+       "труба"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -17363,7 +17906,13 @@
       "entrance",
       "floor",
       "incident_type"
-     ]
+     ],
+     "expected_corrections": {
+      "house": "81"
+     },
+     "correction_evidence": {
+      "house": "Бригада 31-3 прибыла. Место: Вавилова. Фактический номер дома 81, в карточке 112 указан дом 83. Приступаем к уточнению обстановки."
+     }
     }
    },
    "rubric": {
@@ -17574,6 +18123,11 @@
      "result_keywords": [
       "Ориентировка о завладении автомобилем передана"
      ],
+     "update_keywords": {
+      "working": [
+       "Мерседес"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -17763,6 +18317,11 @@
      "result_keywords": [
       "Разлив топлива локализован"
      ],
+     "update_keywords": {
+      "working": [
+       "топливо"
+      ]
+     },
      "brief_required_fields": [
       "city",
       "street",
@@ -17928,6 +18487,11 @@
      "result_keywords": [
       "Режим освещения скорректирован"
      ],
+     "update_keywords": {
+      "working": [
+       "освещение"
+      ]
+     },
      "brief_required_fields": [
       "street",
       "incident_type"
