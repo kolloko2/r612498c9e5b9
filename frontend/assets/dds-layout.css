@@ -204,3 +204,9 @@ body:has(.dds-mode:not([hidden])) .console-meta #clock{font-size:28px}
  body:has(.dds-mode:not([hidden])) nav button{flex:1 1 54px;min-width:0;padding:2px 3px}
  body:has(.dds-mode:not([hidden])) nav .nav-note{display:none}
 }
+
+/* Иконки телефона по центру своего поля; компактная полоса статуса без таблиц. */
+.dds-mode .phone-field::before{align-items:center;padding-top:0}
+.dds-mode .connection .phone-icon{font-size:24px;line-height:1;color:#4a555b}
+.dds-mode.response-compact #responseSection>table,.dds-mode.response-compact #latestReport,
+.dds-mode.response-compact #responseSection>h2~h2{display:none}

@@ -288,7 +288,7 @@ function renderCard() {
   $('responseSection').querySelector('.response-tools').append(progress);
   const tools=element('button','Реагирование');tools.id='cardResponseTools';tools.type='button';
   tools.setAttribute('aria-label','Действия карточки и реагирование');
-  tools.onclick=()=>{const panel=$('cardPanel');if(panel.classList.contains('response-compact')){panel.classList.remove('response-compact');panel.classList.add('response-open');}else panel.classList.toggle('response-open');};
+  tools.onclick=()=>{for(const open of $('services').querySelectorAll('details[open]'))open.open=false;const panel=$('cardPanel');if(panel.classList.contains('response-compact')){panel.classList.remove('response-compact');panel.classList.add('response-open');}else panel.classList.toggle('response-open');};
   $('closeCard').before(tools);
   const practice=element('button','Практика с подсказками');practice.id='cardPractice';practice.type='button';
   practice.onclick=()=>window.startDdsCoach?.();$('closeCard').before(practice);
@@ -471,7 +471,9 @@ function renderServices() {
  for (const service of current.card.services) {
   const tile=element('details',undefined,'service-tile'),summary=element('summary'),state=current.service_states[service]||{};
   tile.dataset.service=service;tile.open=opened.has(service);
-  tile.ontoggle=()=>{if(tile.open)for(const other of $('services').querySelectorAll('details[open]'))if(other!==tile)other.open=false;};
+  tile.ontoggle=()=>{if(!tile.open)return;for(const other of $('services').querySelectorAll('details[open]'))if(other!==tile)other.open=false;
+   // История службы и панель статуса занимают одно место над полосой служб.
+   $('cardPanel').classList.remove('response-open','response-compact');};
   const name=element('strong',service);
   // Основная служба для типа происшествия подчёркнута двойной линией: в
   // реальном АРМ по этому признаку оператор видит, кто отвечает за вызов.
@@ -501,7 +503,7 @@ function renderServices() {
   if(current.exercise_mode==='actions'&&service===current.owner_service){
    const edit=element('button','✎','service-edit');edit.type='button';
    edit.setAttribute('aria-label','Реагирование своей службы');
-   edit.onclick=event=>{event.preventDefault();event.stopPropagation();const panel=$('cardPanel');panel.classList.add('response-compact');panel.classList.toggle('response-open');};
+   edit.onclick=event=>{event.preventDefault();event.stopPropagation();for(const open of $('services').querySelectorAll('details[open]'))open.open=false;const panel=$('cardPanel');panel.classList.add('response-compact');panel.classList.toggle('response-open');};
    summary.append(edit);
   }
   if(!current.owner_service||service===current.owner_service)$('responseService').add(new Option(service,service));

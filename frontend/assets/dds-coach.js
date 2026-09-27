@@ -37,6 +37,7 @@
  go.onclick=()=>{
   const step=nextAction(state);if(!step)return;
   if(['responseStatus','responseComment','crewSelect','openBriefing','requestProgress'].includes(step.target)){
+   document.querySelectorAll('#services details[open]').forEach(d=>d.open=false);
    $('cardPanel').classList.remove('response-compact');$('cardPanel').classList.add('response-open');
   }
   const target=$(step.target);target?.scrollIntoView({block:'nearest'});target?.focus();target?.classList.add('dds-coach-target');
