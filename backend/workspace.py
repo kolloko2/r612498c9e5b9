@@ -3,11 +3,11 @@ import asyncio
 import json
 import os
 import random
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, AsyncExitStack
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Annotated, Literal
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
 
 import httpx
 from transport_tls import httpx_verify
@@ -23,6 +23,7 @@ from dds_review import review as dds_decision_review, unfinished as unfinished_d
 from voice_client import request as voice_request
 from adaptive import attempt_view, recommend
 from briefing import correction_reveal
+from communication import summary as communication_summary
 from ai_review import review as review_card, review_dds as review_dds_actions
 from llm import configuration
 from field_dialogue import report_context
@@ -159,6 +160,7 @@ class CreateLesson(BaseModel):
     # карточкой задаёт преподаватель. Переключение разрешается отдельно: без
     # него обучающийся работает только в выбранном режиме.
     allow_mode_switch: bool = False
+    practice_with_hints: bool = False
     transport: Literal['text', 'sip'] = 'text'
     sip_extensions: dict[str, Annotated[str, StringConstraints(pattern=r'^[0-9]{1,8}$')]] = Field(default_factory=dict, max_length=100)
     # Номер рабочего места закрепляется за обучающимся: преподаватель и отчёт
@@ -173,6 +175,11 @@ class GuidedStep(BaseModel):
     model_config = ConfigDict(extra='forbid')
     # null убирает подсказку с экранов; иначе номер шага вводного курса.
     step: int | None = Field(None, ge=1, le=50)
+
+
+class PracticePolicy(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    practice_with_hints: bool
 
 
 # Номер рабочего места, введённый оператором при входе. В реальной Системе 112
@@ -242,6 +249,11 @@ class CreateSession(BaseModel):
     assignment_id: str | None = None
     transport: Literal["text", "sip"] = "text"
     workstation: Workstation = ''
+
+
+class LessonPhones(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    sip_extensions: dict[str, Annotated[str, StringConstraints(pattern=r'^[0-9]{1,8}$')]] = Field(min_length=1, max_length=100)
 
 
 class SaveCard(BaseModel):
@@ -443,8 +455,14 @@ def unlocked_statuses(value: dict) -> set[str] | None:
 def update_elapsed(value: dict, item: dict) -> float:
     """New crew reports start at dispatch; legacy attempts retain their clock."""
     anchor = value['created_at']
-    if value.get('updates_anchor') == 'crew_assigned' and item.get('unlocks_status'):
-        anchor = (value.get('assigned_crew') or {}).get('at')
+    if value.get('updates_anchor') in ('crew_assigned', 'crew_briefed') and item.get('unlocks_status'):
+        crew = value.get('assigned_crew') or {}
+        anchor = next((event['at'] for event in value.get('events', [])
+                       if event['type'] == 'notification.recorded'
+                       and event.get('detail', {}).get('source') == 'briefing'
+                       and event['detail'].get('counterpart') == 'crew'
+                       and event['detail'].get('crew_id') == crew.get('id')
+                       and event['at'] >= crew.get('at', '')), None) if crew else None
         if not anchor:
             return -1
     return (datetime.now(timezone.utc) - datetime.fromisoformat(anchor)).total_seconds()
@@ -626,6 +644,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
 
     def student_view(value):
         result = dict(value)
+        result['practice_with_hints'] = bool(value.get('practice_with_hints', False))
         if not actor.get() or actor.get()['role'] != 'teacher':
             for key in ('dds_expectation', 'planned_unlocks'):
                 result.pop(key, None)
@@ -779,7 +798,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
     async def create(body: CreateSession):
         return await create_card(body)
 
-    async def create_card(body, lesson_assignment=None, template=None, scenario_snapshot=None, rubric_snapshot=None):
+    async def create_card(body, lesson_assignment=None, template=None, scenario_snapshot=None, rubric_snapshot=None, restart_source=None):
         assignment = None
         if lesson_assignment:
             assignment = lesson_assignment
@@ -790,13 +809,24 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         scenario = template['scenario'] if template else scenario_snapshot or store.scenario(body.scenario_id)
         if not scenario or not scenario["enabled"]:
             raise HTTPException(404, "Сценарий недоступен")
-        sid = str(uuid4())
+        sid = str(uuid5(NAMESPACE_URL, 'trainer112:restart:' + restart_source['id'])) if restart_source else str(uuid4())
+        if restart_source and store.db.execute('SELECT 1 FROM workspace WHERE id=?', (sid,)).fetchone():
+            return public(load(sid))
         count = store.db.execute("SELECT count(*) FROM workspace").fetchone()[0]
         value = {"id": sid, "number": 910001 + count, "scenario_id": body.scenario_id,
                  "title": scenario["title"], "transport": body.transport, "created_at": now(),
                  "status": "Новая", "revision": 0, "card": Card().model_dump(), "events": [],
                  "service_states": {}, "call_id": None}
         value.update(metadata(scenario))
+        value['practice_with_hints'] = bool((assignment or {}).get('practice_with_hints', False))
+        if restart_source:
+            value.update(restarted_from=restart_source['id'], attempt_number=restart_source.get('attempt_number', 1)+1)
+            for key in ('lesson_position', 'lesson_title', 'previous_session_id', 'sip_extension'):
+                if key in restart_source:
+                    value[key] = restart_source[key]
+        value['text_input_allowed'] = scenario.get('text_input_allowed', True)
+        if not value['text_input_allowed'] and not template and body.transport != 'sip':
+            raise HTTPException(409, 'В этом сценарии разрешён только голосовой ввод через IP-телефон')
         assigned_place = (lesson_assignment or {}).get('workstations', {}).get(
             actor.get()['id']) if actor.get() else None
         value['registration'] = {
@@ -845,7 +875,9 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             value['time_limit_seconds'] = 30
             value['crew_options'] = scenario.get('crew_options') or []
             if value['crew_options']:
-                value['updates_anchor'] = 'crew_assigned'
+                value['updates_anchor'] = 'crew_briefed'
+            if not value['text_input_allowed'] and not value.get('sip_extension'):
+                raise HTTPException(409, 'Сценарий требует телефон. Преподаватель должен назначить SIP-номер участнику занятия.')
         # Своя ДДС и план разблокировок фиксируются вместе с карточкой: снимок
         # сценария заморожен, и правка сценария не меняет уже выданную карточку.
         owner = (scenario.get('owner_service') or '').strip()
@@ -953,6 +985,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         editable(value)
         if value["transport"] != "text":
             raise HTTPException(409, "В режиме SIP говорите через учебный телефон")
+        if not value.get('text_input_allowed', True):
+            raise HTTPException(409, 'Преподаватель отключил текстовый ввод для этого сценария')
         if value.get('exercise_mode') == 'actions':
             raise HTTPException(409, 'В этом упражнении работайте с карточкой и реагированием служб, без звонка')
         if not body.text.strip():
@@ -1255,6 +1289,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         crew = value.get('assigned_crew')
         if not crew:
             raise HTTPException(409, 'Сначала назначьте реагирующую бригаду')
+        if value.get('updates_anchor') in ('crew_assigned', 'crew_briefed') and update_elapsed(value, {'unlocks_status': 'progress'}) < 0:
+            raise HTTPException(409, 'Сначала передайте бригаде адрес и задачу и завершите доклад')
         planned = (store.load(str(sid)).get('scenario') or {}).get('updates') or []
         delivered = {event['detail'].get('id') for event in value['events'] if event['type'] == 'situation.update'}
         # Only crew progress, never applicant messages or future facts.
@@ -1467,20 +1503,13 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         user = actor.get()
         return await complete_session(sid, {'role': 'student', 'user_id': user['id'] if user else None})
 
-    async def complete_session(sid, completed_by):
-        value = load(sid)
-        if value["status"] == "Завершена":
-            return public(value)
-        if completed_by['role'] == 'student' and value.get('exercise_mode') == 'actions':
-            missing = unfinished_dds(value, value.get('dds_expectation'))
-            if missing:
-                raise HTTPException(409, 'Завершите работу по карточке: ' + ', '.join(missing))
-        if value["call_id"]:
-            await voice("calls/" + value["call_id"] + "/hangup", "POST", {})
+    async def stop_session_calls(value):
         extra_calls = {item['call_id'] for item in value.get('field_report_calls', {}).values()
                        if item.get('call_id')}
+        if value.get('call_id'):
+            extra_calls.add(value['call_id'])
         if getattr(store, 'briefings_available', False):
-            for (encoded,) in store.db.execute('SELECT body FROM briefings WHERE session_id=?', (str(sid),)).fetchall():
+            for (encoded,) in store.db.execute('SELECT body FROM briefings WHERE session_id=?', (str(value['id']),)).fetchall():
                 briefing = json.loads(encoded)
                 if briefing.get('state') == 'open' and briefing.get('call_id'):
                     extra_calls.add(briefing['call_id'])
@@ -1492,6 +1521,16 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             except HTTPException as error:
                 if error.status_code != 404:
                     raise
+
+    async def complete_session(sid, completed_by):
+        value = load(sid)
+        if value["status"] == "Завершена":
+            return public(value)
+        if completed_by['role'] == 'student' and value.get('exercise_mode') == 'actions':
+            missing = unfinished_dds(value, value.get('dds_expectation'))
+            if missing:
+                raise HTTPException(409, 'Завершите работу по карточке: ' + ', '.join(missing))
+        await stop_session_calls(value)
         await engine.handle(str(sid), event(sid, "call.ended"))
         value = load(sid)
         value["status"] = "Завершена"
@@ -1554,6 +1593,60 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         if 'evaluation' not in value:
             raise HTTPException(404, 'Для этого ранее завершённого занятия отчёт не формировался')
         return value['evaluation']
+
+    @api.post('/sessions/{sid}/restart', status_code=201)
+    @instructor.post('/sessions/{sid}/restart', status_code=201)
+    async def restart_attempt(sid: UUID):
+        source = load(sid)
+        user = actor.get()
+        if not user:
+            raise HTTPException(403)
+        async with AsyncExitStack() as stack:
+            if source.get('lesson_id'):
+                await stack.enter_async_context(coordinated('lesson', source['lesson_id']))
+            await stack.enter_async_context(coordinated('workspace-session', sid))
+            source = load(sid)
+            if source.get('restarted_to'):
+                return public(load(source['restarted_to']))
+            lesson = lesson_load(source['lesson_id']) if source.get('lesson_id') else None
+            if lesson and lesson['state'] != 'running':
+                raise HTTPException(409, 'Занятие остановлено. Преподаватель может начать его заново в кабинете.')
+            if lesson and source['status'] == 'Завершена':
+                others = [c for c in lesson_cards(lesson['id'], source['student_id']) if c['status'] != 'Завершена']
+                if len(others) >= lesson.get('parallel_cards', 1):
+                    raise HTTPException(409, 'Сначала завершите или начните заново текущую открытую карточку')
+            student = accounts.get_user(source['student_id'])
+            if not student or not student.get('active'):
+                raise HTTPException(409, 'Учётная запись ученика неактивна')
+            if not lesson:
+                learning.assignment_for_student(source['assignment_id'], source['scenario_id'], student)
+            snapshot = store.load(str(sid))
+            if not snapshot.get('scenario'):
+                raise HTTPException(409, 'Нет исходного сценария для повтора')
+            if source['status'] != 'Завершена':
+                await stop_session_calls(source)
+                await engine.handle(str(sid), event(sid, 'call.ended'))
+                source = load(sid)
+                source.update(status='Завершена', finished_at=now(), attempt_outcome='restarted',
+                              completed_by={'role': user['role'], 'user_id': user['id'], 'reason': 'Начата новая попытка'})
+                persist(source, 'session.restart_requested', {'user_id': user['id']})
+            template = None
+            if source.get('exercise_mode') == 'actions':
+                template = {'card': source['initial_card'], 'scenario': snapshot['scenario'],
+                            'source_kind': source.get('source_kind', 'scenario'),
+                            'assessment_policy': snapshot.get('assessment_policy')}
+            token = actor.set(student)
+            try:
+                created = await create_card(CreateSession(scenario_id=source['scenario_id'], assignment_id=source.get('assignment_id'),
+                    transport=source['transport'], workstation=(source.get('registration') or {}).get('workstation', '')),
+                    lesson, template, snapshot['scenario'],
+                    {**(snapshot.get('evaluation_rubric') or {'revision': 0, 'rubric': None}),
+                     'assessment_policy': snapshot.get('assessment_policy')}, restart_source=source)
+            finally:
+                actor.reset(token)
+            source['restarted_to'] = created['id']
+            persist(source, 'session.restarted', {'new_session_id': created['id'], 'user_id': user['id']})
+            return created
 
     def lesson_load(lid):
         row = store.db.execute('SELECT body FROM lessons WHERE id=?', (str(lid),)).fetchone()
@@ -1682,6 +1775,40 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         lesson_save(value, 'lesson.created')
         return value
 
+    @instructor.put('/lessons/{lid}/phones')
+    async def configure_lesson_phones(lid: UUID, body: LessonPhones):
+        async with coordinated('lesson', lid):
+            lesson = lesson_load(lid)
+            if lesson['state'] not in ('planned', 'running'):
+                raise HTTPException(409, 'Настройка телефонов доступна до завершения занятия')
+            group = learning._group(lesson['group_id'], actor.get()['id'])
+            members = lesson.get('members') or group['member_ids']
+            if set(body.sip_extensions) != set(members) or len(set(body.sip_extensions.values())) != len(members):
+                raise HTTPException(422, 'Назначьте каждому участнику отдельный SIP-номер')
+            active = [c for c in lesson_cards(lid) if c['status'] != 'Завершена']
+            async with AsyncExitStack() as locks:
+                for item in sorted(active, key=lambda c: c['id']):
+                    await locks.enter_async_context(coordinated('workspace-session', item['id']))
+                active = [load(c['id']) for c in active]
+                for item in active:
+                    if item.get('call_id') or item.get('field_report_calls') or item.get('progress_call'):
+                        raise HTTPException(409, 'Телефон уже использовался в активной карточке. Завершите её перед перенастройкой.')
+                    if item.get('exercise_mode') != 'actions' and store.load(item['id']).get('messages'):
+                        raise HTTPException(409, 'Уже начатый диалог 112 нельзя переключить на другой канал')
+                    if getattr(store, 'briefings_available', False):
+                        briefs = store.db.execute('SELECT body FROM briefings WHERE session_id=?', (item['id'],)).fetchall()
+                        if any(json.loads(row[0]).get('transport') == 'sip' and json.loads(row[0]).get('state') == 'open' for row in briefs):
+                            raise HTTPException(409, 'Сначала завершите открытый телефонный доклад')
+                with store.db:
+                    lesson.update(transport='sip', sip_extensions=body.sip_extensions)
+                    lesson_save(lesson, 'lesson.phones_configured')
+                    for item in active:
+                        item['sip_extension'] = body.sip_extensions[item['student_id']]
+                        if item.get('exercise_mode') != 'actions':
+                            item['transport'] = 'sip'
+                        persist(item, 'phone.configured', {'sip_extension': item['sip_extension']})
+            return {'id': str(lid), 'transport': 'sip', 'sip_extensions': body.sip_extensions}
+
     @instructor.get('/lessons')
     async def teacher_lessons():
         user = actor.get()
@@ -1704,6 +1831,11 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                 raise HTTPException(409, 'В группе нет активных студентов')
             if value.get('transport') == 'sip' and any(uid not in value.get('sip_extensions', {}) for uid in members):
                 raise HTTPException(409, 'Не всем студентам назначены SIP-номера. Подготовьте занятие заново.')
+            scenarios = [store.scenario(sid) or {} for sid in value['scenario_ids']]
+            scenarios += [t['scenario'] for t in value.get('templates', [])]
+            if any(not s.get('text_input_allowed', True) for s in scenarios):
+                if any(uid not in value.get('sip_extensions', {}) for uid in members) or (value.get('scenario_ids') and value.get('transport') != 'sip'):
+                    raise HTTPException(409, 'Сценарий запрещает текстовый ввод: настройте телефоны всех участников занятия')
             snapshots = []
             for scenario_id in value['scenario_ids']:
                 scenario = store.scenario(scenario_id)
@@ -1730,7 +1862,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             planned_member = v['state'] == 'planned' and store.db.execute('SELECT 1 FROM group_members WHERE group_id=? AND student_id=?', (v['group_id'], user['id'])).fetchone()
             if planned_member or user['id'] in v.get('members', []):
                 cards = lesson_cards(v['id'], user['id'])
-                completed = sum(c['status'] == 'Завершена' for c in cards)
+                completed = sum(c['status'] == 'Завершена' and not c.get('restarted_to') for c in cards)
                 open_ids = [c['id'] for c in cards if c['status'] != 'Завершена']
                 active = open_ids[0] if open_ids else None
                 result.append({'id': v['id'], 'title': v['title'], 'state': v['state'], 'cards_per_student': v['cards_per_student'],
@@ -1741,7 +1873,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                                'completed': completed, 'active_session_id': active,
                                'active_session_ids': open_ids,
                                'parallel_cards': v.get('parallel_cards', 1),
-                               'guided_step': v.get('guided_step'),
+                               'guided_step': v.get('guided_step') if v.get('practice_with_hints') else None,
+                               'practice_with_hints': v.get('practice_with_hints', False),
                                'allow_mode_switch': v.get('allow_mode_switch', False),
                                'exhausted': v['cards_per_student'] is not None and completed >= v['cards_per_student']})
         return result
@@ -1753,6 +1886,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             if value['state'] != 'running':
                 raise HTTPException(409, 'Преподаватель ещё не запустил или уже завершил занятие')
             cards = lesson_cards(lid, actor.get()['id'])
+            cards = [c for c in cards if not c.get('restarted_to')]
             predecessor = str(body.after_session_id) if body and body.after_session_id else None
             if predecessor:
                 previous = next((c for c in cards if c['id'] == predecessor), None)
@@ -1822,9 +1956,27 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             user = actor.get()
             if not user or user['role'] != 'teacher':
                 raise HTTPException(403, 'Требуется преподаватель')
+            if body.step is not None and not value.get('practice_with_hints'):
+                raise HTTPException(409, 'Подсказки не разрешены для этого занятия')
             value['guided_step'] = body.step
             lesson_save(value, 'lesson.guided_step', {'step': body.step})
             return {'id': value['id'], 'guided_step': body.step}
+
+    @instructor.put('/lessons/{lid}/practice')
+    async def set_practice_policy(lid: UUID, body: PracticePolicy):
+        async with coordinated('lesson', lid):
+            value = lesson_load(lid)
+            value['practice_with_hints'] = body.practice_with_hints
+            if not body.practice_with_hints:
+                value['guided_step'] = None
+            lesson_save(value, 'lesson.practice_changed', body.model_dump())
+            for card in lesson_cards(lid):
+                if card['status'] != 'Завершена':
+                    async with coordinated('workspace-session', card['id']):
+                        fresh = load(card['id'])
+                        fresh['practice_with_hints'] = body.practice_with_hints
+                        persist(fresh, 'practice.changed', body.model_dump())
+            return {'id': value['id'], **body.model_dump()}
 
     @instructor.post('/lessons/{lid}/finish')
     async def finish_lesson(lid: UUID, body: TeacherFinish):
@@ -1880,6 +2032,9 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                 'critical_grammar_errors': sum((c.get('grammar') or {}).get('critical_errors', 0) for c in own),
                 'cards': [{'id': c['id'], 'number': c['number'], 'title': c['title'], 'status': c['status'],
                            'exercise_mode': c.get('exercise_mode', 'fill'), 'elapsed_seconds': c.get('elapsed_seconds'),
+                           'communication': communication_summary(store, c),
+                           'attempt_number': c.get('attempt_number', 1), 'restarted_from': c.get('restarted_from'),
+                           'restarted_to': c.get('restarted_to'), 'attempt_outcome': c.get('attempt_outcome'),
                            'response_seconds': c.get('response_seconds'),
                            'workstation': (c.get('registration') or {}).get('workstation'),
                            'timing': (c.get('evaluation') or {}).get('timing'),

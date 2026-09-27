@@ -4,7 +4,7 @@
 <h1>Библиотека сценариев</h1><p class="notice">Общие шаблоны доступны для просмотра и копирования. Изменения не затрагивают уже начатые занятия. Эталоны оценки настраиваются отдельно и при копировании не переносятся.</p>
 <label>Сценарий<select id="selected"></select></label><footer><button id="new" type="button">Новый сценарий</button><button id="copy" type="button">Создать копию</button><button id="reload" type="button">Перечитать</button><a href="/generation">Создать с ИИ</a><a href="/instructor">Эталоны оценки</a></footer>
 <p id="status" role="status" aria-live="polite"></p><p id="mode"></p>
-<form id="scenarioForm"><fieldset id="editor" disabled><div class="settings"><label>Название<input data-key="title" required minlength="3" maxlength="120"></label><label>Код<input data-key="id" required pattern="[a-z0-9][a-z0-9_-]{2,63}" maxlength="64"></label></div>
+<form id="scenarioForm"><fieldset id="editor" disabled><div class="settings"><label>Название<input data-key="title" required minlength="3" maxlength="120"></label><label>Код<input data-key="id" required pattern="[a-z0-9][a-z0-9_\-]{2,63}" maxlength="64"></label></div>
 <label>Описание задания<textarea data-key="description" maxlength="1000"></textarea></label>
 <label>Учебная категория<select data-key="category_id"><option value="other">Прочие / без категории</option><option value="fire">Пожары</option><option value="traffic">ДТП и транспорт</option><option value="medical">Медицина</option><option value="utilities">ЖКХ и инженерные сети</option><option value="public">Общественная безопасность</option></select></label>
 <div class="settings"><label>Уровень сложности<select data-key="difficulty"><option value="basic">Базовый</option><option value="standard">Стандартный</option><option value="advanced">Повышенный</option></select></label><label>Профиль ДДС<select data-key="dds_profile"><option value="general">Общий</option><option value="fire">Пожарная охрана</option><option value="police">Полиция</option><option value="medical">Скорая медицинская помощь</option><option value="gas">Аварийная газовая служба</option><option value="utilities">ЖКХ и инженерные сети</option></select></label></div>
@@ -22,6 +22,7 @@
 <label>Поведение заявителя<textarea data-key="behavior" maxlength="1000"></textarea></label>
 <label>Первая реплика<textarea data-key="opening" required minlength="3" maxlength="1000"></textarea></label>
 <label><span><input data-key="enabled" type="checkbox"> Доступен для новых занятий</span></label>
+<label><span><input data-key="text_input_allowed" type="checkbox" checked> Разрешить текстовый ввод диалога и докладов</span><small>Если выключено, нужен IP-телефон и SIP-номер ученика. Заполнение карточки и комментариев остаётся доступным.</small></label>
 <footer><button id="save" type="submit">Сохранить</button><button id="validate" type="button">Проверить структуру</button></footer>
 </fieldset></form><p class="hint">Отключение сценария запрещает новые попытки по его назначениям, но не удаляет историю.</p>
 </main></body></html>

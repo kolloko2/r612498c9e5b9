@@ -102,7 +102,9 @@ def _number_value(word):
 
 def spoken_numbers_to_digits(text):
     """«дом двенадцать» -> «дом 12», «сто двадцать три» -> «123». Порядок разрядов строгий."""
-    words = re.split(r'(\s+)', text or '')
+    # Слова отделяются и от пробелов, и от знаков препинания: «двенадцать,» и
+    # «тринадцать.» тоже числа.
+    words = re.findall(r'[А-Яа-яЁё]+|\s+|[^А-Яа-яЁё\s]+', text or '')
     out, total, rank = [], None, 9
     def flush():
         nonlocal total, rank
@@ -120,7 +122,9 @@ def spoken_numbers_to_digits(text):
             rank = found[1]
             continue
         if total is not None:
-            flush(); out.append(' ')
+            flush()
+            if part[0].isalpha():
+                out.append(' ')
         if found:
             total, rank = found
             continue

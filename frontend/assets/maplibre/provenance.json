@@ -1,0 +1,40 @@
+{
+  "maplibre": "5.18.0",
+  "pmtiles": "4.5.0",
+  "style": "5.7.2",
+  "assets_revision": "028c18f713baecad011301ff7a69acc39bcc2ae7",
+  "files": [
+    {
+      "file": "maplibre-gl.js",
+      "source": "https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl-csp.js",
+      "sha256": "b902e04cc5644299c2fa13cb7322cb249d1c14a374ab6da2ed870dced96f9089"
+    },
+    {
+      "file": "maplibre-gl-csp-worker.js",
+      "source": "https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl-csp-worker.js",
+      "sha256": "6f7b9ca2775cf312c8d89cfa7f00b1f1e9b2576eae7621f30eee514d07582d97"
+    },
+    {
+      "file": "maplibre-gl.css",
+      "source": "https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css",
+      "sha256": "e4711ce4f6225070a859c7a40dc4d2e4e1ab76a5c71a12b4a65227ed2bf362fd"
+    },
+    {
+      "file": "maplibre-LICENSE.txt",
+      "source": "https://unpkg.com/maplibre-gl@5.18.0/LICENSE.txt",
+      "sha256": "ee5fc05a0677eaf69601d2c7db0d9ecd6cc27c3abc1d0733bc9ed34707cf8ef2"
+    },
+    {
+      "file": "pmtiles.js",
+      "source": "https://unpkg.com/pmtiles@4.5.0/dist/pmtiles.js",
+      "sha256": "caf981bc46f6327ee7e65d5dc964d89d38a69f60edca2bd4c5c890c21b554c6c"
+    },
+    {
+      "file": "pmtiles-LICENSE",
+      "source": "https://raw.githubusercontent.com/protomaps/PMTiles/main/LICENSE",
+      "sha256": "0371c38f338835f7fc13ed71176f3d92144e22c8b736a31cced57adbbeb647b3"
+    }
+  ],
+  "style_source": "https://npm-style.protomaps.dev/style.json?version=5.7.2&theme=light&tiles=20260927&lang=ru",
+  "attribution": "Protomaps; OpenStreetMap contributors, ODbL 1.0"
+}

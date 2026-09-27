@@ -117,6 +117,14 @@ def ambiguous(spoken: str, start: int, end: int) -> bool:
                 or HEDGE_AFTER.search(spoken[end:end + 30]))
 
 
+def join_speech(parts) -> str:
+    """Реплики доклада одним текстом: точка между фразами, но без «..» после
+    уже законченной фразы. Одна функция для проверки, записи и оценки: по этому
+    тексту строится отпечаток смыслового решения."""
+    phrases = [str(part).strip() for part in parts if str(part).strip()]
+    return ' '.join(p if re.search(r'[.!?…]$', p) else p + '.' for p in phrases)
+
+
 HOUSE_NUMBER = re.compile(r'\bдом(?:а|е)?\s*(?:номер\s*)?([0-9]+[а-яa-z]?(?:[/\-][0-9]+)?)')
 
 
@@ -269,7 +277,7 @@ async def duty_reply(history: list[dict], card: dict, service: str, missing: lis
                      transcript: str | None = None, report: dict | None = None,
                      timeout_seconds: float | None = None) -> str:
     """Реплика дежурного. Отказ провайдера не ломает занятие."""
-    transcript = transcript if transcript is not None else '. '.join(
+    transcript = transcript if transcript is not None else join_speech(
         m['content'] for m in history if m.get('role') == 'user')
     fallback = clarification(missing, transcript)
     evidence = (report or {}).get('semantic_evidence') or {}
@@ -335,7 +343,7 @@ async def duty_reply(history: list[dict], card: dict, service: str, missing: lis
 
 def spoken_report(briefing: dict) -> str:
     """Текст телефонограммы — то, что диспетчер действительно произнёс."""
-    spoken = '. '.join(m['content'] for m in briefing['messages'] if m['role'] == 'user').strip()
+    spoken = join_speech(m['content'] for m in briefing['messages'] if m['role'] == 'user')
     return spoken or f"Доклад в службу {briefing['service']}"
 
 
@@ -388,7 +396,7 @@ def router(store, accounts, authorize, learning=None, voice=None):
         messages = ([{'role': m['role'], 'content': m['content'], 'at': briefing['started_at']}
                      for m in state.get('messages', [])] if briefing.get('transport') == 'sip'
                     else briefing['messages'])
-        spoken = '. '.join(m['content'] for m in messages if m['role'] == 'user')
+        spoken = join_speech(m['content'] for m in messages if m['role'] == 'user')
         previous = state.get('duty_report') or briefing.get('report') or {}
         return {**briefing, 'messages': messages,
                 'report': check(spoken, card, previous.get('semantic_evidence'))}
@@ -403,6 +411,8 @@ def router(store, accounts, authorize, learning=None, voice=None):
     async def start(sid: UUID, body: StartBriefing, user=Depends(student)):
         value = card_of(sid, user)
         editable(value)
+        if not value.get('text_input_allowed', True) and body.transport != 'sip':
+            raise HTTPException(409, 'Преподаватель отключил текстовый ввод. Используйте IP-телефон.')
         existing = next((item for item in listing(sid, user) if item['message_id'] == str(body.message_id)), None)
         if existing:
             if existing['service'] != body.service or existing.get('crew_id', '') != body.crew_id or existing['phone'] != body.phone:
@@ -525,6 +535,8 @@ def router(store, accounts, authorize, learning=None, voice=None):
             raise HTTPException(409, 'Доклад уже завершён')
         if briefing.get('transport') == 'sip':
             raise HTTPException(409, 'Доклад идёт голосом: говорите по учебному телефону')
+        if not value.get('text_input_allowed', True) or (value.get('exercise_mode') == 'actions' and value.get('sip_extension')):
+            raise HTTPException(409, 'Для этого рабочего места используйте IP-телефон')
         for message in briefing['messages']:
             if message.get('message_id') == str(body.message_id):
                 return briefing
@@ -532,7 +544,7 @@ def router(store, accounts, authorize, learning=None, voice=None):
             raise HTTPException(409, f'Достигнут лимит {MAX_TURNS} реплик в докладе')
         briefing['messages'].append({'role': 'user', 'content': body.text, 'at': now(),
                                      'message_id': str(body.message_id)})
-        spoken = '. '.join(m['content'] for m in briefing['messages'] if m['role'] == 'user')
+        spoken = join_speech(m['content'] for m in briefing['messages'] if m['role'] == 'user')
         started = asyncio.get_running_loop().time()
         briefing['report'] = await check_live(spoken, reference_card(value), briefing.get('report'))
         reply = await duty_reply([{'role': m['role'], 'content': m['content']} for m in briefing['messages']],
@@ -572,6 +584,7 @@ def router(store, accounts, authorize, learning=None, voice=None):
         record = {'message_id': briefing['message_id'], 'service': briefing['service'],
                   'destination': briefing['destination'] or briefing['service'],
                   'phone': briefing['phone'], 'recipient': body.recipient,
+                  'transport': briefing['transport'],
                   'comment': spoken_report(briefing),
                   'briefing_report': briefing['report'],
                   # Бригада или вышестоящий начальник: разные адресаты доклада.

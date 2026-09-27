@@ -19,7 +19,7 @@
       <p><a href="/operations">Технический кабинет — сервисы, мониторинг и резервные копии</a></p>
       <div class="heading"><div><h1>Пользователи</h1><p>Создавайте учётные записи и закрывайте доступ без удаления истории.</p></div></div>
       <form id="userForm" class="form-grid">
-        <label>Логин<input id="newUsername" required minlength="3" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,39}"></label>
+        <label>Логин<input id="newUsername" required minlength="3" maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9._\-]{2,39}"></label>
         <label>Отображаемое имя<input id="newDisplayName" required maxlength="100"></label>
         <label>Роль<select id="newRole"><option value="teacher">Преподаватель</option><option value="student">Студент</option><option value="admin">Администратор</option></select></label>
         <label>Пароль<input id="newPassword" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>

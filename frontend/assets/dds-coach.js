@@ -23,11 +23,11 @@
   const crewBrief=briefs.some(e=>e.detail?.counterpart==='crew'||e.detail?.crew_id);
   const superiorBrief=briefs.some(e=>e.detail?.counterpart==='superior'||(!e.detail?.counterpart&&!e.detail?.crew_id));
   if(s.assigned_crew&&!crewBrief&&!s.card_locked)return {title:'Шаг 3. Передайте задачу бригаде',
-   text:`Нажмите «Доложить по телефону», адресат — «${f.crew} · ${f.leader}», нажмите «Позвонить». Когда бригада ответит, скажите (или напишите) текст ниже. После подтверждения в поле «Информацию принял» укажите «${f.leader}» и нажмите «Завершить доклад».`,
-   sample:`${f.crew}, выезжайте: ${f.address}. ${f.incident}. ${f.injured}.`,fill:'briefingText',target:'openBriefing'};
+   text:`Нажмите «Доложить по телефону», адресат — «${f.crew} · ${f.leader}», нажмите «Позвонить». Когда бригада ответит, ${s.sip_extension?'произнесите в телефоне пример ниже':'передайте текст ниже через текстовый доклад'}. После подтверждения в поле «Информацию принял» укажите «${f.leader}» и нажмите «Завершить доклад».`,
+   sample:`${f.crew}, выезжайте: ${f.address}. ${f.incident}. ${f.injured}.`,fill:s.sip_extension||s.text_input_allowed===false?null:'briefingText',target:'openBriefing'};
   if(!superiorBrief&&!s.card_locked)return {title:`Шаг ${s.assigned_crew?'4':'3'}. Доложите начальнику дежурной смены`,
-   text:`Вышестоящему начальнику докладывают, где и что произошло и кто направлен: так руководство знает обстановку. Нажмите «Доложить по телефону», адресат — «${s.owner_service} · начальник дежурной смены», нажмите «Позвонить» и доложите текстом ниже. В поле «Информацию принял» укажите «Начальник дежурной смены» и нажмите «Завершить доклад». Без этого доклада карточку не завершить.`,
-   sample:`Докладываю: ${f.address}, ${f.incident}. ${f.injured}. Направлена ${f.crew}, старший — ${f.leader}.`,fill:'briefingText',target:'openBriefing'};
+   text:`Вышестоящему начальнику докладывают, где и что произошло и кто направлен: так руководство знает обстановку. Нажмите «Доложить по телефону», адресат — «${s.owner_service} · начальник дежурной смены», нажмите «Позвонить» и ${s.sip_extension?'доложите голосом по примеру ниже':'передайте текст ниже'}. В поле «Информацию принял» укажите «Начальник дежурной смены» и нажмите «Завершить доклад». Без этого доклада карточку не завершить.`,
+   sample:`Докладываю: ${f.address}, ${f.incident}. ${f.injured}. Направлена ${f.crew}, старший — ${f.leader}.`,fill:s.sip_extension||s.text_input_allowed===false?null:'briefingText',target:'openBriefing'};
   if((s.correction_evidence||[]).length&&!(s.error_reports||[]).length&&!s.card_locked)return {title:'Бригада сообщила сведения, отличные от карточки',
    text:`Сверьте с карточкой: «${s.correction_evidence[0]}». Поля карточки 112 не правятся: нажмите «Сообщить в 112 об ошибке», выберите поле с ошибкой, впишите правильное значение ровно как сказала бригада, источник — «${f.leader}», и кто принял сообщение в 112.`,target:'openErrorReport'};
   const update=events.find(e=>e.type==='situation.update'&&e.detail?.unlocks_status&&!events.some(a=>a.type==='service.updated'&&a.detail?.service===s.owner_service&&a.detail?.status===e.detail.unlocks_status&&a.seq>e.seq));
@@ -89,10 +89,10 @@
   panel.style.right='auto';panel.style.left=x+'px';panel.style.top=y+'px';
  }
  function render(){
-  const step=nextAction(state);panel.hidden=!enabled||!step||$('cardPanel')?.hidden;
+  const step=nextAction(state);panel.hidden=!state?.practice_with_hints||!enabled||!step||$('cardPanel')?.hidden;
   document.querySelectorAll('.dds-coach-target').forEach(n=>n.classList.remove('dds-coach-target'));
   if(panel.hidden)return;title.textContent=step.title;text.textContent=step.text;
-  sample.hidden=insert.hidden=!step.sample;sample.textContent=step.sample?'Например: «'+step.sample+'»':'';
+  sample.hidden=!step.sample;insert.hidden=!step.sample||!step.fill;sample.textContent=step.sample?'Например: «'+step.sample+'»':'';
   requestAnimationFrame(place);
  }
  addEventListener('resize',()=>requestAnimationFrame(place));
@@ -108,6 +108,6 @@
   const target=$(step.target);target?.scrollIntoView({block:'nearest'});target?.focus();target?.classList.add('dds-coach-target');
   requestAnimationFrame(place);
  };
- root.updateDdsCoach=s=>{const changed=state?.id!==s?.id;state=s;if(changed){const saved=sessionStorage.getItem(key());enabled=saved==='on'||(!saved&&s?.scenario_id==='dds-guided-practice-v1');}render();};
- root.startDdsCoach=()=>{enabled=true;sessionStorage.setItem(key(),'on');render();};
+ root.updateDdsCoach=s=>{const changed=state?.id!==s?.id;state=s;if(!s?.practice_with_hints)enabled=false;else if(changed){const saved=sessionStorage.getItem(key());enabled=saved!=='off';}render();};
+ root.startDdsCoach=()=>{if(!state?.practice_with_hints)return;enabled=true;sessionStorage.setItem(key(),'on');render();};
 })(typeof window==='undefined'?globalThis:window);

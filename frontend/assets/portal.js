@@ -1,6 +1,10 @@
 'use strict';
 
 const el=id=>document.getElementById(id);
+for(const [formId,id] of [['assignmentForm','assignmentPractice'],['lessonForm','lessonPractice']]){
+ const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.id=id;label.className='check';
+ label.append(input,document.createTextNode(' Практика с подсказками'));el(formId).querySelector('button').before(label);
+}
 const roleNames={admin:'Администратор',teacher:'Преподаватель',student:'Студент'};
 const detailNames={number:'Номер',status:'Статус',created_at:'Создано',finished_at:'Завершено',student_id:'Студент',assignment_id:'Задание',difficulty:'Сложность',dds_profile:'Профиль ДДС',learning_objectives:'Учебные цели',caller_name:'Заявитель',caller_status:'Статус заявителя',phone:'Телефон',supplied_phone:'Переданный телефон',scene_phone:'Телефон с места',country:'Страна',region:'Регион',city:'Город',district:'Район',area:'Территория',object:'Объект',street:'Улица',house:'Дом',building:'Корпус',structure:'Строение',apartment:'Квартира',entrance:'Подъезд',floor:'Этаж',code:'Код двери',address_note:'Уточнение адреса',description:'Описание',incident_type:'Тип происшествия',place:'Место',sign:'Признак',detail:'Деталь',injured:'Есть пострадавшие',no_access:'Нет доступа',threat_to_people:'Угроза людям',offense:'Правонарушение',injured_offsite:'Пострадавший вне места',gasification:'Газификация',refused:'Отказ',no_contact:'Нет контакта',interrupted:'Связь прервана',services:'Выбранные службы'};
 let students=[],groups=[],assignments=[];
@@ -109,10 +113,11 @@ async function showLessonReport(id){
  for(const person of r.participants){const section=node('section',undefined,'card');
   const place=person.workstation?` · ${person.workstation}`:'';
   section.append(node('h3',person.display_name+place),
-   node('p',`Выполнено: ${person.completed} · ошибок ввода: ${person.grammar_errors??0} (критических: ${person.critical_grammar_errors??0})`));
+   node('p',`Выполнено: ${person.completed} · орфографических ошибок в записях: ${person.grammar_errors??0} (грубых: ${person.critical_grammar_errors??0})`));
   for(const c of person.cards){
+   section.append(node('p',`Попытка № ${c.attempt_number||1}${c.restarted_from?' · начата заново':''}${c.restarted_to?' · есть повторная попытка':''}${c.attempt_outcome==='restarted'?' · прервана для повтора':''}`));
    const t=c.timing||{},norm=value=>value===true?'в норме':value===false?'превышен':'не измерено';
-   section.append(node('p',`№ ${c.number} · ${c.title} · ${c.status} · ${c.score_percent==null?'без автоматической оценки':c.score_percent+'%'}`),
+   section.append(node('p',communicationText(c.communication)),node('p',`№ ${c.number} · ${c.title} · ${c.status} · ${c.score_percent==null?'без автоматической оценки':c.score_percent+'%'}`),
     node('p',c.exercise_mode==='actions'&&'first_record_seconds' in t
      ?`Открытие карточки: ${c.response_seconds??'—'} с из ${t.response_limit_seconds??'—'} (${norm(t.response_within_limit)}) · первая запись (статус и текст): ${t.first_record_seconds??'—'} с из ${t.limit_seconds??'—'} (${norm(t.within_limit)}) · всего в работе: ${c.elapsed_seconds??'—'} с (не нормируется)`
      :`${c.exercise_mode==='actions'?'Подтверждение получения':'Реакция'}: ${c.response_seconds??'—'} с из ${t.response_limit_seconds??'—'} (${norm(t.response_within_limit)}) · обработка: ${c.elapsed_seconds??'—'} с из ${t.limit_seconds??'—'} (${norm(t.within_limit)})`),
@@ -131,6 +136,8 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)pollTeache
 
 function setStatus(text,error=false){el('status').textContent=text;el('status').className=error?'error':'';}
 async function api(path,method='GET',body){
+ if(method==='POST'&&body&&path==='/api/v1/instructor/lessons')body={...body,practice_with_hints:el('lessonPractice').checked};
+ if(method==='POST'&&body&&path==='/api/v1/instructor/assignments')body={...body,practice_with_hints:el('assignmentPractice').checked};
  const options={method,headers:{'X-Voice-UI':'1'}};
  if(body!==undefined){options.headers['Content-Type']='application/json';options.body=JSON.stringify(body);}
  const response=await fetch(path,options);
@@ -161,7 +168,7 @@ async function loadAdmin(){
    for(const [value,label] of Object.entries(roleNames))role.add(new Option(label,value,false,value===user.role));
    role.disabled=user.id===me?.id;role.onchange=()=>act(async()=>{try{await api('/api/v1/admin/users/'+encodeURIComponent(user.id)+'/role','PATCH',{role:role.value});}finally{await loadAdmin();}},'Роль изменена: права действуют со следующего входа');
    actions.append(role);if(user.id!==me?.id)actions.append(button(user.active?'Закрыть доступ':'Восстановить доступ',()=>act(async()=>{await api('/api/v1/admin/users/'+encodeURIComponent(user.id),'PATCH',{active:!user.active});await loadAdmin();},'Состояние пользователя изменено')));card.append(actions);}
-  if(user.role!=='admin'){const directoryForm=node('form',undefined,'stack'),directoryName=document.createElement('input');directoryName.placeholder='Логин в LDAP / AD';directoryName.setAttribute('aria-label','Логин в LDAP / AD');directoryName.required=true;directoryName.pattern='[a-zA-Z0-9][a-zA-Z0-9_.-]{2,39}';directoryName.maxLength=40;const submit=node('button','Связать с каталогом');directoryForm.append(directoryName,submit);directoryForm.onsubmit=event=>{event.preventDefault();if(!confirm('Разрешить владельцу этой учётной записи LDAP входить в выбранный профиль?'))return;act(async()=>{await api('/api/v1/admin/users/'+encodeURIComponent(user.id)+'/directory','POST',{username:directoryName.value});directoryName.value='';},'Связь с каталогом сохранена');};card.append(directoryForm);}
+  if(user.role!=='admin'){const directoryForm=node('form',undefined,'stack'),directoryName=document.createElement('input');directoryName.placeholder='Логин в LDAP / AD';directoryName.setAttribute('aria-label','Логин в LDAP / AD');directoryName.required=true;directoryName.pattern='[a-zA-Z0-9][a-zA-Z0-9_.\\-]{2,39}';directoryName.maxLength=40;const submit=node('button','Связать с каталогом');directoryForm.append(directoryName,submit);directoryForm.onsubmit=event=>{event.preventDefault();if(!confirm('Разрешить владельцу этой учётной записи LDAP входить в выбранный профиль?'))return;act(async()=>{await api('/api/v1/admin/users/'+encodeURIComponent(user.id)+'/directory','POST',{username:directoryName.value});directoryName.value='';},'Связь с каталогом сохранена');};card.append(directoryForm);}
   container.append(card);
  }
 }
@@ -186,10 +193,19 @@ async function loadAssignments(){
  for(const item of assignments){const card=node('article',undefined,'card'),group=groups.find(value=>value.id===item.group_id),scenario=scenarioPool.find(value=>value.id===item.scenario_id),source=scenario||item;card.append(node('h3',item.title),node('p',`${group?.title||'Группа'} · сценарий ${item.scenario_id}`),node('p',`${curriculumTitle('difficulties',source.difficulty||'basic')} · ${curriculumTitle('profiles',source.dds_profile||'general')}`));if(source.learning_objectives)card.append(node('p','Учебные цели: '+source.learning_objectives));const actions=node('div',undefined,'card-actions');actions.append(node('span',item.active?'Активно':'Приостановлено',`badge${item.active?'':' off'}`),button(item.active?'Приостановить':'Включить',()=>act(async()=>{await api('/api/v1/instructor/assignments/'+encodeURIComponent(item.id),'PATCH',{active:!item.active});await loadAssignments();},'Задание изменено')));card.append(actions);container.append(card);}
 }
 
+function addAssignmentPracticeControls(){
+ [...el('assignments').querySelectorAll('article')].forEach((card,index)=>{
+  const item=assignments[index];if(!item||card.querySelector('[data-practice]'))return;
+  const toggle=button(item.practice_with_hints?'Подсказки разрешены — выключить':'Разрешить практику с подсказками',()=>act(async()=>{
+   await api('/api/v1/instructor/assignments/'+encodeURIComponent(item.id),'PATCH',{active:item.active,practice_with_hints:!item.practice_with_hints});await loadAssignments();
+  },'Настройка применяется к новым попыткам'));toggle.dataset.practice='true';card.append(toggle);
+ });
+}
+new MutationObserver(addAssignmentPracticeControls).observe(el('assignments'),{childList:true});
 async function loadSessions(){
  const sessions=await api('/api/v1/instructor/sessions');sessionSourcePool=sessions.filter(s=>s.status==='Завершена');refreshLessonChoices();const container=el('sessions');container.replaceChildren();
  if(!sessions.length){empty(container,'У назначенных вам занятий пока нет попыток');return;}
- for(const item of sessions){const card=node('article',undefined,'card'),student=students.find(value=>value.id===item.student_id),head=node('div',undefined,'card-head'),title=node('div');title.append(node('h3',`№ ${item.number||'—'} · ${item.scenario_title||'Сценарий'}`),node('p',`${student?.display_name||'Студент'} · ${item.status||'—'} · ${new Date(item.created_at).toLocaleString('ru-RU')}`));head.append(title,node('span',item.score_percent===null||item.score_percent===undefined?'Без оценки':`${item.score_percent}%`,'badge'));card.append(head);card.append(button('Открыть',()=>act(()=>showSession(item.id))));container.append(card);}
+ for(const item of sessions){const card=node('article',undefined,'card'),student=students.find(value=>value.id===item.student_id),head=node('div',undefined,'card-head'),title=node('div');title.append(node('h3',`№ ${item.number||'—'} · ${item.scenario_title||'Сценарий'}`),node('p',`${student?.display_name||'Студент'} · ${item.status||'—'} · ${new Date(item.created_at).toLocaleString('ru-RU')}`));head.append(title,node('span',item.score_percent===null||item.score_percent===undefined?'Без оценки':`${item.score_percent}%`,'badge'));card.append(head,node('p',communicationText(item.communication)),node('p',`Попытка № ${item.attempt_number||1}${item.restarted_from?' · начата заново':''}${item.restarted_to?' · есть повторная попытка':''}${item.attempt_outcome==='restarted'?' · прервана для повтора':''}`));card.append(button('Открыть',()=>act(()=>showSession(item.id))));container.append(card);}
 }
 
 async function loadLessons(){
@@ -198,8 +214,11 @@ async function loadLessons(){
  const finishedCount=values.filter(v=>v.state==='finished').length,done=node('details',undefined,'lessons-done');done.append(node('summary',`Завершённые занятия (${finishedCount})`));
  const labels={planned:'Подготовлено',running:'Идёт',stopping:'Завершается — повторите завершение',finished:'Завершено'};
  for(const value of values){const card=node('article',undefined,'card'),meta=[value.difficulty&&curriculumTitle('difficulties',value.difficulty),value.dds_profile&&curriculumTitle('profiles',value.dds_profile)].filter(Boolean).join(' · ');card.append(node('h3',value.title),node('p',`${labels[value.state]} · ${value.cards_per_student===null?'До остановки преподавателем':value.cards_per_student+' карточек каждому'}${meta?' · '+meta:''} · завершено ${value.cards.filter(c=>c.status==='Завершена').length} из ${value.cards.length} выданных`));
+ if(['planned','running'].includes(value.state))card.append(button('Настроить IP-телефоны',()=>configurePhones(value)));
  if(value.state==='planned')card.append(button('Начать',()=>act(async()=>{await api(`/api/v1/instructor/lessons/${value.id}/start`,'POST');await loadLessons();})));
- if(value.state==='running'){
+ card.append(node('p',value.practice_with_hints?'Практика с подсказками':'Самостоятельное выполнение без подсказок'));
+ if(['planned','running'].includes(value.state))card.append(button(value.practice_with_hints?'Выключить подсказки':'Разрешить подсказки',()=>act(async()=>{await api(`/api/v1/instructor/lessons/${value.id}/practice`,'PUT',{practice_with_hints:!value.practice_with_hints});await loadLessons();},'Настройка подсказок сохранена')));
+ if(value.state==='running'&&value.practice_with_hints){
   // «Делай как я»: преподаватель ведёт группу по шагам вводного курса.
   const guided=node('div',undefined,'guided-control');
   const step=document.createElement('input');step.type='number';step.min='1';step.max='11';
@@ -294,10 +313,24 @@ function createVisForm(id, services){
  };
  return form;
 }
+function configurePhones(lesson){
+ const dialog=document.createElement('dialog'),form=document.createElement('form'),inputs={};
+ form.append(node('h2','IP-телефоны участников'),node('p','Укажите номера, зарегистрированные на учебных телефонах. Настройка применяется к новым и ещё не начатым телефонным разговорам.'));
+ const members=lesson.members?.length?lesson.members:(groups.find(g=>g.id===lesson.group_id)?.member_ids||[]);
+ for(const uid of members){const label=document.createElement('label'),input=document.createElement('input');input.required=true;input.pattern='[0-9]{1,8}';input.value=lesson.sip_extensions?.[uid]||'';label.append(node('span',students.find(s=>s.id===uid)?.display_name||uid),input);form.append(label);inputs[uid]=input;}
+ const save=document.createElement('button');save.type='submit';save.textContent='Сохранить и включить телефон';const cancel=button('Закрыть',()=>dialog.close()),message=node('p');form.append(save,cancel,message);
+ form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{await api(`/api/v1/instructor/lessons/${lesson.id}/phones`,'PUT',{sip_extensions:Object.fromEntries(Object.entries(inputs).map(([id,input])=>[id,input.value.trim()]))});dialog.close();await loadLessons();}catch(error){message.textContent=error.message;}finally{save.disabled=false;}};
+ dialog.append(form);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove());dialog.showModal();
+}
+function communicationText(c){return c?`Общение: ${{text:'текст',sip:'голос по IP-телефону',mixed:'голос и текст',none:'реплик ученика ещё нет'}[c.mode]||'неизвестно'} · голосовых реплик: ${c.sip_turns} · текстовых: ${c.text_turns}`:'Способ общения не зафиксирован';}
 function renderSession(value){
- const detail=el('sessionDetail'),id=value.id;if(detail.dataset.sessionId!==id)buildSessionShell(id);const host=name=>detail.querySelector(`[data-session-host="${name}"]`),refreshState=host('refresh-state'),main=host('main');refreshState.textContent='Обновлено: '+new Date().toLocaleTimeString('ru-RU');refreshState.className='';main.replaceChildren();
+ const detail=el('sessionDetail'),id=value.id;if(detail.dataset.sessionId!==id)buildSessionShell(id);const host=name=>detail.querySelector(`[data-session-host="${name}"]`),refreshState=host('refresh-state'),main=host('main');refreshState.textContent='Обновлено: '+new Date().toLocaleTimeString('ru-RU');refreshState.className='';main.replaceChildren();main.append(node('p',communicationText(value.communication)));
  main.append(renderObject('Сведения',{number:value.number,status:value.status,created_at:value.created_at,finished_at:value.finished_at,student_id:value.student_id,assignment_id:value.assignment_id,difficulty:curriculumTitle('difficulties',value.difficulty||'basic'),dds_profile:curriculumTitle('profiles',value.dds_profile||'general'),learning_objectives:value.learning_objectives}),renderObject('Карточка',value.card),node('p','Статус карточки АРМ: '+(value.incident_status||'не указан')));
  for(const item of value.notifications||[])main.append(renderObject('Телефонограмма',item));for(const item of value.linked_cards||[])main.append(button('Связанная карточка № '+item.number,()=>act(()=>showSession(item.id))));if(value.action_report)main.append(renderObject('Действия с готовой карточкой',value.action_report));if(value.dds_review){const r=value.dds_review;main.append(node('h3','Решения диспетчера'),node('p',`${r.service} · выполнено ${r.passed_count} из ${r.total_count}`+(r.score_percent===null?'':` · ${r.score_percent}%`)));if(r.critical_errors.length)main.append(node('p','Критические ошибки: '+r.critical_errors.join('; '),'error'));for(const c of r.checks)main.append(node('p',`${c.passed===true?'✓':c.passed===false?'×':'○'} ${c.label}`+(c.detail?' — '+c.detail:'')));}for(const event of value.events||[])if(event.type==='service.updated')main.append(renderObject('Реагирование службы',event.detail));if(value.completed_by)main.append(renderObject('Завершение занятия',value.completed_by));
+ main.append(node('p',`Попытка № ${value.attempt_number||1}${value.attempt_outcome==='restarted'?' · прервана для повторного прохождения':''}`));
+ if(value.restarted_from)main.append(button('Предыдущая попытка',()=>act(()=>showSession(value.restarted_from))));
+ if(value.restarted_to)main.append(button('Новая попытка',()=>act(()=>showSession(value.restarted_to))));
+ else main.append(button('Начать эту карточку ученика заново',()=>{if(!confirm('Начать карточку с нуля? Предыдущая попытка останется в истории.'))return;act(async()=>{const next=await api(`/api/v1/instructor/sessions/${id}/restart`,'POST',{});await showSession(next.id);await loadSessions();},'Создана новая попытка');}));
  const stopHost=host('stop');if(value.status==='Завершена')stopHost.replaceChildren();else if(!stopHost.querySelector(`[data-session-stop-form="${id}"]`))stopHost.replaceChildren(createStopForm(id));
  const visHost=host('vis');
  const visAvailable=(routingServices||[]).filter(name=>!(value.card?.services||[]).includes(name));

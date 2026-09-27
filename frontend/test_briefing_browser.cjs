@@ -51,6 +51,9 @@ async function serve(page){
    else if(p==='/api/v1/student/routing/catalog')data={rules_version:'full-v2',services:['Служба 101'],flags:[]};
    else if(p==='/api/v1/student/assignments'||p==='/api/v1/student/lessons')data=[];
    else if(p==='/api/v1/student/sessions')data=[JSON.parse(JSON.stringify(card))];
+   else if(process.env.ATTEMPT_RESTART_TEST&&p===`/api/v1/student/sessions/${card.id}/restart`){
+    const old=card.id;Object.assign(card,{id:'fresh-attempt',restarted_from:old,attempt_number:2,practice_with_hints:false,events:[],notifications:[]});data=JSON.parse(JSON.stringify(card));status=201;
+   }
    else if(p===`/api/v1/student/sessions/${card.id}/briefings`&&request.method()==='POST'){
     const body=request.postDataJSON();
     briefing={id:'brief-1',service:body.service,state:'open',voice:'baya',simulated:true,
@@ -94,6 +97,16 @@ async function serve(page){
 
   await page.locator('tr[aria-label="Происшествие 910301"]').click();
   await expect(page.locator('#cardNumber')).toContainText('910301');
+  if(process.env.ATTEMPT_RESTART_TEST){
+   await page.evaluate(()=>{current.exercise_mode='actions';current.owner_service='Служба 101';current.scenario_id='dds-guided-practice-v1';current.practice_with_hints=false;renderCard();window.startDdsCoach();});
+   await expect(page.locator('#cardPractice')).toBeHidden();await expect(page.locator('#ddsCoach')).toBeHidden();
+   await page.evaluate(()=>{current.practice_with_hints=true;renderCard();});
+   await page.locator('#cardPractice').click();await expect(page.locator('#ddsCoach')).toBeVisible();
+   await page.evaluate(()=>{current.practice_with_hints=false;renderCard();});await expect(page.locator('#ddsCoach')).toBeHidden();
+   await page.locator('#audit').click();await page.getByRole('button',{name:'Начать эту карточку заново',exact:true}).last().click();
+   await expect.poll(()=>page.evaluate(()=>current.id)).toBe('fresh-attempt');
+   if(errors.length)throw Error(errors.join('\n'));console.log('Practice authorization and restart UI: PASS');return;
+  }
   if(process.env.ARM_DDS_PREVIEW){
    await page.locator('#cardTutorial').click();
    await expect(page.locator('.onboarding-box')).toBeVisible();

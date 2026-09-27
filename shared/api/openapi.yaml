@@ -18,6 +18,35 @@ servers:
 security:
 - bearerAuth: []
 paths:
+  /map-data/region.pmtiles:
+    servers:
+    - url: https://127.0.0.1:3000
+      description: Frontend origin (not Backend /api/v1)
+    get:
+      summary: Read public local vector map archive
+      security: []
+      parameters:
+      - name: Range
+        in: header
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Complete PMTiles archive
+        '206':
+          description: Requested byte range
+        '416':
+          description: Unsatisfiable byte range
+        '503':
+          description: Archive not installed
+    head:
+      summary: Inspect local vector map archive headers
+      security: []
+      responses:
+        '200':
+          description: Archive metadata headers
+        '503':
+          description: Archive not installed
   /student/sessions/{sid}/briefings/{bid}/recover:
     post:
       summary: Recover
@@ -3831,13 +3860,6 @@ paths:
   /student/sessions/{sid}/briefings/{bid}/messages:
     post:
       summary: Speak
-      description: >-
-        The report may include server-generated semantic_evidence (verdict,
-        quote, detail, fingerprint, provider, model). Local semantic checking
-        applies only to incident_type; a credited check has granted_by=model.
-        Addresses and numbers remain strict. Evidence is bound to the full
-        transcript and expected incident and retained in accepted notifications
-        as briefing_report. Text and SIP share a 15-second inference budget.
       operationId: speak_api_v1_student_sessions__sid__briefings__bid__messages_post
       parameters:
       - name: sid
@@ -4637,6 +4659,186 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - bearerAuth: []
+  /instructor/lessons/{lid}/phones:
+    put:
+      summary: Configure Lesson Phones
+      operationId: configure_lesson_phones_api_v1_instructor_lessons__lid__phones_put
+      parameters:
+      - name: lid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Lid
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LessonPhones'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /instructor/lessons/{lid}/restart:
+    post:
+      summary: Restart Lesson
+      description: 'Пройти занятие заново с нуля: прежнее завершается (его результаты
+
+        остаются в отчётах), создаётся и запускается такое же с новыми карточками.'
+      operationId: restart_lesson_api_v1_instructor_lessons__lid__restart_post
+      parameters:
+      - name: lid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Lid
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /student/sessions/{sid}/restart:
+    post:
+      summary: Restart Attempt
+      operationId: restart_attempt_api_v1_student_sessions__sid__restart_post
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /instructor/sessions/{sid}/restart:
+    post:
+      summary: Restart Attempt
+      operationId: restart_attempt_api_v1_instructor_sessions__sid__restart_post
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /instructor/lessons/{lid}/practice:
+    put:
+      summary: Set Practice Policy
+      operationId: set_practice_policy_api_v1_instructor_lessons__lid__practice_put
+      parameters:
+      - name: lid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Lid
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PracticePolicy'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
 components:
   securitySchemes:
     bearerAuth:
@@ -4745,6 +4947,10 @@ components:
           maxLength: 1500
           title: Learning Objectives
           default: ''
+        text_input_allowed:
+          type: boolean
+          title: Text Input Allowed
+          default: true
         description:
           type: string
           maxLength: 1000
@@ -5503,6 +5709,10 @@ components:
           maxLength: 160
           minLength: 1
           title: Title
+        practice_with_hints:
+          type: boolean
+          title: Practice With Hints
+          default: false
       additionalProperties: false
       type: object
       required:
@@ -5573,6 +5783,11 @@ components:
         active:
           type: boolean
           title: Active
+        practice_with_hints:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Practice With Hints
       additionalProperties: false
       type: object
       required:
@@ -5634,6 +5849,10 @@ components:
           maxLength: 1500
           title: Learning Objectives
           default: ''
+        text_input_allowed:
+          type: boolean
+          title: Text Input Allowed
+          default: true
         description:
           type: string
           maxLength: 1000
@@ -5794,6 +6013,10 @@ components:
           maxLength: 1500
           title: Learning Objectives
           default: ''
+        text_input_allowed:
+          type: boolean
+          title: Text Input Allowed
+          default: true
         description:
           type: string
           maxLength: 1000
@@ -5992,6 +6215,10 @@ components:
         allow_mode_switch:
           type: boolean
           title: Allow Mode Switch
+          default: false
+        practice_with_hints:
+          type: boolean
+          title: Practice With Hints
           default: false
         transport:
           type: string
@@ -7464,3 +7691,28 @@ components:
       required:
       - role
       title: UserRoleRequest
+    LessonPhones:
+      properties:
+        sip_extensions:
+          additionalProperties:
+            type: string
+            pattern: ^[0-9]{1,8}$
+          type: object
+          maxProperties: 100
+          minProperties: 1
+          title: Sip Extensions
+      additionalProperties: false
+      type: object
+      required:
+      - sip_extensions
+      title: LessonPhones
+    PracticePolicy:
+      properties:
+        practice_with_hints:
+          type: boolean
+          title: Practice With Hints
+      additionalProperties: false
+      type: object
+      required:
+      - practice_with_hints
+      title: PracticePolicy

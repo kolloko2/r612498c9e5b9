@@ -63,15 +63,23 @@ def test_dds_norms_have_no_overall_handling_limit():
     assert timing['response_limit_seconds'] == 30 and timing['response_within_limit'] is True
 
 
-def test_operational_reports_start_after_assignment_not_receipt():
+def test_operational_reports_start_after_completed_briefing_not_assignment():
     timestamp = datetime.now(timezone.utc)
     value = {'created_at': (timestamp - timedelta(seconds=100)).isoformat(),
              'updates_anchor': 'crew_assigned'}
     crew_report = {'unlocks_status': 'Прибытие'}
     assert update_elapsed(value, crew_report) == -1
     assert update_elapsed(value, {}) >= 100
-    value['assigned_crew'] = {'at': (timestamp - timedelta(seconds=5)).isoformat()}
-    assert 5 <= update_elapsed(value, crew_report) < 7
+    value['assigned_crew'] = {'id': '17', 'at': (timestamp - timedelta(seconds=50)).isoformat()}
+    assert update_elapsed(value, crew_report) == -1
+    value['events'] = [{'type': 'briefing.started', 'at': timestamp.isoformat()}]
+    assert update_elapsed(value, crew_report) == -1
+    event = {'type': 'notification.recorded', 'at': (timestamp - timedelta(seconds=5)).isoformat(),
+             'detail': {'source': 'briefing', 'counterpart': 'crew', 'crew_id': 'other'}}
+    value['events'].append(event)
+    assert update_elapsed(value, crew_report) == -1
+    event['detail']['crew_id'] = '17'
+    assert 5 <= update_elapsed(value, crew_report) < 8
     del value['updates_anchor']
     assert update_elapsed(value, crew_report) >= 100
 

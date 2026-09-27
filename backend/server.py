@@ -15,7 +15,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocke
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 import llm
 from llm import complete, configuration, reply as speak
-from briefing import check_live as briefing_check_live, duty_reply as briefing_duty_reply, SUPERIOR_TITLE, CREW_VOICE
+from briefing import join_speech as briefing_join_speech, check_live as briefing_check_live, duty_reply as briefing_duty_reply, SUPERIOR_TITLE, CREW_VOICE
 from field_dialogue import answer as field_answer, crew_speech, report_speech
 from categories import CategoryId
 from curriculum import Difficulty, DdsProfile
@@ -111,6 +111,7 @@ class Scenario(BaseModel):
     difficulty: Difficulty = 'basic'
     dds_profile: DdsProfile = 'general'
     learning_objectives: str = Field('', max_length=1500)
+    text_input_allowed: bool = True
     description: str = Field("", max_length=1000)
     victim_name: str = Field(min_length=1, max_length=80)
     incident: str = Field(min_length=3, max_length=1000)
@@ -396,7 +397,7 @@ class Engine:
                 state["echoes_ignored"] = state.get("echoes_ignored", 0) + 1
                 self.store.save(sid, state)
                 return None
-            spoken = ". ".join([*(m["content"] for m in state["messages"] if m["role"] == "user"), utterance])
+            spoken = briefing_join_speech([*(m["content"] for m in state["messages"] if m["role"] == "user"), utterance])
             # Полнота доклада считается по сохранённой карточке, а не моделью:
             # ответ собеседника не может подтвердить приём вместо проверки.
             started = asyncio.get_running_loop().time()

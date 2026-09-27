@@ -1,4 +1,4 @@
-"""Regression of the reported Учебная, 12 conversation, without live models."""
+"""Regression of the reported Профсоюзная, 12 conversation, without live models."""
 import json
 from pathlib import Path
 
@@ -19,7 +19,7 @@ async def test_user_report_accepts_water_leak_and_city_without_repeated_question
         raise AssertionError('Normal report turns must not call the model')
     monkeypatch.setattr(llm, 'reply', forbidden)
     card = practice()
-    first = 'во дворе дома учебная дом двенадцать вода вытекает из трубы пострадавших нет'
+    first = 'во дворе дома профсоюзная дом двенадцать вода вытекает из трубы пострадавших нет'
     history = [{'role': 'user', 'content': first}]
     report = check(first, card)
     assert report['missing'] == ['Город']
@@ -35,7 +35,7 @@ async def test_user_report_accepts_water_leak_and_city_without_repeated_question
 @pytest.mark.asyncio
 async def test_house_conflict_and_explicit_correction():
     card = practice()
-    spoken = 'Москва улица Учебная дом двенадцать повреждение трубы водоснабжения. Дом тринадцать'
+    spoken = 'Москва Профсоюзная улица дом двенадцать повреждение трубы водоснабжения. Дом тринадцать'
     report = check(spoken, card)
     assert report['missing'] == ['Дом']
     answer = await duty_reply([], card, 'ЖКХ', report['missing'], transcript=spoken, report=report)
@@ -54,7 +54,7 @@ async def test_full_fact_memory_and_model_cannot_reopen_city_or_demand_district(
     monkeypatch.setattr(llm, 'configuration', lambda: {'provider': 'ollama', 'configured': True})
     monkeypatch.setattr(llm, 'reply', bad_model)
     card = practice()
-    spoken = 'Москва Учебная дом 12 повреждение трубы водоснабжения'
+    spoken = 'Москва Профсоюзная дом 12 повреждение трубы водоснабжения'
     report = check(spoken, card)
     history = [{'role': 'user', 'content': 'Можете уточнить доступ во двор?'}]
     answer = await duty_reply(history, card, 'ЖКХ', [], transcript=spoken, report=report)
@@ -69,7 +69,7 @@ def test_water_paraphrase_does_not_credit_other_or_negated_incidents(text):
 
 
 def test_denial_in_previous_turn_does_not_negate_following_facts():
-    assert check('Пострадавших нет. Москва. Учебная дом 12. Повреждение трубы водоснабжения', practice())['complete']
+    assert check('Пострадавших нет. Москва. Профсоюзная дом 12. Повреждение трубы водоснабжения', practice())['complete']
 
 
 @pytest.mark.asyncio
@@ -84,13 +84,13 @@ async def test_voice_engine_uses_accumulated_report_and_corrects_house(monkeypat
                      'duty': {'service': 'ЖКХ', 'greeting': 'Старший бригады. Слушаю вас.', 'card': practice()}})
     engine = Engine(store)
     await engine.handle(sid, event(sid, 'call.connected'))
-    first = 'во дворе дома учебная дом двенадцать вода вытекает из трубы пострадавших нет'
+    first = 'во дворе дома профсоюзная дом двенадцать вода вытекает из трубы пострадавших нет'
     reply = await engine.handle(sid, event(sid, 'operator.utterance', first))
     assert 'город' in reply['payload']['text']
     reply = await engine.handle(sid, event(sid, 'operator.utterance', 'Москва'))
     assert 'Информация принята' in reply['payload']['text']
     assert store.load(sid)['duty_report']['complete']
-    reply = await engine.handle(sid, event(sid, 'operator.utterance', 'улица Учебная дом тринадцать'))
+    reply = await engine.handle(sid, event(sid, 'operator.utterance', 'Профсоюзная улица дом тринадцать'))
     assert '12, 13' in reply['payload']['text']
     assert not store.load(sid)['duty_report']['complete']
     reply = await engine.handle(sid, event(sid, 'operator.utterance', 'Уточняю, дом двенадцать'))

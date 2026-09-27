@@ -210,7 +210,7 @@ body:has(.dds-mode:not([hidden])) .console-meta #clock{font-size:28px}
 }
 
 /* Иконки телефона по центру своего поля; компактная полоса статуса без таблиц. */
-.dds-mode .phone-field::before{align-items:flex-end;padding:0 0 9px}
+.dds-mode .phone-field::before{align-items:center;padding:0;line-height:1}
 .dds-mode .connection .phone-icon{font-size:24px;line-height:1;color:#4a555b}
 .dds-mode.response-compact #responseSection>table,.dds-mode.response-compact #latestReport,
 .dds-mode.response-compact #responseSection>h2~h2{display:none}

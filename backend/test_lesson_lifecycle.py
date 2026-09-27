@@ -321,7 +321,7 @@ def test_adaptive_is_off_by_default(classroom):
 def test_guided_step_is_broadcast_to_the_group(classroom):
     """«Делай как я»: преподаватель ведёт группу по шагам вводного курса."""
     client, h = classroom["client"], classroom["headers"]
-    lesson = create_lesson(classroom).json()
+    lesson = create_lesson(classroom, practice_with_hints=True).json()
     url = "/api/v1/instructor/lessons/" + lesson["id"] + "/guided-step"
     client.post("/api/v1/instructor/lessons/" + lesson["id"] + "/start", headers=h["teacher1"])
 

@@ -26,6 +26,7 @@ if any(urlsplit(value).scheme not in ('http', 'https') or not urlsplit(value).ho
        or urlsplit(value).username for value in ALLOWED_ORIGINS):
     raise ValueError('ALLOWED_ORIGINS must contain exact http(s) origins without paths')
 COOKIE_SECURE = os.getenv('COOKIE_SECURE', 'false').lower() == 'true'
+MAP_DATA_DIR = Path(os.getenv('MAP_DATA_DIR', str(Path(__file__).resolve().parents[1] / 'deploy/maps')))
 
 
 def internal_http_verify(url):
@@ -64,7 +65,7 @@ app = FastAPI(title='Голосовой чат', lifespan=lifespan)
 async def local_only(request, call_next):
     if request.url.hostname not in ALLOWED_HOSTS:
         return Response('Local access only', status_code=403)
-    if request.method != 'GET' and (request.headers.get('origin') not in ALLOWED_ORIGINS | {None}
+    if request.method not in ('GET', 'HEAD') and (request.headers.get('origin') not in ALLOWED_ORIGINS | {None}
                                    or request.headers.get('x-voice-ui') != '1'):
         return Response('Invalid origin', status_code=403)
     # Legacy global call/history endpoints have no user ownership. Do not expose
@@ -88,6 +89,8 @@ async def local_only(request, call_next):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     ancestors = "'self'" if request.url.path == '/map' else "'none'"
     response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors " + ancestors
+    if request.url.path == '/map':
+        response.headers['Content-Security-Policy'] += "; worker-src 'self'; img-src 'self' data: blob:"
     return response
 
 async def gateway(path, method='GET', body=None):
@@ -199,6 +202,14 @@ async def assessment_page():
 @app.get('/map')
 async def incident_map():
     return FileResponse(Path(__file__).with_name('map.html'))
+
+@app.api_route('/map-data/region.pmtiles', methods=['GET', 'HEAD'])
+async def map_archive():
+    # Public cartography only. Never expose the address DB or arbitrary paths.
+    archive = MAP_DATA_DIR / 'region.pmtiles'
+    if not archive.is_file():
+        raise HTTPException(503, 'Локальная подложка карты не установлена')
+    return FileResponse(archive, media_type='application/octet-stream')
 
 @app.api_route('/api/v1/instructor/{path:path}', methods=['GET', 'PUT', 'POST', 'PATCH', 'DELETE'])
 async def instructor_proxy(path: str, request: Request):

@@ -243,3 +243,10 @@ def test_hedged_address_number_is_not_accepted():
                    'Учебная, примерно дом 10, квартира 5, прорыв трубы',
                    'Учебная, дом 10, квартира 5 или 6, прорыв трубы'):
         assert not check(spoken, card)['complete'], spoken
+
+
+def test_spoken_numbers_next_to_punctuation_count():
+    from briefing import check
+    card = {'street': 'Учебная', 'house': '12', 'incident_type': 'Прорыв трубы'}
+    assert check('улица Учебная, дом двенадцать, прорыв трубы.', card)['complete']
+    assert not check('улица Учебная, дом двенадцать. Уточнение: дом тринадцать.', card)['complete']

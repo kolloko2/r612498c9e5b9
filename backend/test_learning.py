@@ -123,7 +123,7 @@ def test_session_list_and_detail_do_not_leak_across_teachers(classroom):
                          "scenario": {"known_facts": ["скрыто"]}, "evaluation_rubric": {"rubric": {"expected": "скрыто"}}})
     listed = client.get("/api/v1/instructor/sessions", headers=headers("t1")).json()
     assert [item["id"] for item in listed] == ["owned"]
-    assert set(listed[0]) == {"id", "number", "student_id", "student_name", "assignment_id", "status", "created_at", "score_percent", "scenario_title", "difficulty", "dds_profile", "learning_objectives"}
+    assert set(listed[0]) == {"id", "number", "student_id", "student_name", "assignment_id", "status", "created_at", "score_percent", "scenario_title", "difficulty", "dds_profile", "learning_objectives", "communication", "attempt_number", "restarted_from", "restarted_to", "attempt_outcome"}
     detail = client.get("/api/v1/instructor/sessions/owned", headers=headers("t1"))
     assert detail.status_code == 200 and detail.json()["messages"][0]["content"] == "Учебная реплика"
     assert "scenario" not in detail.json() and "evaluation_rubric" not in detail.json()

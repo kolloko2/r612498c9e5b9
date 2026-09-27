@@ -246,8 +246,9 @@ def ensure_lessons(teacher: Client, group_id: str, scenarios: list[str],
                 teacher.base_path = saved
         _, lesson = teacher.call("POST", "/instructor/lessons", {
             "title": guided_title, "group_id": group_id, "mode": "actions",
-            "prefilled_scenario_ids": [guided["id"]], "cards_per_student": 1,
-            "workstations": places, "transport": "text",
+            "prefilled_scenario_ids": [guided["id"]], "cards_per_student": 1, "practice_with_hints": True,
+            "workstations": places, "transport": "sip",
+            "sip_extensions": {student_ids["kursant1"]: "201", student_ids["kursant2"]: "202"},
         })
         teacher.call("POST", f"/instructor/lessons/{lesson['id']}/start")
         print("создано и запущено занятие:", guided_title)
@@ -292,6 +293,16 @@ def ensure_lessons(teacher: Client, group_id: str, scenarios: list[str],
         print("создано занятие (ожидает старта):", mixed_title)
 
 
+def ensure_materials(teacher: Client, group_ids: list[str]) -> None:
+    """Учебные памятки ДДС: порядок работы, образцы записей, доклад по телефону."""
+    materials = json.loads((Path(__file__).parent / "data" / "materials.json").read_text(encoding="utf-8"))
+    existing = {item["title"] for item in teacher.call("GET", "/instructor/materials")[1]}
+    for material in materials:
+        if material["title"] not in existing:
+            teacher.call("POST", "/instructor/materials", {**material, "group_ids": group_ids, "published": True})
+            print("опубликован материал:", material["title"])
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="http://127.0.0.1:3000",
@@ -319,6 +330,7 @@ def main() -> None:
     titles.update({item["id"]: item["title"] for item in REFUSAL_SCENARIOS})
     ensure_assignments(teacher, group_id, scenarios + refusals, titles)
     ensure_lessons(teacher, group_id, scenarios, student_ids)
+    ensure_materials(teacher, [group_id])
     print()
     print("Готово. Вход:", args.base_url + "/login")
     print("  преподаватель  prepod    /", PASSWORD)

@@ -1,5 +1,57 @@
 # API Contract
 
+## Practice permissions and audited retries
+
+CreateLesson/CreateAssignment accept `practice_with_hints: boolean` (default false).
+UpdateAssignment can change it for future attempts. Issued workspace responses
+freeze the permission; legacy attempts without the field do not enable coaching.
+`PUT /instructor/lessons/{lid}/practice` with that boolean changes the lesson and
+its open cards, under lesson/session locks. Completed cards are not rewritten.
+Non-null guided-step requires the permission. Scenario names never enable hints.
+
+`POST /student/sessions/{sid}/restart` and `/instructor/sessions/{sid}/restart`
+restart one owned card (201). A running lesson or active assignment is required.
+Calls must stop successfully before a new attempt starts (404 means already gone;
+other failures abort the restart). New card uses the frozen original scenario,
+initial card and rubric, but fresh timers, dialogue, events and service states.
+Old attempts and grades are retained, with `restarted_to`; the new attempt has
+`restarted_from` and `attempt_number`. Interrupted attempts get
+`attempt_outcome: restarted`, no invented passing grade, and an audit event.
+Retries of the same source return the same successor. Restarted cards do not
+consume additional lesson slots. Teacher session lists/details and lesson reports
+expose retry metadata. Cross-owner requests return 404; stopped lessons return 409.
+
+## Local vector map resource (Frontend)
+
+`GET` / `HEAD /map-data/region.pmtiles` serves public OSM/Protomaps cartography,
+not lesson data. No authentication is required for this fixed resource. HTTP
+Range requests return 206, unsatisfiable ranges 416, missing archive 503.
+Other files in MAP_DATA_DIR are not exposed. The existing authenticated map
+search/manifest API is unchanged; the viewer no longer requests `/map/features`.
+
+## Communication policy and lesson phones
+
+Scenario `text_input_allowed` is boolean, defaults to true and is frozen in issued
+workspace sessions. False rejects text dialogue and text briefings with 409;
+card fields and status comments remain editable. A voice-only lesson requires
+SIP extensions for all participants before start.
+
+`PUT /api/v1/instructor/lessons/{lid}/phones` accepts `{sip_extensions: {student_id: extension}}`.
+Only the owning teacher may configure a planned/running lesson; mapping must cover
+all members with distinct 1–8 digit extensions (422 otherwise). Existing telephone
+activity or started 112 dialogue prevents reconfiguration (409). Active DDS cards
+receive the extension without removing history. Returns `id`, `transport: sip`,
+and `sip_extensions`.
+
+Teacher session list/detail and lesson report cards include `communication`:
+`mode` (none/text/sip/mixed), `text_turns`, `sip_turns`, `text_input_allowed`, and
+`briefings` (id, transport, state, student_turns, recipient). Counts describe actual
+student turns, not the configured transport. Listening alone is not counted as speech.
+
+DDS operational updates anchored to the assigned crew wait for a completed
+briefing notification for that crew. Merely opening a briefing or assigning a crew
+does not start the clock. Progress requests before dispatch return 409.
+
 ## Live DDS incident meaning (2026-09-28)
 
 Text and SIP briefing reports may add `semantic_evidence` with `verdict`

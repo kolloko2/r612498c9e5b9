@@ -1,4 +1,5 @@
 """Classroom groups, assignments, and role-scoped session discovery."""
+from communication import summary as communication_summary
 import json
 from datetime import datetime, timezone
 from typing import Annotated
@@ -32,11 +33,13 @@ class CreateAssignment(BaseModel):
     group_id: str = Field(min_length=1, max_length=100)
     scenario_id: str = Field(min_length=1, max_length=100)
     title: Name
+    practice_with_hints: bool = False
 
 
 class UpdateAssignment(BaseModel):
     model_config = ConfigDict(extra="forbid")
     active: bool
+    practice_with_hints: bool | None = None
 
 
 class Learning:
@@ -59,6 +62,11 @@ class Learning:
             "created_at TEXT NOT NULL)"
         )
         store.db.commit()
+        if store.db.is_postgres:
+            store.db.execute('ALTER TABLE assignments ADD COLUMN IF NOT EXISTS practice_with_hints INTEGER NOT NULL DEFAULT 0')
+        elif 'practice_with_hints' not in {row[1] for row in store.db.execute('PRAGMA table_info(assignments)')}:
+            store.db.execute('ALTER TABLE assignments ADD COLUMN practice_with_hints INTEGER NOT NULL DEFAULT 0')
+        store.db.commit()
 
     @staticmethod
     def require_role(user, role):
@@ -68,7 +76,7 @@ class Learning:
 
     def _assignment(self, assignment_id):
         row = self.store.db.execute(
-            "SELECT id, teacher_id, group_id, scenario_id, title, active, created_at "
+            "SELECT id, teacher_id, group_id, scenario_id, title, active, created_at, practice_with_hints "
             "FROM assignments WHERE id=?",
             (str(assignment_id),),
         ).fetchone()
@@ -78,6 +86,7 @@ class Learning:
             "id": row[0], "teacher_id": row[1], "group_id": row[2],
             "scenario_id": row[3], "title": row[4], "active": bool(row[5]),
             "created_at": row[6],
+            "practice_with_hints": bool(row[7]),
         }
 
     def assignment_for_student(self, assignment_id, scenario_id, user):
@@ -228,9 +237,9 @@ class Learning:
             created_at = now()
             with self.store.db:
                 self.store.db.execute(
-                    "INSERT INTO assignments (id,teacher_id,group_id,scenario_id,title,active,created_at) "
-                    "VALUES (?,?,?,?,?,1,?)",
-                    (assignment_id, user["id"], body.group_id, body.scenario_id, body.title, created_at),
+                    "INSERT INTO assignments (id,teacher_id,group_id,scenario_id,title,active,created_at,practice_with_hints) "
+                    "VALUES (?,?,?,?,?,1,?,?)",
+                    (assignment_id, user["id"], body.group_id, body.scenario_id, body.title, created_at, int(body.practice_with_hints)),
                 )
             return self._assignment(assignment_id)
 
@@ -241,8 +250,8 @@ class Learning:
                 raise HTTPException(404, "Назначение не найдено")
             with self.store.db:
                 self.store.db.execute(
-                    "UPDATE assignments SET active=? WHERE id=? AND teacher_id=?",
-                    (int(body.active), assignment_id, user["id"]),
+                    "UPDATE assignments SET active=?, practice_with_hints=? WHERE id=? AND teacher_id=?",
+                    (int(body.active), int(assignment['practice_with_hints'] if body.practice_with_hints is None else body.practice_with_hints), assignment_id, user["id"]),
                 )
             return self._assignment(assignment_id)
 
@@ -265,6 +274,10 @@ class Learning:
                     "student_name": (self.accounts.get_user(value.get('student_id')) or {}).get('display_name', 'Студент'),
                     "status": value.get("status"), "created_at": value.get("created_at"),
                     "score_percent": evaluation.get("score_percent"),
+                    "communication": communication_summary(self.store, value),
+                    "attempt_number": value.get('attempt_number', 1),
+                    "restarted_from": value.get('restarted_from'), "restarted_to": value.get('restarted_to'),
+                    "attempt_outcome": value.get('attempt_outcome'),
                     "scenario_title": scenario.get("title") if scenario else value.get("title"),
                     **metadata(value),
                 })
@@ -280,6 +293,7 @@ class Learning:
                 raise HTTPException(403, "Занятие недоступно")
             state = self.store.load(session_id)
             result = {**value, 'incident_status': incident_status(value), "messages": state.get("messages", []),
+                      'communication': communication_summary(self.store, value),
                       "provider_error": state.get("provider_error")}
             result.pop("scenario", None)
             result.pop("evaluation_rubric", None)

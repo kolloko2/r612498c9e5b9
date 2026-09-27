@@ -1,5 +1,16 @@
 # Backend
 
+Practice permission defaults off and is teacher-controlled at assignment/lesson
+issuance. A backward-compatible assignments column stores this setting; existing
+rows remain off. `test_practice_restart.py` covers audited retries, access control,
+stable successor IDs, lesson slot counts, clean DDS state and Voice failure safety.
+No PostgreSQL service settings or existing attempt history are reset.
+
+`communication.py` формирует для преподавателя сведения о фактическом канале
+общения: выбор SIP сам по себе не считается голосовой репликой. Политика
+`text_input_allowed` сохраняется в снимке попытки и проверяется сервером.
+Оперативные вводные привязаны к завершённому докладу назначенной бригаде.
+
 Первое упражнение ДДС использует те же API и оценивание, что обычное занятие.
 `dds_expectation.update_keywords` задаёт обязательные факты комментария для
 каждого доклада. Проверка использует русские словоформы и отрицания; простой

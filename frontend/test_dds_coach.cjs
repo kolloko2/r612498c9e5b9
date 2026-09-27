@@ -7,6 +7,7 @@ assert.equal(nextAction(s).target,'responseStatus');assert.ok(nextAction(s).samp
 s.service_states['Служба 104']={status:'Принята'};
 assert.equal(nextAction(s).target,'crewSelect');s.assigned_crew={id:'17'};
 assert.equal(nextAction(s).target,'openBriefing');
+s.sip_extension='201';assert.equal(nextAction(s).fill,null);assert.match(nextAction(s).text,/произнесите в телефоне/);delete s.sip_extension;
 s.events.push({seq:1,type:'notification.recorded',detail:{source:'briefing',counterpart:'crew',crew_id:'17'}});
 assert.equal(nextAction(s).target,'openBriefing');assert.match(nextAction(s).title,/начальнику дежурной смены/);assert.ok(nextAction(s).sample.includes('Докладываю'));
 s.events.push({seq:1,type:'notification.recorded',detail:{source:'briefing',counterpart:'superior'}});

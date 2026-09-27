@@ -57,7 +57,7 @@ def main() -> None:
             if item["title"] == TITLE and item["group_id"] == group["id"] and item["state"] != "finished":
                 teacher.call("POST", f"/instructor/lessons/{item['id']}/finish", {"reason": "Обучение начато заново"})
         body = {"title": TITLE, "group_id": group["id"], "mode": "actions",
-                "prefilled_scenario_ids": [guided["id"]], "cards_per_student": 1,
+                "prefilled_scenario_ids": [guided["id"]], "cards_per_student": 1, "practice_with_hints": True,
                 "transport": "sip" if voice else "text"}
         if voice:
             body["sip_extensions"] = {uid: phones[uid] for uid in members}

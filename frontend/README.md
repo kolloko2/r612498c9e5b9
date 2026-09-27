@@ -1,5 +1,32 @@
 # Local web console
 
+Practice coaching requires the issued `practice_with_hints` flag, not a scenario
+ID or saved browser preference. Teacher forms and existing lesson controls expose
+the permission. «Начать эту карточку заново» in response tools/history creates a
+fresh attempt with confirmation; teacher detail offers the same per-student action.
+Regression: `ATTEMPT_RESTART_TEST=1 node frontend/test_briefing_browser.cjs`.
+
+DDS telephone icons are vertically centered within their grey cells, with an
+explicit line height independent of the phone input's font metrics.
+
+The map uses vendored MapLibre GL JS 5.18.0 (CSP worker), PMTiles 4.5.0 and
+Protomaps light style with Russian labels. Fonts/sprites are local. The frontend
+mounts `deploy/maps` read-only and serves only `/map-data/region.pmtiles` with
+HTTP Range support. Address search still uses Backend's regional SQLite index.
+See `docs/MAPS.md`; run `node frontend/test_map_browser.cjs` with the archive installed.
+
+Map point selection: «Указать на карте» selects by click/tap or Enter at the
+viewport centre. Dragging (threshold 5 CSS pixels) only pans. The toolbar copies
+WGS84 coordinates and restores the original card point. DDS/completed cards are
+copy-only; editable 112 cards retain explicit transfer confirmation and save.
+Search results select a point through the same toolbar. No reverse geocoding or
+automatic address replacement. Regression: `node frontend/test_map_browser.cjs`.
+
+Редактор сценария позволяет запретить текстовый диалог. Кабинет преподавателя
+показывает фактическое общение (голос/текст/смешанное), число реплик и настройку
+SIP-номеров участников занятия. В голосовой практике наставник предлагает
+произнести пример в телефоне; кнопка вставки текста для этого шага скрыта.
+
 В редакторе эталона ДДС можно задать факты комментария к каждому докладу:
 `working = повреждена труба; перекрыли воду`. Статус в АРМ не выбирается
 автоматически, в том числе после принятия карточки: следующее решение за учеником.
