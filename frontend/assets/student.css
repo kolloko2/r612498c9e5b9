@@ -120,6 +120,8 @@ body.alt-hints .options button{outline:1px dotted var(--blue)}
 /* Читаемость на тёмном и сером фоне, текст в границах кнопок. */
 .training-strip a{color:#d6dfe4;text-decoration:underline}
 .training-strip a:hover,.training-strip a:focus-visible{color:#fff}
+.training-strip #restartLessonAttempt{font-size:11px;color:#fff;border:1px solid #8498a3;background:#344956;padding:2px 8px;white-space:nowrap}
+.training-strip #restartLessonAttempt:hover,.training-strip #restartLessonAttempt:focus-visible{background:#496575}
 .incidents th{color:#f4f7f9}
 .card-footer #processed,.card-footer #finish{white-space:normal;overflow-wrap:normal;word-break:normal;line-height:1.15}
 .dds-mode #processed,.dds-mode #finish{max-width:none;min-width:88px;width:auto}
@@ -130,3 +132,17 @@ dialog input::placeholder,dialog textarea::placeholder,.response-input input::pl
 #errorReportDialog table{width:100%;margin-top:14px;border-collapse:collapse;font-size:12px}
 #errorReportDialog th,#errorReportDialog td{padding:5px 6px;text-align:left;border-bottom:1px solid #c7ccd0}
 #errorReportDialog table:has(tbody:empty){display:none}
+/* Ожидаемый телефонный доклад — сверху карточки, чтобы его не перекрывали плитки служб. */
+.phone-report-banner{margin:8px 0 0;display:flex;flex-direction:column;gap:6px}
+.phone-report-banner article{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff4e8;border-left:4px solid var(--orange);padding:8px 12px}
+.phone-report-banner b{color:#303638}
+.phone-report-banner span{flex:1;min-width:220px;color:#5d4a3d;font-size:12px}
+.phone-report-banner button{background:var(--orange);border-color:var(--orange);color:#fff;font-weight:bold}
+.phone-report-banner button:hover{background:#e9582b}
+/* После первого знакомства с АРМ кнопка обучения — маленькая, справа. */
+#startTraining.compact{margin-left:auto;order:10;padding:3px 9px;font-size:11px;font-weight:normal;border-color:#9fb6c4;color:#48565f}
+/* Занятие: войти — пока не в режиме занятия, выйти (красная) — когда вошли. */
+#leaveLesson{background:#b3261e;border-color:#b3261e;color:#fff;font-weight:600}
+#leaveLesson:hover{background:#951f18}
+.lesson-control.in-lesson{background:#e6f4ea;border-bottom-color:#9cc8a8}
+.lesson-control .lesson-badge{font-weight:600;color:#1e6b34}

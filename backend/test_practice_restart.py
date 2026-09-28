@@ -2,9 +2,24 @@ import json
 from fastapi import HTTPException
 from test_rbac_integration import classroom
 from test_lesson_lifecycle import create_lesson
+from practice_plan import draft, fingerprint
+
+
+def approve_fixture(classroom):
+    store = classroom['store']
+    scenario = store.scenario(classroom['scenario_id'])
+    scenario['practice_plan'] = draft(scenario)
+    scenario['practice_approved_version'] = fingerprint(scenario)
+    with store.db:
+        store.db.execute('UPDATE scenarios SET body=? WHERE id=?', (json.dumps(scenario), scenario['id']))
+    # This test fixture predates issuing an approved snapshot.
+    state = store.load(classroom['session']['id'])
+    state['scenario'] = scenario
+    store.save(classroom['session']['id'], state)
 
 
 def test_assignment_practice_and_restart_preserves_history(classroom):
+    approve_fixture(classroom)
     c, h = classroom['client'], classroom['headers']
     sid = classroom['session']['id']
     assert classroom['session']['practice_with_hints'] is False
@@ -30,7 +45,16 @@ def test_assignment_practice_and_restart_preserves_history(classroom):
     assert next(v for v in report if v['id'] == new['id'])['attempt_number'] == 2
 
 
+def test_unapproved_practice_is_rejected_before_issuance(classroom):
+    c, h = classroom['client'], classroom['headers']
+    response = c.patch('/api/v1/instructor/assignments/'+classroom['assignment']['id'],
+                       headers=h['teacher1'], json={'active': True, 'practice_with_hints': True})
+    assert response.status_code == 409
+    assert create_lesson(classroom, practice_with_hints=True).status_code == 409
+
+
 def test_lesson_policy_and_same_slot_restart(classroom):
+    approve_fixture(classroom)
     c, h = classroom['client'], classroom['headers']
     lesson = create_lesson(classroom, practice_with_hints=True).json()
     lid = lesson['id']
@@ -39,6 +63,8 @@ def test_lesson_policy_and_same_slot_restart(classroom):
     next_url = '/api/v1/student/lessons/'+lid+'/next'
     first = c.post(next_url, headers=h['student1']).json()
     assert first['practice_with_hints'] is True
+    visible = next(item for item in c.get('/api/v1/student/lessons', headers=h['student1']).json() if item['id'] == lid)
+    assert visible['restart_session_id'] == first['id']
     policy = teacher+'/practice'
     assert c.put(policy, headers=h['student1'], json={'practice_with_hints': False}).status_code == 403
     assert c.put(policy, headers=h['teacher1'], json={'practice_with_hints': False}).status_code == 200
@@ -52,6 +78,7 @@ def test_lesson_policy_and_same_slot_restart(classroom):
     summary = c.get('/api/v1/student/lessons', headers=h['student1']).json()[0]
     assert summary['completed'] == 0 and not summary['exhausted']
     assert summary['active_session_id'] == new.json()['id']
+    assert summary['restart_session_id'] == new.json()['id']
 
 
 def test_dds_restart_resets_actions_and_requires_successful_hangup(classroom, monkeypatch):

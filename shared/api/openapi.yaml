@@ -161,6 +161,10 @@ paths:
   /student/inbox/poll:
     post:
       summary: Poll Inbox
+      description: >-
+        Poll active cards of the current student and start at most one due SIP
+        field report. Cards from lessons where the student is no longer a
+        member are skipped without failing the poll.
       operationId: poll_inbox_api_v1_student_inbox_poll_post
       parameters:
       - name: x-user-session
@@ -1646,6 +1650,9 @@ paths:
   /student/lessons:
     get:
       summary: Student Lessons
+      description: >-
+        Each lesson summary includes restart_session_id, the current student's
+        latest card not superseded by a restart, or null before first issue.
       operationId: student_lessons_api_v1_student_lessons_get
       parameters:
       - name: x-user-session
@@ -4260,6 +4267,17 @@ paths:
 
         обратилось за обновлением. Повторный вызов ничего не дублирует.'
       operationId: situation_updates_api_v1_student_sessions__sid__updates_post
+      description: >-
+        In voice-only lessons (text_input_allowed=false), student responses omit
+        the spoken report text and source from situation_updates and
+        situation.update event details. Internal grading retains the full report.
+        DDS SIP field reports are recorded automatically once the first crew
+        reply has played and the call has ended. Full-cycle 112 cards receive
+        service statuses on the service tile (service_states and a system
+        service.status_received event, only for a saved card with that service)
+        and caller updates as a repeated call from the same caller ID
+        (caller.repeat_call event, repeat_call_status in the response); the
+        card text is never filled in automatically.
       parameters:
       - name: sid
         in: path
@@ -4839,6 +4857,38 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - bearerAuth: []
+  /scenarios/practice-draft:
+    post:
+      summary: Draft Practice
+      operationId: draft_practice_api_v1_scenarios_practice_draft_post
+      parameters:
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Scenario'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
 components:
   securitySchemes:
     bearerAuth:
@@ -4951,6 +5001,17 @@ components:
           type: boolean
           title: Text Input Allowed
           default: true
+        practice_plan:
+          items:
+            $ref: '#/components/schemas/PracticeStep'
+          type: array
+          maxItems: 24
+          title: Practice Plan
+        practice_approved_version:
+          type: string
+          maxLength: 64
+          title: Practice Approved Version
+          default: ''
         description:
           type: string
           maxLength: 1000
@@ -5853,6 +5914,17 @@ components:
           type: boolean
           title: Text Input Allowed
           default: true
+        practice_plan:
+          items:
+            $ref: '#/components/schemas/PracticeStep'
+          type: array
+          maxItems: 24
+          title: Practice Plan
+        practice_approved_version:
+          type: string
+          maxLength: 64
+          title: Practice Approved Version
+          default: ''
         description:
           type: string
           maxLength: 1000
@@ -6017,6 +6089,17 @@ components:
           type: boolean
           title: Text Input Allowed
           default: true
+        practice_plan:
+          items:
+            $ref: '#/components/schemas/PracticeStep'
+          type: array
+          maxItems: 24
+          title: Practice Plan
+        practice_approved_version:
+          type: string
+          maxLength: 64
+          title: Practice Approved Version
+          default: ''
         description:
           type: string
           maxLength: 1000
@@ -6098,6 +6181,10 @@ components:
           type: string
           pattern: ^[a-f0-9]{64}$
           title: Version
+        practice_confirm:
+          type: boolean
+          title: Practice Confirm
+          default: false
       additionalProperties: false
       type: object
       required:
@@ -7716,3 +7803,61 @@ components:
       required:
       - practice_with_hints
       title: PracticePolicy
+    PracticeStep:
+      properties:
+        phase:
+          type: string
+          enum:
+          - accept
+          - refused
+          - assign
+          - crew
+          - superior
+          - correction
+          - update
+          - processed
+          - finish
+          - wait
+          - completed
+          title: Phase
+        update_id:
+          type: string
+          maxLength: 32
+          title: Update Id
+          default: ''
+        title:
+          type: string
+          maxLength: 160
+          minLength: 3
+          title: Title
+        text:
+          type: string
+          maxLength: 2000
+          minLength: 3
+          title: Text
+        sample:
+          type: string
+          maxLength: 1000
+          title: Sample
+          default: ''
+        target:
+          type: string
+          enum:
+          - responseStatus
+          - responseComment
+          - crewSelect
+          - openBriefing
+          - openErrorReport
+          - processed
+          - finish
+          - requestProgress
+          - audit
+          title: Target
+      additionalProperties: false
+      type: object
+      required:
+      - phase
+      - title
+      - text
+      - target
+      title: PracticeStep

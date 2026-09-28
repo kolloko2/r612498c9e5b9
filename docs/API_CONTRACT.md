@@ -1,5 +1,34 @@
 # API Contract
 
+The briefing creation response includes `recipient_hint`, derived from the
+configured crew leader or the superior's role. The trainee may record that role
+as the recipient when no personal name was spoken, or edit it if the counterpart
+identifies themself.
+
+## Progress briefing and field arrival answers
+
+A second briefing to the same superior after a new `situation.update` is returned
+with `purpose: progress` and `progress_reference` from the delivered report.
+Its `report` checks progress/result facts instead of requiring the original
+address and incident type again. Accepted notifications include `purpose`.
+The field dialogue returns an ETA only when it is present in a delivered report;
+departure alone yields an explicit unknown ETA answer.
+
+## Authored practice plans
+
+Scenario stores `practice_plan` (up to 24 typed PracticeStep entries) and the
+server-managed `practice_approved_version`. POST `/scenarios/practice-draft`
+accepts Scenario and returns `{steps: [...]}` without saving or invoking a model.
+Teacher-owned PUT `/scenarios/{id}` accepts `practice_confirm: true` with the
+existing optimistic `version` to explicitly approve a complete plan. Creation
+ignores supplied approval hashes; ordinary edits preserve approval only if the
+full scenario/plan fingerprint is unchanged. Copies require fresh approval.
+Assignment/lesson practice enablement and issuance reject unapproved plans (409).
+Workspace snapshots freeze the scenario and its approved plan. Student responses
+expose only `practice_hint` for the current phase, never the complete plan;
+update-specific hints require a delivered situation.update event. Legacy plans
+without approval provide no coaching. Restart validates before stopping a call.
+
 ## Practice permissions and audited retries
 
 CreateLesson/CreateAssignment accept `practice_with_hints: boolean` (default false).
@@ -665,6 +694,10 @@ Starting an already running lesson is idempotent; a finished lesson cannot resta
 `GET /student/lessons` includes planned lessons for current group members and later
 lessons for their frozen members. It exposes id/title/state/card limit/mode/category_ids,
 completed count, active_session_id and exhausted, never hidden facts or other students.
+It also exposes `restart_session_id`, the student's latest non-superseded card
+in that lesson (or null before the first card). In a running one-card lesson,
+the trainee can restart this card after completion or while it is open; earlier
+attempts remain in history.
 `POST /student/lessons/{lid}/next` accepts an optional `{after_session_id: UUID}`:
 opens the existing active card or creates a random text card from the frozen pool.
 The predecessor must be a completed own card of this lesson (otherwise 409).
@@ -1022,18 +1055,50 @@ correct}`; повтор с тем же телом идемпотентен, ко
 `pending_phone_reports` (доступные по времени, но ещё не заслушанные вводные).
 `POST /sessions/{sid}/updates/{update_id}/call` инициирует отдельный SIP-вызов
 на учебный номер рабочего места, сохраняет `call_id` и идемпотентно возвращает
-карточку. `POST /sessions/{sid}/updates/{update_id}/confirm` принимает доклад
-только после фактического соединения (реплика старшего записана в состоянии
-голосовой сессии), добавляет `situation.update` с `transport: sip` и открывает
-соответствующий статус. Повторное подтверждение не дублирует вводную.
+карточку. Отдельно подтверждать доклад ученику не нужно: когда первая реплика
+старшего проиграна полностью и разговор завершён (трубка положена), очередной
+`POST /sessions/{sid}/updates` сам добавляет `situation.update` с
+`transport: sip` и открывает соответствующий статус. Пока разговор идёт, доклад
+не вносится — ученик может задать бригаде вопросы.
+`POST /sessions/{sid}/updates/{update_id}/confirm` сохранён для совместимости:
+принимает доклад после проигранной реплики и кладёт трубку. Повторное внесение
+не дублирует вводную.
 Без SIP-номера действует прежняя текстовая доставка.
+
+Полный цикл 112 (карточка без `exercise_mode: actions`) получает вводные не
+сообщениями в ленту, а так, как их получает оператор 112 (§11.1 инструкции по
+заведению карточки):
+
+* вводная с `unlocks_status` — статус службы. Он приходит сам только в
+  сохранённую карточку, где эта служба назначена: меняется
+  `service_states[service]` и пишется системное событие
+  `service.status_received` (`id`, `service`, `status`, `comment`). Это не
+  действие ученика и не влияет на норматив реакции;
+* вводная без статуса (например, от заявителя) — повторный вызов того же
+  заявителя. В SIP-занятии это звонок на учебный номер после окончания первого
+  разговора, с тем же АОН; в текстовом — новое сообщение заявителя в диалоге.
+  Пишется событие `caller.repeat_call`. В карточку сведения сами не попадают:
+  оператор вносит их дополнением. Ответ содержит `repeat_call_status` —
+  `[{id, call_id, ended, recorded}]`, где `recorded` означает, что после звонка
+  карточка сохранена.
+
+Учебные звонки передают голосовому модулю `caller_name` и `caller_number`
+(`POST /api/v1/calls`), и IP-телефон показывает звонящего вместо «anonymous»:
+«Гражданин» с номером АОН для вызова 112, «Старший бригады 01-1, Бригада 01-1»
+с номером бригады, «Начальник дежурной смены, Служба 101» с номером службы.
+При `text_input_allowed: false` ответ ученику после подтверждения телефонного
+доклада содержит идентификатор, время и открываемый статус для работы интерфейса,
+но не содержит расшифровку или источник доклада в `situation_updates` и событии
+`situation.update`. В карточке показывается только нейтральное напоминание
+выбрать статус и записать услышанное в комментарий. Преподавательский снимок
+и внутренняя оценка сохраняют исходные сведения.
 # Исправления рабочего места — 23.09.2026
 
 - Список `GET /instructor/sessions` использует `dds_review.score_percent` для готовых карточек с оценкой действий; для остальных сохраняется балл `evaluation`. Схема ответа не изменена.
 
 - Создание телефонного доклада принимает необязательный `crew_id`. Он должен совпадать с назначенной бригадой своей ДДС; номер телефона проверяется по бригаде, а не по списку служб.
 
-- `POST /api/v1/student/inbox/poll`: обновляет все активные карточки текущего студента, не только открытую; исключает остановленные занятия. За запрос инициирует не более одного ожидающего SIP-доклада. Ошибка Voice возвращается как `phone_error` карточки.
+- `POST /api/v1/student/inbox/poll`: обновляет все активные карточки текущего студента, не только открытую; исключает остановленные занятия и занятия, из которых студент был исключён. Старая карточка такого занятия не прерывает обновление текущей. За запрос инициирует не более одного ожидающего SIP-доклада. Ошибка Voice возвращается как `phone_error` карточки.
 - Студенческие ответы списка и карточки не содержат `dds_expectation` и `planned_unlocks`. Доступны `dds_assessment_enabled` и `card_locked`; терминальный статус своей ДДС блокирует `PUT .../card` с 409 ещё до завершения занятия.
 - Синонимы статусов нормализуются до проверки оперативных вводных и обязательного результата работ.
 - Подтверждение телефонного доклада требует `caller.playback` со статусом `played` для его начальной реплики; наличие текста ответа само по себе недостаточно. После подтверждения линия освобождается. Остановка занятия завершает также отдельные звонки доклада и оперативных вводных.

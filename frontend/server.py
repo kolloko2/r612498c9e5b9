@@ -263,6 +263,10 @@ async def scenarios(request: Request):
 async def validate_scenario(request: Request):
     return await dialogue('scenarios/validate', 'POST', await request.json())
 
+@app.post('/api/scenarios/practice-draft')
+async def practice_draft(request: Request):
+    return await dialogue('scenarios/practice-draft', 'POST', await request.json())
+
 @app.api_route('/api/scenarios/{scenario_id}', methods=['GET', 'PUT', 'DELETE'])
 async def scenario(scenario_id: str, request: Request):
     body = await request.json() if request.method == 'PUT' else None

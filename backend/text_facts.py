@@ -23,6 +23,40 @@ def word_forms(word):
 def tokens(text):
     return re.findall(r'[а-яёa-z0-9]+', (text or '').casefold())
 
+NEGATORS = {'не', 'нет', 'без', 'отсутствовать', 'отсутствие'}
+
+
+@lru_cache(maxsize=20000)
+def _tags(word):
+    return [p.tag for p in morphology().parse(word.casefold().replace('ё', 'е'))]
+
+
+def _noun(word):
+    # «пострадавших», «раненых» — субстантивированные причастия: тоже предмет отрицания.
+    return any(('NOUN' in tag or 'PRTF' in tag or 'ADJF' in tag) for tag in _tags(word))
+
+
+def _genitive(word):
+    return any('gent' in tag for tag in _tags(word))
+
+
+def negates(raw_words, words, j, i):
+    """Отрицание на позиции j относится к слову на позиции i.
+
+    Распознаватель речи не ставит знаков препинания, поэтому «пострадавших нет
+    москва» идёт одной фразой. Отрицание не переходит через другое
+    существительное («не было пострадавших москва»), а «нет» перед словом
+    отрицает его только в родительном падеже («нет пострадавших», но не «нет москва»).
+    """
+    if words[j] not in NEGATORS:
+        return False
+    if any(_noun(word) for word in raw_words[j + 1:i]):
+        return False
+    if words[j] == 'нет' and j + 1 == i and not _genitive(raw_words[i]):
+        return False
+    return True
+
+
 def asserted(text, phrase):
     """A matching phrase must have the same local negation as its reference."""
     expected_tokens = tokens(phrase)
@@ -40,8 +74,8 @@ def asserted(text, phrase):
         for i in range(len(words)-len(core)+1):
             if not all(word_forms(left) & word_forms(right) for left,right in zip(raw_words[i:i+len(core)], core)):
                 continue
-            before, after = words[max(0, i-3):i], words[i+len(core):i+len(core)+3]
-            negated = any(w in {'не', 'нет', 'без', 'отсутствовать', 'отсутствие'} for w in before)
+            after = words[i+len(core):i+len(core)+3]
+            negated = any(negates(raw_words, words, j, i) for j in range(max(0, i-3), i))
             negated |= bool(after and after[0] in {'не', 'нет', 'отсутствовать'})
             negated |= after[:2] in [['не', 'подтвердить'], ['не', 'подтвержденный']]
             matches.append(negated == negative)
@@ -131,3 +165,74 @@ def spoken_numbers_to_digits(text):
         out.append(part)
     flush()
     return re.sub(r' {2,}', ' ', ''.join(out)).strip()
+
+
+# Служебные слова в названии объекта-ориентира: «около», «недалеко от» — часть
+# описания места, а не признак неуверенности, и не опознают объект.
+OBJECT_FILLER = {'около', 'возле', 'рядом', 'у', 'от', 'недалеко', 'напротив', 'на', 'в', 'во',
+                 'за', 'при', 'из', 'до', 'с', 'со', 'к', 'по', 'и', 'ст', 'г', 'ул', 'д'}
+
+
+def _one_edit(a, b):
+    """Не больше одной вставки, удаления или замены буквы."""
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) > len(b):
+        a, b = b, a
+    i = j = edits = 0
+    while i < len(a) and j < len(b):
+        if a[i] != b[j]:
+            edits += 1
+            if edits > 1:
+                return False
+            if len(a) == len(b):
+                i += 1
+            j += 1
+            continue
+        i += 1
+        j += 1
+    return edits + (len(b) - j) <= 1
+
+
+def _heard_as(spoken, expected):
+    """Слово объекта в речи с ошибкой распознавания: «киетская» — «киевская»,
+    «дпо» — «депо», «пассажирско» — «пассажирская»."""
+    if word_forms(spoken) & word_forms(expected):
+        return True
+    if len(expected) < 4 or len(spoken) < 3:
+        return False
+    prefix = 0
+    while prefix < min(len(spoken), len(expected)) and spoken[prefix] == expected[prefix]:
+        prefix += 1
+    return _one_edit(spoken, expected) or prefix >= max(5, len(expected) - 3)
+
+
+def object_named(text, name):
+    """Объект-ориентир назван, если прозвучали его опознавательные слова.
+
+    Длинное название («Депо около станции Москва-Пассажирская Киевская») на
+    слух передают не дословно, а распознаватель искажает слова. Засчитывается,
+    когда названы не меньше 2/3 значимых слов (при двух — оба); одно общее
+    слово вроде «станция» или названия города объект не опознаёт.
+    """
+    wanted = [w for w in tokens(name) if w not in OBJECT_FILLER and not w.isdigit()]
+    if not wanted:
+        return False
+    heard = [w for w in tokens(text) if w not in NEGATORS]
+    found = sum(any(_heard_as(word, key) for word in heard) for key in wanted)
+    need = len(wanted) if len(wanted) <= 2 else -(-2 * len(wanted) // 3)
+    return found >= need
+
+
+# Общие слова места: по ним одному конкретный объект не опознать.
+PLACE_GENERIC = {'станция', 'улица', 'проспект', 'переулок', 'шоссе', 'площадь', 'бульвар', 'проезд',
+                 'дом', 'здание', 'помещение', 'объект', 'территория', 'город', 'район', 'деревня', 'поселок'}
+
+
+def anchor_heard(text, name, generic=()):
+    """В тексте есть хотя бы одно опознавательное слово названия (с ошибкой
+    распознавания): «киетская» для «Киевская». Общие слова и город не считаются."""
+    skip = OBJECT_FILLER | set(generic)
+    keys = [w for w in tokens(name) if w not in skip and not w.isdigit() and lemma(w) not in PLACE_GENERIC]
+    heard = tokens(text)
+    return any(_heard_as(word, key) for key in keys for word in heard)

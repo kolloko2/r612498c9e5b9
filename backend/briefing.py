@@ -8,10 +8,12 @@
 направление по отношению к приёму вызова от заявителя: там модель — пострадавший,
 здесь — дежурный, который принимает доклад и подтверждает приём информации.
 
-Без модели полноту проверяют правила. Локальная модель дополнительно сверяет
-смысл типа происшествия, если правила не распознали перефразировку. Решение
-с цитатой сохраняется и повторно используется в оценке. Адреса и номера модель
-не засчитывает. Свободный ответ собеседника не является решением о полноте.
+Полноту проверяют правила. Локальная модель дополнительно сверяет смысл типа
+происшествия и решает, назван ли город, улица или объект, если правила не нашли
+их дословно (речь распознана с ошибками, место названо своими словами). Решение
+с цитатой сохраняется и повторно используется в оценке. Номера модель не
+засчитывает. Без модели названия мест сравниваются приблизительно, с пометкой
+для преподавателя. Свободный ответ собеседника не является решением о полноте.
 """
 
 from __future__ import annotations
@@ -28,10 +30,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 import llm
 import incident_meaning
-from text_facts import asserted, incident_asserted, spoken_numbers_to_digits
+import report_facts
+from text_facts import asserted, incident_asserted, object_named, spoken_numbers_to_digits
 from teacher_guidance import examples as guidance_examples, initialize as initialize_guidance
 from materials import material_context
-from voice_client import request as voice_request
+from voice_client import caller as caller_id, request as voice_request
 
 MAX_BRIEFINGS = 20
 MAX_TURNS = 20
@@ -155,8 +158,30 @@ def clarification(missing: list[str], transcript: str) -> str:
     return questions.get(missing[0], 'Уточните: ' + missing[0] + '.') if missing else ACCEPTED + '.'
 
 
-def check(transcript: str, card: dict, semantic_evidence: dict | None = None) -> dict:
-    """Check explicit address components and asserted facts, including negation."""
+NUMBER_LABELS = {'building': r'корпус(?:а|е)?|корп\.?', 'structure': r'строени[ея]|стр\.?',
+                 'apartment': r'квартир[аеуы]?|кв\.?', 'entrance': r'подъезд[ае]?', 'floor': r'этаж[ае]?'}
+
+
+def model_can_read(field: str, spoken: str) -> bool:
+    """Модель помогает, когда правила не нашли сведение; явно названный номер
+    («дом 13», «квартира 5») решают правила, и модель его не перекрывает."""
+    if field not in report_facts.FIELDS:
+        return False
+    if field == 'house':
+        return not HOUSE_NUMBER.search(spoken)
+    if field in NUMBER_LABELS:
+        return not re.search(r'(?:' + NUMBER_LABELS[field] + r')\s*(?:номер\s*)?\d', spoken)
+    return True
+
+
+def check(transcript: str, card: dict, semantic_evidence: dict | None = None,
+          field_evidence: dict | None = None, approximate: bool | None = None) -> dict:
+    """Check explicit address components and asserted facts, including negation.
+
+    Город, улицу и объект, названные не дословно, решает модель (field_evidence).
+    approximate — приблизительное сравнение правилами (2/3 опознавательных слов),
+    когда решения модели нет; по умолчанию — если прочтения этого текста нет.
+    """
     spoken = report_text(transcript)
     checks = []
     labels = {'building':r'корпус(?:а|е)?|корп\.?', 'structure':r'строени[ея]|стр\.?',
@@ -202,6 +227,33 @@ def check(transcript: str, card: dict, semantic_evidence: dict | None = None) ->
         if not passed and alternatives.get(fact['id']):
             passed = stated(fact, normalize(str(alternatives[fact['id']])))
         checks.append({**fact, 'passed':passed})
+    # Модель прочитала доклад целиком: засчитываются только сведения с дословной
+    # цитатой, совпадающие с карточкой. Явно названный номер решают правила.
+    read = report_facts.valid(field_evidence, transcript)
+    if read:
+        for item in checks:
+            if item['passed'] or not model_can_read(item['id'], spoken):
+                continue
+            expected = card.get('injured') if item['id'] == 'injured' else item['expected']
+            reading = field_evidence['fields'].get(item['id'])
+            quote = report_facts.credited(item['id'], expected, reading, transcript, field_evidence.get('reference'))
+            if not quote and alternatives.get(item['id']):
+                quote = report_facts.credited(item['id'], alternatives[item['id']], reading, transcript,
+                                              field_evidence.get('reference'))
+            if quote:
+                item.update(passed=True, granted_by='model', quote=quote)
+    if approximate is None:
+        # Прочтение модели для этого текста — её решение, в том числе «не то место».
+        approximate = not read
+    if approximate:
+        # Модель недоступна: название места с ошибками распознавания засчитывают
+        # правила, с пометкой для преподавателя.
+        for item in checks:
+            if item['passed'] or item['id'] not in report_facts.NAMED:
+                continue
+            values = [item['expected'], *([alternatives[item['id']]] if alternatives.get(item['id']) else [])]
+            if any(object_named(spoken, normalize(str(v))) for v in values):
+                item.update(passed=True, granted_by='approximate')
     incident = next((item for item in checks if item['id'] == 'incident_type'), None)
     trusted = incident is not None and incident_meaning.valid(semantic_evidence, transcript, incident['expected'])
     if trusted and not incident['passed'] and semantic_evidence['verdict'] == 'equivalent':
@@ -209,17 +261,34 @@ def check(transcript: str, card: dict, semantic_evidence: dict | None = None) ->
     missing = [item['label'] for item in checks if not item['passed']]
     return {'checks':checks, 'missing':missing, 'complete':not missing and bool(checks),
             'note':'Проверены обязательные факты и отрицания; неоднозначный доклад требует уточнения.',
-            **({'semantic_evidence': semantic_evidence} if trusted else {})}
+            **({'semantic_evidence': semantic_evidence} if trusted else {}),
+            **({'field_evidence': field_evidence} if read else {})}
 
 
 async def check_live(transcript: str, card: dict, previous: dict | None = None) -> dict:
-    """One bounded semantic pass for otherwise unrecognized incident meaning."""
-    report = check(transcript, card, (previous or {}).get('semantic_evidence'))
+    """Rules first; the local model reads what the rules did not recognise.
+
+    Fields (city, street, numbers, casualties) and the incident meaning are each
+    read once per new transcript within the shared phone-turn budget.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + llm.VOICE_REPLY_TIMEOUT_SECONDS
+    semantic = (previous or {}).get('semantic_evidence')
+    fields = (previous or {}).get('field_evidence')
+    card_reference = report_facts.reference(card)
+    fresh = report_facts.current(fields, transcript, card_reference)
+    # Пока модель может прочитать доклад, приблизительное правило не решает за неё.
+    report = check(transcript, card, semantic, fields, approximate=False if report_facts.available() else None)
+    spoken = report_text(transcript)
+    unread = [item for item in report['checks'] if not item['passed'] and model_can_read(item['id'], spoken)]
+    if unread and not fresh:
+        fields = await report_facts.extract(transcript, timeout=deadline - loop.time(), card_reference=card_reference)
+        report = check(transcript, card, semantic, fields)
     incident = next((item for item in report['checks'] if item['id'] == 'incident_type'), None)
     if incident is None or incident['passed'] or report.get('semantic_evidence'):
         return report
-    evidence = await incident_meaning.assess(transcript, incident['expected'], timeout=llm.VOICE_REPLY_TIMEOUT_SECONDS)
-    return check(transcript, card, evidence)
+    semantic = await incident_meaning.assess(transcript, incident['expected'], timeout=deadline - loop.time())
+    return check(transcript, card, semantic, fields)
 
 
 def correction_reveal(value: dict, expectation: dict | None = None) -> str | None:
@@ -271,15 +340,53 @@ def known_card(value: dict, expectation: dict | None = None) -> dict:
     return {key: unaware.get(key, item) for key, item in card.items() if not key.startswith('_')}
 
 
+def progress_reference(value: dict, prior: list[dict], service: str, crew_id: str) -> dict | None:
+    """A second call to the same superior concerns new work, not the initial card."""
+    if crew_id or value.get('exercise_mode') != 'actions':
+        return None
+    earlier = [item for item in prior if item.get('state') == 'accepted' and
+               item.get('service') == service and not item.get('crew_id')]
+    if not earlier:
+        return None
+    after = max(item.get('finished_at', '') for item in earlier)
+    updates = [event for event in value.get('events', []) if event.get('type') == 'situation.update'
+               and event.get('at', '') > after and event.get('detail', {}).get('text')]
+    if not updates:
+        return None
+    latest = updates[-1]['detail']
+    expectation = value.get('dds_expectation') or {}
+    keywords = list((expectation.get('update_keywords') or {}).get(latest.get('id'), []))
+    if latest.get('unlocks_status') == 'Работы завершены':
+        keywords += expectation.get('result_keywords') or []
+    return {'update_id': latest.get('id'), 'status': latest.get('unlocks_status', ''),
+            'text': latest['text'], 'keywords': list(dict.fromkeys(keywords))}
+
+
+def check_progress(transcript: str, reference: dict) -> dict:
+    spoken = normalize(transcript)
+    keywords = reference.get('keywords') or []
+    missing = [word for word in keywords if not asserted(spoken, normalize(word))]
+    if not keywords and (len(spoken) < 25 or not re.search(
+            r'\b(?:прибыл|приехал|обнаруж|устран|восстанов|перекры|приступ|выполн|провед|потуш|эвакуир|пострадав|поврежд|начал|заверш|выезжа|выехал)', spoken)):
+        missing.append('Что установлено и что сделано по новому докладу')
+    return {'checks': [{'id': 'progress', 'label': 'Ход и результат работ', 'passed': not missing}],
+            'missing': missing, 'complete': not missing and bool(spoken),
+            'note': 'Повторный доклад сверяется с новой вводной, без повторного опроса карточки.'}
+
+
 async def duty_reply(history: list[dict], card: dict, service: str, missing: list[str],
                      corrections: list[dict] | None = None,
                      materials: list[dict] | None = None, *,
                      transcript: str | None = None, report: dict | None = None,
-                     timeout_seconds: float | None = None) -> str:
+                     timeout_seconds: float | None = None, purpose: str = 'initial',
+                     progress: dict | None = None) -> str:
     """Реплика дежурного. Отказ провайдера не ломает занятие."""
     transcript = transcript if transcript is not None else join_speech(
         m['content'] for m in history if m.get('role') == 'user')
     fallback = clarification(missing, transcript)
+    if purpose == 'progress':
+        fallback = ('Уточните по последнему докладу: ' + ', '.join(missing) + '.'
+                    if missing else 'Информацию о ходе работ принял.')
     evidence = (report or {}).get('semantic_evidence') or {}
     if missing and missing[0] == 'Тип происшествия' and evidence.get('verdict') == 'insufficient':
         fallback = {'participants': 'Уточните, сколько людей участвует и что они делают.',
@@ -309,11 +416,16 @@ async def duty_reply(history: list[dict], card: dict, service: str, missing: lis
         context['исправления_преподавателя'] = corrections[:4]
     if materials:
         context['методические_материалы'] = materials
+    if purpose == 'progress':
+        context['цель_звонка'] = 'Повторный доклад руководителю о ходе или результате работ'
+        context['последний_доклад_бригады'] = (progress or {}).get('text', '')
     # Свободный ответ не управляет обязательным опросом или оценкой доклада.
     directive = ('Ответь кратко на последний вопрос диспетчера только по известным сведениям. '
                  'Если ответа нет, скажи, что сведений пока нет. Не задавай встречных вопросов, '
                  'не требуй подтверждений и не повторяй опрос. Уже переданные сведения сохранены. '
                  'Не объявляй доклад принятым: это делает система проверки.')
+    if purpose == 'progress':
+        directive += ' Это повторный звонок. Не проси заново назвать город, адрес и тип происшествия.'
     try:
         text = await asyncio.wait_for(llm.reply([
             {'role': 'system', 'content': SYSTEM_PROMPT},
@@ -398,8 +510,9 @@ def router(store, accounts, authorize, learning=None, voice=None):
                     else briefing['messages'])
         spoken = join_speech(m['content'] for m in messages if m['role'] == 'user')
         previous = state.get('duty_report') or briefing.get('report') or {}
-        return {**briefing, 'messages': messages,
-                'report': check(spoken, card, previous.get('semantic_evidence'))}
+        report = (check_progress(spoken, briefing['progress_reference']) if briefing.get('purpose') == 'progress'
+                  else check(spoken, card, previous.get('semantic_evidence'), previous.get('field_evidence')))
+        return {**briefing, 'messages': messages, 'report': report}
 
     @api.get('/{sid}/briefings')
     async def briefings(sid: UUID, user=Depends(student)):
@@ -433,19 +546,25 @@ def router(store, accounts, authorize, learning=None, voice=None):
                 raise HTTPException(409, 'Для этого рабочего места доклад выполняется через IP-телефон')
         if len(listing(sid, user)) >= MAX_BRIEFINGS:
             raise HTTPException(409, f'Достигнут лимит {MAX_BRIEFINGS} докладов на карточку')
+        progress = progress_reference(value, listing(sid, user), body.service, body.crew_id)
         # Собеседник: руководитель назначенной бригады либо вышестоящий начальник.
         greeting = (crew.get('leader') or 'Старший бригады') if body.crew_id else f'{SUPERIOR_TITLE}, {body.service}'
-        opening = f'{greeting}. Слушаю вас.'
+        opening = (f'{greeting}. Слушаю доклад о ходе работ.' if progress else f'{greeting}. Слушаю вас.')
         identifier = str(uuid4())
         briefing = {'id': identifier, 'session_id': str(sid), 'student_id': user['id'],
                     'crew_id': body.crew_id,
+                    'recipient_hint': (crew.get('leader') or 'Старший бригады') if body.crew_id else SUPERIOR_TITLE,
+                    'caller_name': greeting,
                     'message_id': str(body.message_id), 'service': body.service,
                     'destination': body.destination, 'phone': body.phone,
                     'transport': body.transport, 'call_id': None,
                     'state': 'open', 'started_at': now(),
                     'voice': CREW_VOICE if body.crew_id else duty_voice(body.service),
                     'messages': [] if body.transport == 'sip' else [{'role': 'assistant', 'content': opening, 'at': now()}],
-                    'report': check('', reference_card(value)), 'simulated': True}
+                    'purpose': 'progress' if progress else 'initial',
+                    'progress_reference': progress,
+                    'report': check_progress('', progress) if progress else check('', reference_card(value)),
+                    'simulated': True}
         if body.transport == 'sip':
             if not value.get('sip_extension'):
                 raise HTTPException(409, 'Учебный SIP-номер не назначен: доклад голосом недоступен')
@@ -455,6 +574,8 @@ def router(store, accounts, authorize, learning=None, voice=None):
                                     'duty': {'service': body.service, 'greeting': greeting,
                                              'card': reference_card(value),
                                              'known_card': known_card(value),
+                                             'purpose': briefing['purpose'],
+                                             'progress_reference': progress,
                                              'briefing_id': identifier, 'voice': briefing['voice'],
                                              'teacher_corrections': guidance_examples(
                                                  store, value.get('teacher_id'), value.get('dds_profile', 'general')),
@@ -463,7 +584,8 @@ def router(store, accounts, authorize, learning=None, voice=None):
                                                  value.get('group_id'), query=value['card'].get('incident_type', '') + ' ' + value['card'].get('description', ''))}})
             result = await voice('calls', 'POST', {'session_id': identifier,
                                                    'extension': value['sip_extension'],
-                                                   'mode': 'auto'})
+                                                   'mode': 'auto',
+                                                   **caller_id(briefing['caller_name'], briefing['phone'])})
             briefing['call_id'] = result.get('call_id')
         with store.db:
             save(briefing)
@@ -514,7 +636,8 @@ def router(store, accounts, authorize, learning=None, voice=None):
             state['superseded_calls'] = list(dict.fromkeys([*state.get('superseded_calls', []), item['call_id']]))[-20:]
             store.save(str(bid), state)
             editable(card_of(sid, user))
-            result = await voice('calls', 'POST', {'session_id': str(bid), 'extension': value['sip_extension'], 'mode': 'auto'})
+            result = await voice('calls', 'POST', {'session_id': str(bid), 'extension': value['sip_extension'], 'mode': 'auto',
+                                                   **caller_id(item.get('caller_name', item.get('recipient_hint', '')), item.get('phone', ''))})
             # Teacher completion wins a concurrent recovery request.
             if card_of(sid, user)['status'] == 'Завершена' or load(bid, sid, user)['state'] != 'open':
                 await voice('calls/' + result['call_id'] + '/hangup', 'POST', {})
@@ -546,7 +669,8 @@ def router(store, accounts, authorize, learning=None, voice=None):
                                      'message_id': str(body.message_id)})
         spoken = join_speech(m['content'] for m in briefing['messages'] if m['role'] == 'user')
         started = asyncio.get_running_loop().time()
-        briefing['report'] = await check_live(spoken, reference_card(value), briefing.get('report'))
+        briefing['report'] = (check_progress(spoken, briefing['progress_reference']) if briefing.get('purpose') == 'progress'
+                              else await check_live(spoken, reference_card(value), briefing.get('report')))
         reply = await duty_reply([{'role': m['role'], 'content': m['content']} for m in briefing['messages']],
                                  known_card(value),
                                  briefing['service'], briefing['report']['missing'],
@@ -554,7 +678,8 @@ def router(store, accounts, authorize, learning=None, voice=None):
                                  material_context(store, value.get('teacher_id'), value.get('dds_profile', 'general'),
                                                   value.get('group_id'), query=value['card'].get('incident_type', '') + ' ' + value['card'].get('description', '')),
                                  transcript=spoken, report=briefing['report'],
-                                 timeout_seconds=llm.VOICE_REPLY_TIMEOUT_SECONDS - (asyncio.get_running_loop().time() - started))
+                                 timeout_seconds=llm.VOICE_REPLY_TIMEOUT_SECONDS - (asyncio.get_running_loop().time() - started),
+                                 purpose=briefing.get('purpose', 'initial'), progress=briefing.get('progress_reference'))
         briefing['messages'].append({'role': 'assistant', 'content': reply, 'at': now()})
         with store.db:
             save(briefing)
@@ -587,6 +712,7 @@ def router(store, accounts, authorize, learning=None, voice=None):
                   'transport': briefing['transport'],
                   'comment': spoken_report(briefing),
                   'briefing_report': briefing['report'],
+                  'purpose': briefing.get('purpose', 'initial'),
                   # Бригада или вышестоящий начальник: разные адресаты доклада.
                   'crew_id': briefing.get('crew_id', ''),
                   'counterpart': 'crew' if briefing.get('crew_id') else 'superior'}

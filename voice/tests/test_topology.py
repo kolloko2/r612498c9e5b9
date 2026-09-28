@@ -64,3 +64,23 @@ async def test_partial_topology_failure_can_be_cleaned():
     assert set(ari.deleted) == ({f"channels/{c}" for c in topology.channel_ids}
                                 | {f"bridges/{b}" for b in topology.bridges.values()})
     assert set(ari.forgotten) == set(topology.channel_ids)
+
+
+async def test_originate_shows_who_is_calling_on_the_training_phone():
+    from app.domain.call import CallContext
+    ari = FakeARI()
+    topology = Topology(ari, Settings(_env_file=None), uuid4())
+    context = CallContext(uuid4(), "201", caller_name="Старший бригады 01-1", caller_number="+79000000101")
+    await topology.originate("201", context.caller_id())
+    assert ari.requests[0][2]["params"]["callerId"] == '"Старший бригады 01-1" <+79000000101>'
+    # Без сведений заголовок не выдумывается.
+    await topology.originate("201", CallContext(uuid4(), "201").caller_id())
+    assert "callerId" not in ari.requests[1][2]["params"]
+
+
+@pytest.mark.parametrize("name", ['x" <666>', "a\b", "a\nb"])
+def test_caller_name_cannot_break_the_sip_header(name):
+    from pydantic import ValidationError
+    from app.domain.messages import CreateCall
+    with pytest.raises(ValidationError):
+        CreateCall(session_id=uuid4(), caller_name=name)

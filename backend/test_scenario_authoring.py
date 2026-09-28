@@ -67,3 +67,23 @@ def test_student_cannot_read_hidden_scenario_or_author(authoring):
     assert client.get('/api/v1/scenarios/'+body['id']).status_code==403
     assert client.post('/api/v1/scenarios/validate',json=body).status_code==403
     assert client.post('/api/v1/scenarios',json={**body,'id':'forbidden_copy'}).status_code==403
+
+
+def test_practice_approval_is_explicit_and_invalidates_on_edit(authoring):
+    from practice_plan import approved
+    client, store = authoring
+    body = {**store.first_enabled(), 'id': 'practice_copy'}
+    result = client.post('/api/v1/scenarios/practice-draft', json=body)
+    assert result.status_code == 200
+    body['practice_plan'] = result.json()['steps']
+    body['practice_approved_version'] = 'f' * 64
+    created = client.post('/api/v1/scenarios', json=body).json()
+    assert not created['practice_approved_version']
+    body.update(version=created['version'], practice_confirm=True)
+    saved = client.put('/api/v1/scenarios/practice_copy', json=body)
+    assert saved.status_code == 200, saved.text
+    assert approved(store.scenario('practice_copy'))
+    body.update(version=saved.json()['version'], practice_confirm=False, incident='Изменённые обстоятельства')
+    saved = client.put('/api/v1/scenarios/practice_copy', json=body)
+    assert saved.status_code == 200
+    assert not approved(store.scenario('practice_copy'))

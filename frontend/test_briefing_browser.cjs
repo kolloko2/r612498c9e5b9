@@ -21,11 +21,16 @@ const card={id:'brief-card',number:910301,title:'Учебный пожар',scen
  allowed_service_statuses:{},notifications:[],linked_cards:[],transport:'text',messages:[],assessment_enabled:false};
 
 if(process.env.ARM_DDS_PREVIEW){
- Object.assign(card,{exercise_mode:'actions',owner_service:'Служба 101',card_locked:false,crew_options:[],situation_updates:[]});
+ Object.assign(card,{exercise_mode:'actions',owner_service:'Служба 101',card_locked:false,crew_options:[],situation_updates:[],practice_with_hints:true,
+  practice_hint:{title:'Проверьте карточку',text:'Примите решение по карточке своей службы.',target:'responseStatus'}});
  card.card.services.push('Служба 102','Служба 104','Деп. ЖКХ','ЦЭМП','ЦОДД','Мос.Без.','Мослифт','ОАТИ','ДДС района','ДДС округа');
  for(const name of card.card.services)card.service_states[name]={status:'Добавлена',added_at:now};
  card.allowed_service_statuses={'Служба 101':['Принята','Не принята']};
 }
+if(process.env.INBOX_REPORT_TEST)Object.assign(card,{exercise_mode:'actions',owner_service:'Служба 101',
+ text_input_allowed:false,pending_phone_reports:[],situation_updates:[]});
+if(process.env.LESSON_RESTART_TEST)Object.assign(card,{exercise_mode:'actions',owner_service:'Служба 101',
+ lesson_id:'lesson-test',practice_with_hints:false});
 
 // Состояние доклада на стороне «сервера».
 let briefing=null,finishBody=null;
@@ -49,14 +54,17 @@ async function serve(page){
    else if(p==='/api/v1/health')data={status:'ok',provider:'mock'};
    else if(p==='/api/v1/student/classifier')data={version:'test-v1',groups:[],records:[]};
    else if(p==='/api/v1/student/routing/catalog')data={rules_version:'full-v2',services:['Служба 101'],flags:[]};
-   else if(p==='/api/v1/student/assignments'||p==='/api/v1/student/lessons')data=[];
+   else if(p==='/api/v1/student/assignments')data=[];
+   else if(p==='/api/v1/student/lessons')data=process.env.LESSON_RESTART_TEST?[{id:'lesson-test',title:'Тестовая карточка ДДС',
+    state:'running',cards_per_student:1,completed:0,mode:'actions',transport:'sip',sip_extension:'201',
+    practice_with_hints:false,restart_session_id:card.id,active_session_id:card.id,active_session_ids:[card.id]}]:[];
    else if(p==='/api/v1/student/sessions')data=[JSON.parse(JSON.stringify(card))];
-   else if(process.env.ATTEMPT_RESTART_TEST&&p===`/api/v1/student/sessions/${card.id}/restart`){
+   else if((process.env.ATTEMPT_RESTART_TEST||process.env.LESSON_RESTART_TEST)&&p===`/api/v1/student/sessions/${card.id}/restart`){
     const old=card.id;Object.assign(card,{id:'fresh-attempt',restarted_from:old,attempt_number:2,practice_with_hints:false,events:[],notifications:[]});data=JSON.parse(JSON.stringify(card));status=201;
    }
    else if(p===`/api/v1/student/sessions/${card.id}/briefings`&&request.method()==='POST'){
     const body=request.postDataJSON();
-    briefing={id:'brief-1',service:body.service,state:'open',voice:'baya',simulated:true,
+    briefing={id:'brief-1',service:body.service,state:'open',voice:'baya',simulated:true,recipient_hint:'Начальник дежурной смены',
      messages:[{role:'assistant',content:`Начальник дежурной смены, ${body.service}. Слушаю вас.`,at:now}],report:null};
     briefing.report=report();
     data=briefing;status=201;
@@ -97,13 +105,63 @@ async function serve(page){
 
   await page.locator('tr[aria-label="Происшествие 910301"]').click();
   await expect(page.locator('#cardNumber')).toContainText('910301');
+  if(process.env.LESSON_RESTART_TEST){
+   await expect(page.locator('#restartLessonAttempt')).toBeVisible({timeout:7000});
+   await expect(page.locator('#restartLessonAttempt')).toHaveText('Начать карточку заново');
+   await page.locator('#restartLessonAttempt').click();
+   await expect.poll(()=>page.evaluate(()=>current.id)).toBe('fresh-attempt');
+   await expect(page.locator('#restartLessonAttempt')).toBeVisible();
+   // В занятии — только красная «Выйти», после выхода — только «Войти».
+   await page.locator('#closeCard').click();
+   await expect(page.locator('#leaveLesson')).toBeVisible();await expect(page.locator('#joinLesson')).toBeHidden();
+   await expect(page.locator('#lessonBadge')).toContainText('Вы в занятии');
+   await page.locator('#leaveLesson').click();
+   await expect(page.locator('#joinLesson')).toBeVisible();await expect(page.locator('#leaveLesson')).toBeHidden();
+   await expect(page.locator('#lessonBadge')).toBeHidden();
+   // Обучение уже показывалось — кнопка маленькая.
+   await page.evaluate(()=>localStorage.setItem('onboardingDone','1'));await page.reload();
+   await expect(page.locator('#startTraining')).toHaveText('Обучение');
+   if(errors.length)throw Error(errors.join('\n'));
+   console.log('Visible one-card lesson restart: PASS');return;
+  }
+  if(process.env.INBOX_REPORT_TEST){
+   await expect(page.locator('#situationFeed')).toBeHidden();
+   card.pending_phone_reports=[{id:'arrived',call_id:'test-call'}];
+   // Доклад виден вверху карточки, подтверждать его вручную не нужно.
+   await expect(page.locator('#phoneReportBanner')).toContainText('внесён в карточку автоматически',{timeout:12000});
+   await expect(page.locator('#phoneReportBanner')).not.toContainText('Подтвердить');
+   const banner=await page.locator('#phoneReportBanner').boundingBox(),footer=await page.locator('.card-footer').boundingBox();
+   if(!(banner.y+banner.height<footer.y-80))throw Error('Плашка доклада перекрыта подвалом со службами');
+   if(errors.length)throw Error(errors.join('\n'));
+   console.log('Live phone-report poll without reload: PASS');return;
+  }
+  if(process.env.VOICE_REPORT_TEST){
+   await page.evaluate(()=>{
+    Object.assign(current,{exercise_mode:'actions',owner_service:'Служба 101',text_input_allowed:false,
+     situation_updates:[{id:'arrived',at:'2026-09-16T09:03:00Z',source:'Старший бригады',
+      text:'Секретная учебная вводная',unlocks_status:'Прибытие'}],
+     events:[{type:'situation.update',at:'2026-09-16T09:03:00Z',detail:{source:'Старший бригады',text:'Секретная учебная вводная'}}]});
+    renderSituationUpdates();
+   });
+   await expect(page.locator('#latestReport')).toContainText('Отразите услышанное');
+   await expect(page.locator('#latestReport')).not.toContainText('Прибытие');
+   await expect(page.locator('#situationFeed')).not.toContainText('Секретная учебная вводная');
+   await expect(page.locator('#latestReport')).not.toContainText('Доклад с места');
+   await page.evaluate(()=>{current.text_input_allowed=true;renderSituationUpdates();});
+   await expect(page.locator('#latestReport')).toContainText('Секретная учебная вводная');
+   if(errors.length)throw Error(errors.join('\n'));
+   console.log('Voice-only report display: PASS');return;
+  }
   if(process.env.ATTEMPT_RESTART_TEST){
    await page.evaluate(()=>{current.exercise_mode='actions';current.owner_service='Служба 101';current.scenario_id='dds-guided-practice-v1';current.practice_with_hints=false;renderCard();window.startDdsCoach();});
    await expect(page.locator('#cardPractice')).toBeHidden();await expect(page.locator('#ddsCoach')).toBeHidden();
-   await page.evaluate(()=>{current.practice_with_hints=true;renderCard();});
+   await page.evaluate(()=>{current.practice_with_hints=true;current.practice_hint={title:'Проверенный шаг',text:'Проверьте карточку',target:'responseStatus'};renderCard();});
    await page.locator('#cardPractice').click();await expect(page.locator('#ddsCoach')).toBeVisible();
    await page.evaluate(()=>{current.practice_with_hints=false;renderCard();});await expect(page.locator('#ddsCoach')).toBeHidden();
-   await page.locator('#audit').click();await page.getByRole('button',{name:'Начать эту карточку заново',exact:true}).last().click();
+   // Повтор — только в верхней учебной полосе, не в «Реагировании».
+   await expect(page.locator('#responseSection #restartAttempt')).toHaveCount(0);
+   await expect(page.locator('#restartLessonAttempt')).toHaveText('Начать карточку заново');
+   await page.locator('#restartLessonAttempt').click();
    await expect.poll(()=>page.evaluate(()=>current.id)).toBe('fresh-attempt');
    if(errors.length)throw Error(errors.join('\n'));console.log('Practice authorization and restart UI: PASS');return;
   }
@@ -128,10 +186,6 @@ async function serve(page){
     await expect(page.locator('#services .service-status').first()).toContainText('Добавлена');
     await expect(page.locator('.service-edit')).toHaveCount(1);
     if(width>1150){
-     await expect(page.locator('#cardSupplement')).toBeVisible();
-     await page.locator('#cardSupplement').click();
-     await expect(page.locator('#description')).toBeEditable();
-     await page.locator('#cardView').click();
      await expect(page.locator('#description')).not.toBeEditable();
      const metrics=await page.evaluate(()=>{
       const box=selector=>document.querySelector(selector).getBoundingClientRect();
@@ -197,6 +251,7 @@ async function serve(page){
   await page.locator('#sendBriefing').click();
   await expect(page.locator('#briefingMissing')).toContainText('Сведения названы полностью');
   await expect(page.locator('#briefingFinishForm')).toBeVisible();
+  await expect(page.locator('#briefingRecipient')).toHaveValue('Начальник дежурной смены');
   await page.screenshot({path:path.join(shots,'briefing-dialog.png')});
 
   await page.locator('#briefingRecipient').fill('Дежурный смены Петров');

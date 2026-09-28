@@ -1,5 +1,25 @@
 # Local web console
 
+The top training strip exposes restart for a running single-card lesson once
+its card exists, including after completion. It stays visible over the DDS ARM;
+the original attempt remains in history. The teacher's separate lesson restart
+remains in the portal.
+
+Voice-only DDS cards show a neutral status/comment reminder after a confirmed
+phone report. The report transcript, source and timestamp are not rendered in
+the situation feed, response panel or student history; text-enabled cards retain
+the report display.
+
+Поле подтверждения доклада автоматически заполняется известной должностью
+собеседника. Если он назвал имя, обучаемый может уточнить эту запись.
+
+Повторный доклад начальнику сопровождается отдельной инструкцией о ходе работ.
+Телефонограммы и статус происшествия имеют контрастные подписи в АРМ ДДС.
+
+The scenario editor prepares, edits and explicitly approves practice steps.
+The student coach displays only the server-selected approved `practice_hint`;
+there is no generic fallback or runtime model-generated instruction.
+
 Practice coaching requires the issued `practice_with_hints` flag, not a scenario
 ID or saved browser preference. Teacher forms and existing lesson controls expose
 the permission. «Начать эту карточку заново» in response tools/history creates a
@@ -77,8 +97,13 @@ button, without an additional native browser confirmation. Group stop uses an
 in-page reason form. Map requests have cancellation/timeouts and retain geometry
 on failure; all road labels render after geometry.
 
-На рабочем месте есть отдельная кнопка «Начать обучение интерфейсу»: она
-повторно запускает пошаговый тур после первого входа. В журнале ожидающая
+Пошаговый тур по АРМ открывается сам при первом входе, и до его закрытия в
+полосе занятия видна крупная кнопка «Начать обучение интерфейсу». После
+первого знакомства она становится маленькой кнопкой «Обучение» справа.
+Полоса занятия показывает, вошёл ли обучающийся: вне занятия — выбор занятия
+и «Войти / ожидать старта», в занятии — зелёная отметка «Вы в занятии: …» и
+только красная «Выйти из режима занятия». Кнопка повтора карточки находится в
+верхней тёмной полосе («Начать карточку заново»). В журнале ожидающая
 принятия карточка ДДС показывает оставшееся время до 30-секундного норматива;
 открытие строки не останавливает отсчёт: нужен статус приёма/отказа. В форме преподавателя SIP-номер для
 готовой карточки обозначает исходящий голосовой доклад дежурному службы.

@@ -5,6 +5,19 @@ import pytest
 
 from accounts import Accounts
 from briefing import check, duty_voice, router
+
+
+def test_repeat_superior_call_checks_new_work_not_initial_address():
+    from briefing import progress_reference, check_progress
+    value = {'exercise_mode': 'actions', 'dds_expectation': {'update_keywords': {'done': ['повреждение устранено']}},
+             'events': [{'type': 'situation.update', 'at': '2026-09-28T10:05:00+00:00',
+                         'detail': {'id': 'done', 'text': 'Повреждение устранено', 'unlocks_status': 'Работы завершены'}}]}
+    prior = [{'state': 'accepted', 'service': 'Деп. ЖКХ', 'crew_id': '', 'finished_at': '2026-09-28T10:00:00+00:00'}]
+    reference = progress_reference(value, prior, 'Деп. ЖКХ', '')
+    assert reference and reference['status'] == 'Работы завершены'
+    assert check_progress('У нас всё сделано.', reference)['complete'] is False
+    assert check_progress('Докладываю: повреждение устранено, работы завершены.', reference)['complete'] is True
+    assert progress_reference(value, prior, 'Деп. ЖКХ', 'Бригада 17') is None
 from test_rbac_integration import classroom
 
 
@@ -44,6 +57,7 @@ def test_assigned_crew_contact_is_validated(reporting):
     response = c['client'].post(base(card), headers=c['headers']['student1'], json=request)
     assert response.status_code == 201, response.text
     assert response.json()['crew_id'] == 'Бригада 17'
+    assert response.json()['recipient_hint'] == 'Старший группы'
     request.update(message_id=str(uuid4()), phone='wrong')
     assert c['client'].post(base(card), headers=c['headers']['student1'], json=request).status_code == 422
 
@@ -72,6 +86,7 @@ def test_briefing_dialogue_and_acceptance(reporting):
     assert start.status_code == 201, start.text
     briefing = start.json()
     assert briefing['messages'][0]['content'].startswith('Начальник дежурной смены')
+    assert briefing['recipient_hint'] == 'Начальник дежурной смены'
     assert briefing['state'] == 'open' and briefing['simulated'] is True
     assert briefing['voice'] in ('baya', 'aidar')
     url = base(card) + '/' + briefing['id']

@@ -365,7 +365,7 @@ VAD работает на исходном входе оператора: 60 м�
 | Метод | Путь | Назначение |
 | --- | --- | --- |
 | GET | `/api/v1/health` | Готовность ARI и активные звонки |
-| POST | `/api/v1/calls` | `{session_id: UUID, extension: "201"}` |
+| POST | `/api/v1/calls` | `{session_id: UUID, extension: "201", caller_name?: "Старший бригады 01-1", caller_number?: "+79000000101"}` — имя и номер показываются на IP-телефоне вместо «anonymous» |
 | GET | `/api/v1/calls/{call_id}` | Статус звонка |
 | POST | `/api/v1/calls/{call_id}/hangup` | Завершение и финализация |
 | POST | `/api/v1/calls/{call_id}/mock/audio` | Только mock: сырые PCM фреймы |

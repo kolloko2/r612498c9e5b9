@@ -29,6 +29,16 @@ class CallContext:
     failed: bool = False
     seq: int = 0
     seen_replies: set[str] = field(default_factory=set)
+    caller_name: str | None = None
+    caller_number: str | None = None
+
+    def caller_id(self):
+        """Caller ID для ARI: ``"Имя" <номер>``; без сведений — пусто."""
+        name = (self.caller_name or "").strip()
+        number = self.caller_number or ""
+        if name and number:
+            return f'"{name}" <{number}>'
+        return f'"{name}"' if name else (f"<{number}>" if number else "")
 
     def elapsed_ms(self):
         return max(0, round((time.monotonic() - self.created_at) * 1000))

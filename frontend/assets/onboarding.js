@@ -73,9 +73,23 @@
   place(step);
  }
 
+ // Крупная кнопка нужна до первого знакомства; дальше — маленькая «Обучение» справа.
+ // Крупная кнопка — только при первом заходе: со следующего она маленькая,
+ // даже если тур тогда не открывали (при карточках в журнале он не всплывает).
+ const OFFERED = 'onboardingOffered';
+ let offeredBefore = false;
+ try { offeredBefore = !!localStorage.getItem(OFFERED); localStorage.setItem(OFFERED, '1'); } catch {}
+ function compactButton() {
+  const button = el('startTraining');
+  if (!button || !(stored() || offeredBefore)) return;
+  button.textContent = 'Обучение';
+  button.classList.add('compact');
+ }
+
  function stop() {
   active = false;
   stored('1');
+  compactButton();
   overlay?.remove();
   overlay = box = null;
   window.removeEventListener('resize', reposition);
@@ -138,6 +152,7 @@
  document.addEventListener('DOMContentLoaded', () => {
   el('onboarding')?.addEventListener('click', () => start(0));
   el('startTraining')?.addEventListener('click', () => start(0));
+  compactButton();
   // Первый вход показываем сразу, но только на пустом рабочем месте: если
   // происшествия уже поступили, обучение не должно закрывать собой работу.
   if (!stored()) setTimeout(() => {

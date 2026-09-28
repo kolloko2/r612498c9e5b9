@@ -87,7 +87,7 @@ class CallRuntime:
                     # A speakerphone can feed the generated victim voice back into
                     # the microphone. In bot-controlled modes, do not turn that echo
                     # into a new operator turn. Manual mode keeps full duplex STT.
-                    if not self.barge_open and self.mode != "manual" and (self.playback.active or
+                    if not self.barge_open and self.mode != "manual" and (self.playback.speaking or
                             asyncio.get_running_loop().time() < self.capture_blocked_until):
                         if not self.barge_in(frame):
                             continue
@@ -183,7 +183,7 @@ class CallRuntime:
         await self.recorder.start()
         await self.backend.start()
         if self.topology:
-            await self.topology.originate(self.context.extension)
+            await self.topology.originate(self.context.extension, self.context.caller_id())
             await self.context.answered.wait()
             await self.topology.build()
             await asyncio.gather(*(event.wait() for event in self.media_ready.values()))
@@ -419,7 +419,8 @@ class CallManager:
             raise OverflowError("Training extension already has an active call")
         if self.ari and not self.ari.ready.is_set():
             raise ConnectionError("ARI event connection is unavailable")
-        context = CallContext(request.session_id, request.extension, status=CallStatus.calling)
+        context = CallContext(request.session_id, request.extension, status=CallStatus.calling,
+                              caller_name=request.caller_name, caller_number=request.caller_number)
         runtime = CallRuntime(self, context, request.mode, request.scenario_id)
         self.chat.create(context, request.mode, request.scenario_id)
         key = str(context.call_id)

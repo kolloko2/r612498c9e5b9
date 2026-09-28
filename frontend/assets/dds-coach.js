@@ -1,46 +1,8 @@
 'use strict';
 // Derive guidance from received facts only. Never read the private marking rubric.
 (function(root){
- // Готовые формулировки берутся из сведений этой карточки и полученных докладов,
- // а не из скрытого эталона: ученик видит, что и как записать.
- function facts(s){
-  const c=s.card||{},crew=s.assigned_crew||(s.crew_options||[])[0]||{};
-  const address=[c.city,c.street&&('ул. '+c.street),c.house&&('д. '+c.house)].filter(Boolean).join(', ')||c.address_note||'адрес из карточки';
-  return {address,incident:c.incident_type||'происшествие',crew:crew.id||'бригада',leader:crew.leader||'старший бригады',
-   injured:c.injured?'Есть пострадавшие':'Пострадавших нет'};
- }
  function nextAction(s){
-  if(!s||s.exercise_mode!=='actions')return null;
-  const events=s.events||[], status=s.service_states?.[s.owner_service]?.status, f=facts(s);
-  if(s.status==='Завершена')return {title:'Занятие завершено',text:'Откройте отчёт: в разделе «Решения диспетчера» видно, какие действия выполнены и где ошибки. Кнопка «Получить ИИ-разбор» разберёт ваши записи с цитатами.',target:'audit'};
-  if(!status||['Добавлена','Получена службой'].includes(status))return {title:'Шаг 1. Примите карточку',
-   text:`В «Реагировании» службы «${s.owner_service}» выберите статус «Принята» и напишите комментарий — он обязателен, без него статус не сохранится. Когда ✓ станет зелёной, нажмите её. Первая запись — не позже 3 минут.`,
-   sample:`Принято в работу. ${f.incident}, ${f.address}. Направляем бригаду.`,fill:'responseComment',target:'responseStatus'};
-  if(status==='Не принята')return {title:'Проверьте обоснование отказа',text:'В комментарии должны быть причина и кому передана информация. Затем завершите карточку.',target:'finish'};
-  if((s.crew_options||[]).length&&!s.assigned_crew&&!s.card_locked)return {title:'Шаг 2. Назначьте бригаду',
-   text:`В блоке «Бригада» выберите «${f.crew} · ${f.leader}», в поле «Решение принял» оставьте «Диспетчер» и нажмите «Назначить». Номер наряда в статусе не заменяет назначение бригады.`,target:'crewSelect'};
-  const briefs=events.filter(e=>e.type==='notification.recorded'&&e.detail?.source==='briefing');
-  const crewBrief=briefs.some(e=>e.detail?.counterpart==='crew'||e.detail?.crew_id);
-  const superiorBrief=briefs.some(e=>e.detail?.counterpart==='superior'||(!e.detail?.counterpart&&!e.detail?.crew_id));
-  if(s.assigned_crew&&!crewBrief&&!s.card_locked)return {title:'Шаг 3. Передайте задачу бригаде',
-   text:`Нажмите «Доложить по телефону», адресат — «${f.crew} · ${f.leader}», нажмите «Позвонить». Когда бригада ответит, ${s.sip_extension?'произнесите в телефоне пример ниже':'передайте текст ниже через текстовый доклад'}. После подтверждения в поле «Информацию принял» укажите «${f.leader}» и нажмите «Завершить доклад».`,
-   sample:`${f.crew}, выезжайте: ${f.address}. ${f.incident}. ${f.injured}.`,fill:s.sip_extension||s.text_input_allowed===false?null:'briefingText',target:'openBriefing'};
-  if(!superiorBrief&&!s.card_locked)return {title:`Шаг ${s.assigned_crew?'4':'3'}. Доложите начальнику дежурной смены`,
-   text:`Вышестоящему начальнику докладывают, где и что произошло и кто направлен: так руководство знает обстановку. Нажмите «Доложить по телефону», адресат — «${s.owner_service} · начальник дежурной смены», нажмите «Позвонить» и ${s.sip_extension?'доложите голосом по примеру ниже':'передайте текст ниже'}. В поле «Информацию принял» укажите «Начальник дежурной смены» и нажмите «Завершить доклад». Без этого доклада карточку не завершить.`,
-   sample:`Докладываю: ${f.address}, ${f.incident}. ${f.injured}. Направлена ${f.crew}, старший — ${f.leader}.`,fill:s.sip_extension||s.text_input_allowed===false?null:'briefingText',target:'openBriefing'};
-  if((s.correction_evidence||[]).length&&!(s.error_reports||[]).length&&!s.card_locked)return {title:'Бригада сообщила сведения, отличные от карточки',
-   text:`Сверьте с карточкой: «${s.correction_evidence[0]}». Поля карточки 112 не правятся: нажмите «Сообщить в 112 об ошибке», выберите поле с ошибкой, впишите правильное значение ровно как сказала бригада, источник — «${f.leader}», и кто принял сообщение в 112.`,target:'openErrorReport'};
-  const update=events.find(e=>e.type==='situation.update'&&e.detail?.unlocks_status&&!events.some(a=>a.type==='service.updated'&&a.detail?.service===s.owner_service&&a.detail?.status===e.detail.unlocks_status&&a.seq>e.seq));
-  if(update&&!s.card_locked){const next=update.detail.unlocks_status,last=next==='Работы завершены';
-   return {title:`Отразите доклад: статус «${next}»`,
-    text:`Бригада сообщила: «${update.detail.text}». Выберите статус «${next}», в «Комментарий службы» запишите своими словами всё существенное из доклада — что делают, что установили${last?', каков результат работ':''} — и нажмите ✓. Слова «ок», «готово» не засчитываются.${last?' После этого статуса редактирование закроется, поэтому запишите итог полностью.':''}`,
-    sample:(last?'Работы завершены. ':'')+update.detail.text,fill:'responseComment',target:'responseComment'};}
-  if(s.card_locked){
-   if(!s.processed_at)return {title:'Отметьте отработку',text:'Итоговый статус и результат сохранены. Нажмите «Отметить отработанным»: это отметка по происшествию, ещё не завершение занятия.',target:'processed'};
-   return {title:'Завершите карточку',text:'Нажмите «Завершить карточку». Если остались обязательные действия, они будут перечислены. Затем откройте отчёт и запросите ИИ-разбор.',target:'finish'};
-  }
-  if((s.pending_phone_reports||[]).length)return {title:'Примите доклад бригады',text:'Бригада звонит: ответьте в телефоне и выслушайте доклад до конца. В списке докладов нажмите «Подтвердить получение», затем обновите статус и запишите сведения в комментарий.',target:'situationFeed'};
-  return {title:'Ждите доклада бригады',text:'Следующий доклад поступит сам, после того как предыдущий отражён статусом. Можно нажать «Уточнить ход работ». Не ставьте следующий статус заранее: после доклада о выезде — «Начало реагирования», о прибытии — «Прибытие», о начале работ — «Проведение работ».',target:'requestProgress'};
+  return s?.practice_with_hints && s.exercise_mode==='actions' ? s.practice_hint || null : null;
  }
  if(typeof module!=='undefined')module.exports={nextAction};
  if(!root.document)return;

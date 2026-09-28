@@ -48,6 +48,8 @@ def report_context(value, source, text, crew='', update_id=''):
 
 def fallback(report, question):
     question = question.casefold()
+    if re.search(r'\b(?:когда|через сколько|сколько ждать|время прибытия|срок прибытия|скоро ли)', question) and re.search(r'\b(?:приед|прибуд|прибы|доед|будет|ожид|ждат)', question):
+        return arrival_answer(report)
     if re.search(r'адрес|улиц|дом\b|куда', question):
         card = report.get('card', {})
         address = ', '.join(str(card[k]) for k in
@@ -60,8 +62,24 @@ def fallback(report, question):
     return 'Дополнительных подтверждённых сведений по этому вопросу пока нет. ' + report['text']
 
 
+def arrival_answer(report):
+    """Never convert departure into an invented ETA."""
+    facts = [report.get('text', ''), *reversed(report.get('reports', []))]
+    for fact in facts:
+        if re.search(r'\b(?:прибыл[аи]?|на месте|по адресу)', fact, re.I):
+            return 'Мы уже на месте. ' + fact
+        match = re.search(r'\b(?:прибудем|приедем|будем на месте)\s+(?:через\s+\d+\s+минут|к\s+\d{1,2}[:.]\d{2})', fact, re.I)
+        if match:
+            return 'По последнему докладу: ' + match.group() + '.'
+    return ('Точного времени прибытия пока нет. Бригада выехала, доложим по прибытии.'
+            if any(re.search(r'\b(?:выехал[аи]?|в пути|следуем)', fact, re.I) for fact in facts)
+            else 'Точного времени прибытия пока нет. Сообщим, когда появятся подтверждённые сведения.')
+
+
 async def answer(report, history):
     question = history[-1]['content'].casefold()
+    if re.search(r'\b(?:когда|через сколько|сколько ждать|время прибытия|срок прибытия|скоро ли)', question) and re.search(r'\b(?:приед|прибуд|прибы|доед|будет|ожид|ждат)', question):
+        return arrival_answer(report)
     # Critical operational facts are repeated from the current report, not inferred
     # from a leading question or a request to bypass the exercise.
     if re.search(r'\b(?:заверш|закончи|устран|ликвид|прибы|выех|выезд|приступ|закры|готово|потуш)', question):

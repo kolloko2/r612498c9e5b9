@@ -3,6 +3,8 @@ import asyncio
 import json
 import os
 import random
+import re
+from practice_plan import require_approved, hint as practice_hint, approved as practice_approved
 from contextlib import asynccontextmanager, AsyncExitStack
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -20,7 +22,7 @@ from evaluation import (DEFAULT_RESPONSE_LIMIT_SECONDS, DEFAULT_TIME_LIMIT_SECON
 from grammar import analyze as grammar_report
 from semantic_grading import review as semantic_review, review_dds as semantic_review_dds
 from dds_review import review as dds_decision_review, unfinished as unfinished_dds
-from voice_client import request as voice_request
+from voice_client import caller as caller_id, request as voice_request
 from adaptive import attempt_view, recommend
 from briefing import correction_reveal
 from communication import summary as communication_summary
@@ -479,6 +481,10 @@ def report_due(value: dict, item: dict, planned: list[dict]) -> bool:
     """
     if update_elapsed(value, item) < item['after_seconds']:
         return False
+    if value.get('exercise_mode') != 'actions':
+        # У оператора 112 статусы служб приходят сами (§11.1 инструкции АРМ-112):
+        # их никто не «отражает», поэтому следующий не ждёт предыдущего.
+        return True
     owner = value.get('owner_service')
     if not item.get('unlocks_status') or not owner:
         return True
@@ -657,6 +663,21 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                                 value.get('exercise_mode') == 'actions' and
                                 owner_state.get('status') in ('Работы завершены', 'Отказ от выполнения работ'))
         result['dds_assessment_enabled'] = bool(value.get('dds_expectation'))
+        snapshot = store.load(value['id']).get('scenario') or {}
+        result['practice_with_hints'] = result['practice_with_hints'] and practice_approved(snapshot)
+        result['practice_hint'] = practice_hint(snapshot, result)
+        if value.get('text_input_allowed') is False and (actor.get() or {}).get('role') != 'teacher':
+            # In a voice-only lesson the spoken report is the evidence. Do not
+            # hand its transcript to the student's browser through card state.
+            result['situation_updates'] = [
+                {key: update[key] for key in ('id', 'at', 'unlocks_status', 'transport') if key in update}
+                for update in value.get('situation_updates', [])]
+            result['events'] = [
+                {**event, 'detail': {key: event['detail'][key]
+                                     for key in ('id', 'unlocks_status', 'transport', 'call_id')
+                                     if key in event.get('detail', {})}}
+                if event['type'] == 'situation.update' else event
+                for event in value.get('events', [])]
         result['completion_missing'] = (unfinished_dds(value, value.get('dds_expectation'))
                                         if value.get('exercise_mode') == 'actions' and value['status'] != 'Завершена' else [])
         return result
@@ -673,7 +694,15 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                                for item in (state.get('scenario') or {}).get('updates', [])
                                if item['id'] not in delivered
                                and report_due(value, item, (state.get('scenario') or {}).get('updates', []))]
+            if value.get('text_input_allowed') is False and (actor.get() or {}).get('role') != 'teacher':
+                pending_reports = [{key: report[key] for key in ('id', 'call_id')}
+                                   for report in pending_reports]
+        saves = [event['at'] for event in value.get('events', []) if event['type'] == 'card.saved']
+        repeat_calls = [{'id': key, 'call_id': call['call_id'], 'ended': bool(store.load(call['session_id']).get('ended')),
+                         'recorded': any(at > call['started_at'] for at in saves)}
+                        for key, call in (value.get('repeat_calls') or {}).items()]
         return {**student_view(value), 'incident_status': incident_status(value),
+                'repeat_call_status': repeat_calls,
                 'allowed_service_statuses': visible_statuses(value),
                 'owner_service': value.get('owner_service', ''),
                 'pending_phone_reports': pending_reports,
@@ -809,6 +838,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         scenario = template['scenario'] if template else scenario_snapshot or store.scenario(body.scenario_id)
         if not scenario or not scenario["enabled"]:
             raise HTTPException(404, "Сценарий недоступен")
+        if (assignment or {}).get('practice_with_hints'):
+            require_approved(scenario)
         sid = str(uuid5(NAMESPACE_URL, 'trainer112:restart:' + restart_source['id'])) if restart_source else str(uuid4())
         if restart_source and store.db.execute('SELECT 1 FROM workspace WHERE id=?', (sid,)).fetchone():
             return public(load(sid))
@@ -1219,6 +1250,81 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         return await complete_session(sid, {'role': 'student', 'user_id': (actor.get() or {}).get('id'),
                                             'reason': 'Нерезультативный вызов'})
 
+    def report_heard(call: dict | None, *, ended: bool = False) -> bool:
+        """Первая реплика бригады проиграна полностью; ended — и звонок завершён."""
+        if not call:
+            return False
+        report_state = store.load(call['session_id'])
+        opening = next((reply for reply in report_state.get('replies', {}).values()
+                        if reply and reply.get('type') == 'caller.reply'), None)
+        return (bool(opening) and report_state.get('playback', {}).get(opening['payload']['reply_id']) == 'played'
+                and (not ended or bool(report_state.get('ended'))))
+
+    REPEAT_OPENING = 'Алло, 112? Звоню снова по тому же вызову. '
+
+    async def operator_updates(sid: UUID, value: dict, fresh: list[dict], scenario: dict):
+        """Вводные в полном цикле 112. В карточку сами они не пишутся.
+
+        * Статус службы («Наряд сформирован…») приходит из ДДС автоматически на
+          плитку службы — только в сохранённую карточку, куда служба назначена
+          (§11.1 инструкции по заведению карточки).
+        * Новое от заявителя — это повторный вызов с того же АОН: звонок на
+          учебный телефон после окончания первого разговора (в текстовом режиме —
+          новое сообщение в диалоге). Сведения оператор вносит сам, дополнением.
+        """
+        changed = False
+        for item in fresh:
+            if item.get('unlocks_status'):
+                service = next((name for name in value.get('service_states', {})
+                                if name and name in item.get('source', '')), None) or scenario.get('owner_service')
+                if not value.get('revision') or service not in value.get('service_states', {}):
+                    continue
+                value['service_states'][service] = {**value['service_states'][service],
+                                                    'status': item['unlocks_status'], 'comment': item['text'], 'at': now()}
+                persist(value, 'service.status_received', {'id': item['id'], 'service': service,
+                                                          'status': item['unlocks_status'], 'comment': item['text']})
+                changed = True
+            elif await repeat_call(value, item, scenario):
+                changed = True
+        return public(load(sid) if changed else value)
+
+    async def repeat_call(value: dict, item: dict, scenario: dict) -> bool:
+        main = store.load(str(value['id']))
+        opening = REPEAT_OPENING + item['text'].rstrip('.') + '.'
+        if value.get('transport') != 'sip' or not value.get('sip_extension'):
+            main.setdefault('messages', []).append({'role': 'assistant', 'content': opening})
+            store.save(str(value['id']), main)
+            persist(value, 'caller.repeat_call', {'id': item['id'], 'transport': 'text'})
+            return True
+        # Линия одна: повторный вызов поступает, когда первый разговор закончен.
+        if not value.get('call_id') or not main.get('ended'):
+            return False
+        if any(not store.load(call['session_id']).get('ended') for call in value.get('repeat_calls', {}).values()):
+            return False
+        source = main.get('scenario') or scenario
+        # Тот же человек звонит снова: его слова из первого разговора держат роль
+        # (кто звонит, кем приходится пострадавшему), модель их не придумывает.
+        said = [m['content'][:300] for m in main.get('messages', []) if m.get('role') == 'assistant'][:3]
+        repeat = {**source, 'opening': opening,
+                  'known_facts': [*source.get('known_facts', []),
+                                  *(['Это повторный звонок того же заявителя. В первом звонке вы говорили: '
+                                     + ' / '.join(said)] if said else []),
+                                  'Новое после первого звонка: ' + item['text']]}
+        repeat_sid = str(uuid4())
+        store.save(repeat_sid, {'step': 0, 'seq': 0, 'messages': [], 'replies': {}, 'ended': False, 'scenario': repeat})
+        try:
+            result = await voice('calls', 'POST', {'session_id': repeat_sid, 'extension': value['sip_extension'],
+                                                   'mode': 'auto', 'scenario_id': value['scenario_id'],
+                                                   **citizen_caller(value)})
+        except HTTPException as error:
+            if error.status_code in (409, 429, 503):
+                return False  # Линия занята или голос недоступен: повтор при следующем опросе.
+            raise
+        value.setdefault('repeat_calls', {})[item['id']] = {'session_id': repeat_sid, 'call_id': result['call_id'],
+                                                           'started_at': now()}
+        persist(value, 'caller.repeat_call', {'id': item['id'], 'transport': 'sip', 'call_id': result['call_id']})
+        return True
+
     @api.post('/sessions/{sid}/updates', dependencies=[Depends(serialize_mutation)])
     async def situation_updates(sid: UUID):
         """Доставить вводные, срок которых наступил.
@@ -1236,13 +1342,24 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         if not planned:
             return public(value)
         delivered = {event['detail'].get('id') for event in value['events']
-                     if event['type'] == 'situation.update'}
+                     if event['type'] in ('situation.update', 'service.status_received', 'caller.repeat_call')}
         fresh = [item for item in planned
                  if item['id'] not in delivered and report_due(value, item, planned)]
+        if value.get('exercise_mode') != 'actions':
+            return await operator_updates(sid, value, fresh, scenario)
         if value.get('exercise_mode') == 'actions' and value.get('sip_extension'):
-            # The progress fact remains locked until the student hears and
-            # acknowledges the separate SIP report from the response team.
-            return public(value)
+            # The progress fact remains locked until the student hears the
+            # separate SIP report from the response team. Отдельного
+            # подтверждения ТЗ не требует: доклад, прозвучавший до конца,
+            # вносится в карточку, когда разговор с бригадой завершён.
+            heard = [item for item in planned if item['id'] not in delivered
+                     and report_heard((value.get('field_report_calls') or {}).get(item['id']), ended=True)]
+            for item in heard:
+                call = value['field_report_calls'][item['id']]
+                value.setdefault('situation_updates', []).append({**item, 'at': now(), 'transport': 'sip'})
+                persist(value, 'situation.update', {**item, 'transport': 'sip', 'call_id': call['call_id'],
+                                                    'recorded': 'call_ended'})
+            return public(load(sid) if heard else value)
         if not fresh:
             return public(value)
         for item in fresh:
@@ -1263,8 +1380,18 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             value = json.loads(encoded)
             if value['status'] == 'Завершена':
                 continue
-            if value.get('lesson_id') and lesson_load(value['lesson_id'])['state'] != 'running':
-                continue
+            if value.get('lesson_id'):
+                try:
+                    lesson = lesson_load(value['lesson_id'])
+                except HTTPException as error:
+                    if error.status_code != 404:
+                        raise
+                    # The student was removed from an old lesson. Its saved
+                    # card remains in history, but must not break live polling
+                    # for the current lesson.
+                    continue
+                if lesson['state'] != 'running':
+                    continue
             async with coordinated('workspace-session', value['id']):
                 refreshed = await situation_updates(UUID(value['id']))
                 pending = refreshed.get('pending_phone_reports') or []
@@ -1322,7 +1449,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         store.save(report_sid, {'step': 0, 'seq': 0, 'messages': [], 'replies': {}, 'ended': False,
                                'field_report': report_context(value, crew['leader'], message)})
         result = await voice('calls', 'POST', {'session_id': report_sid,
-                                              'extension': value['sip_extension'], 'mode': 'auto'})
+                                              'extension': value['sip_extension'], 'mode': 'auto',
+                                              **caller_id(f"{crew['leader']}, {crew['id']}", crew.get('phone', ''))})
         value['progress_call'] = {'session_id': report_sid, 'call_id': result['call_id']}
         persist(value, 'progress.requested', {'transport': 'sip', 'call_id': result['call_id']})
         return {**public(value), 'progress_message': 'Примите соединение на IP-телефоне. Новых вводных этот ответ не открывает.'}
@@ -1367,7 +1495,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         store.save(report_sid, {'step': 0, 'seq': 0, 'messages': [], 'replies': {}, 'ended': False,
                                 'field_report': report_context(value, source, item['text'], crew.get('id', ''), update_id)})
         result = await voice('calls', 'POST', {'session_id': report_sid,
-                                              'extension': value['sip_extension'], 'mode': 'auto'})
+                                              'extension': value['sip_extension'], 'mode': 'auto',
+                                              **caller_id(source, crew.get('phone', ''))})
         calls[update_id] = {'session_id': report_sid, 'call_id': result['call_id'], 'started_at': now()}
         persist(value, 'field_report.call_started', {'id': update_id, 'call_id': result['call_id']})
         return public(value)
@@ -1384,10 +1513,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         call = (value.get('field_report_calls') or {}).get(update_id)
         if not item or not call:
             raise HTTPException(409, 'Сначала примите телефонный доклад')
-        report_state = store.load(call['session_id'])
-        opening = next((reply for reply in report_state.get('replies', {}).values()
-                        if reply and reply.get('type') == 'caller.reply'), None)
-        if not opening or report_state.get('playback', {}).get(opening['payload']['reply_id']) != 'played':
+        if not report_heard(call):
             raise HTTPException(409, 'Дождитесь окончания телефонного доклада')
         try:
             await voice('calls/' + call['call_id'] + '/hangup', 'POST', {})
@@ -1429,6 +1555,17 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             persist(value, 'card.linked', {'id': target['id'], 'number': target['number']})
         return public(value)
 
+    def citizen_caller(value):
+        """Вызов 112 от гражданина: на телефоне — «Гражданин» и номер АОН из сценария.
+        Имя заявителя не показывается: оператор узнаёт его в разговоре."""
+        scenario = store.load(str(value['id'])).get('scenario') or {}
+        phone = next((p for p in (value['card'].get('phone'), (value.get('initial_card') or {}).get('phone'),
+                                  (scenario.get('prefilled_card') or {}).get('phone')) if p), '')
+        if not phone:
+            fact = next((f for f in scenario.get('known_facts', []) if re.match(r'\s*Телефон заявителя\s*:', str(f))), '')
+            phone = fact.split(':', 1)[1] if fact else ''
+        return caller_id('Гражданин', phone)
+
     # Клиент голосового модуля общий с докладом дежурному: см. voice_client.py.
     async def voice(path, method='GET', body=None):
         return await voice_request(path, method, body)
@@ -1442,7 +1579,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         if value['call_id']:
             return public(value)
         try:
-            result = await voice("calls", "POST", {"session_id": str(sid), "extension": value.get('sip_extension', '201'), "mode": "auto", "scenario_id": value["scenario_id"]})
+            result = await voice("calls", "POST", {"session_id": str(sid), "extension": value.get('sip_extension', '201'), "mode": "auto", "scenario_id": value["scenario_id"],
+                                                   **citizen_caller(value)})
         except HTTPException:
             persist(value, 'call.failed', {'message': 'Не удалось подключить учебный звонок. Проверьте Voice и SIP-номер.'})
             raise
@@ -1480,7 +1618,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         await engine.handle(str(sid),event(sid,'session.resume',previous_call_id=value['call_id']))
         try:
             result=await voice('calls','POST',{'session_id':str(sid),'extension':value.get('sip_extension','201'),
-                'mode':'auto','scenario_id':value['scenario_id']})
+                'mode':'auto','scenario_id':value['scenario_id'],**citizen_caller(value)})
         except HTTPException:
             persist(value,'call.recovery.failed',{'attempt':recovery['attempts']})
             raise
@@ -1515,6 +1653,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                     extra_calls.add(briefing['call_id'])
         if value.get('progress_call'):
             extra_calls.add(value['progress_call']['call_id'])
+        extra_calls |= {call['call_id'] for call in value.get('repeat_calls', {}).values() if call.get('call_id')}
         for call_id in extra_calls:
             try:
                 await voice('calls/' + call_id + '/hangup', 'POST', {})
@@ -1619,10 +1758,12 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             if not student or not student.get('active'):
                 raise HTTPException(409, 'Учётная запись ученика неактивна')
             if not lesson:
-                learning.assignment_for_student(source['assignment_id'], source['scenario_id'], student)
+                assignment = learning.assignment_for_student(source['assignment_id'], source['scenario_id'], student)
             snapshot = store.load(str(sid))
             if not snapshot.get('scenario'):
                 raise HTTPException(409, 'Нет исходного сценария для повтора')
+            if (lesson or assignment).get('practice_with_hints'):
+                require_approved(snapshot['scenario'])
             if source['status'] != 'Завершена':
                 await stop_session_calls(source)
                 await engine.handle(str(sid), event(sid, 'call.ended'))
@@ -1767,6 +1908,9 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             raise HTTPException(422, 'Переключение режима доступно в смешанном занятии: '
                                      'нужны и сценарии вызова, и готовые карточки')
         available = set(ids) | {item['scenario']['id'] for item in templates}
+        if body.practice_with_hints:
+            for scenario in [store.scenario(sid) for sid in ids] + [t['scenario'] for t in templates]:
+                require_approved(scenario)
         unknown = [sid for sid in body.student_scenarios.values() if sid not in available]
         if unknown:
             raise HTTPException(422, 'Адресное задание ссылается на сценарий вне занятия')
@@ -1833,6 +1977,9 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                 raise HTTPException(409, 'Не всем студентам назначены SIP-номера. Подготовьте занятие заново.')
             scenarios = [store.scenario(sid) or {} for sid in value['scenario_ids']]
             scenarios += [t['scenario'] for t in value.get('templates', [])]
+            if value.get('practice_with_hints'):
+                for scenario in scenarios:
+                    require_approved(scenario)
             if any(not s.get('text_input_allowed', True) for s in scenarios):
                 if any(uid not in value.get('sip_extensions', {}) for uid in members) or (value.get('scenario_ids') and value.get('transport') != 'sip'):
                     raise HTTPException(409, 'Сценарий запрещает текстовый ввод: настройте телефоны всех участников занятия')
@@ -1865,12 +2012,14 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                 completed = sum(c['status'] == 'Завершена' and not c.get('restarted_to') for c in cards)
                 open_ids = [c['id'] for c in cards if c['status'] != 'Завершена']
                 active = open_ids[0] if open_ids else None
+                restart_session_id = next((c['id'] for c in reversed(cards) if not c.get('restarted_to')), None)
                 result.append({'id': v['id'], 'title': v['title'], 'state': v['state'], 'cards_per_student': v['cards_per_student'],
                                'mode': v.get('mode', 'fill'), 'category_ids': v.get('category_ids', []),
                                'transport': v.get('transport', 'text'),
                                'sip_extension': v.get('sip_extensions', {}).get(user['id']),
                                'difficulty': v.get('difficulty'), 'dds_profile': v.get('dds_profile'),
                                'completed': completed, 'active_session_id': active,
+                               'restart_session_id': restart_session_id,
                                'active_session_ids': open_ids,
                                'parallel_cards': v.get('parallel_cards', 1),
                                'guided_step': v.get('guided_step') if v.get('practice_with_hints') else None,
@@ -1966,6 +2115,12 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
     async def set_practice_policy(lid: UUID, body: PracticePolicy):
         async with coordinated('lesson', lid):
             value = lesson_load(lid)
+            if body.practice_with_hints:
+                for scenario in ([t['scenario'] for t in value.get('templates', [])] +
+                                 ([t['scenario'] for t in value['fill_snapshots']] if value.get('fill_snapshots') else
+                                  [store.scenario(sid) for sid in value.get('scenario_ids', [])]) +
+                                 [store.load(c['id']).get('scenario') for c in lesson_cards(lid) if c['status'] != 'Завершена']):
+                    require_approved(scenario)
             value['practice_with_hints'] = body.practice_with_hints
             if not body.practice_with_hints:
                 value['guided_step'] = None

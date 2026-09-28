@@ -1,5 +1,6 @@
 """Classroom groups, assignments, and role-scoped session discovery."""
 from communication import summary as communication_summary
+from practice_plan import require_approved
 import json
 from datetime import datetime, timezone
 from typing import Annotated
@@ -234,6 +235,8 @@ class Learning:
             if owner and owner[0] != user["id"]:
                 raise HTTPException(404, "Сценарий недоступен")
             assignment_id = str(uuid4())
+            if body.practice_with_hints:
+                require_approved(scenario)
             created_at = now()
             with self.store.db:
                 self.store.db.execute(
@@ -248,6 +251,8 @@ class Learning:
             assignment = self._assignment(assignment_id)
             if not assignment or assignment["teacher_id"] != user["id"]:
                 raise HTTPException(404, "Назначение не найдено")
+            if body.practice_with_hints:
+                require_approved(self.store.scenario(assignment['scenario_id']))
             with self.store.db:
                 self.store.db.execute(
                     "UPDATE assignments SET active=?, practice_with_hints=? WHERE id=? AND teacher_id=?",

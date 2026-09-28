@@ -22,12 +22,15 @@ class Topology:
     def channel_ids(self):
         return [self.phone, *self.media.values(), *self.snoops.values()]
 
-    async def originate(self, extension):
-        await self.ari.request("POST", "channels", params={
+    async def originate(self, extension, caller_id=""):
+        params = {
             "endpoint": f"PJSIP/{extension}", "app": self.settings.ari_app,
             "appArgs": "phone", "channelId": self.phone,
             "timeout": int(self.settings.connect_timeout_s),
-        })
+        }
+        if caller_id:
+            params["callerId"] = caller_id
+        await self.ari.request("POST", "channels", params=params)
 
     async def build(self):
         cfg = self.settings

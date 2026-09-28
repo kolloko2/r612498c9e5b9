@@ -14,6 +14,7 @@ import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 import llm
+from practice_plan import PracticeStep, fingerprint as practice_fingerprint, validate_plan, draft as practice_draft
 from llm import complete, configuration, reply as speak
 from briefing import join_speech as briefing_join_speech, check_live as briefing_check_live, duty_reply as briefing_duty_reply, SUPERIOR_TITLE, CREW_VOICE
 from field_dialogue import answer as field_answer, crew_speech, report_speech
@@ -112,6 +113,8 @@ class Scenario(BaseModel):
     dds_profile: DdsProfile = 'general'
     learning_objectives: str = Field('', max_length=1500)
     text_input_allowed: bool = True
+    practice_plan: list[PracticeStep] = Field(default_factory=list, max_length=24)
+    practice_approved_version: str = Field('', max_length=64)
     description: str = Field("", max_length=1000)
     victim_name: str = Field(min_length=1, max_length=80)
     incident: str = Field(min_length=3, max_length=1000)
@@ -139,6 +142,7 @@ class Scenario(BaseModel):
 
     @model_validator(mode='after')
     def visible_correction_evidence(self):
+        validate_plan(self.model_dump())
         if self.enabled and self.dds_expectation:
             expected = self.dds_expectation.expected_corrections
             evidence = self.dds_expectation.correction_evidence
@@ -167,6 +171,7 @@ class ScenarioView(Scenario):
 
 class ScenarioUpdate(Scenario):
     version: str = Field(pattern=r'^[a-f0-9]{64}$')
+    practice_confirm: bool = False
 
 
 def scenario_version(value):
@@ -401,7 +406,11 @@ class Engine:
             # Полнота доклада считается по сохранённой карточке, а не моделью:
             # ответ собеседника не может подтвердить приём вместо проверки.
             started = asyncio.get_running_loop().time()
-            state["duty_report"] = await briefing_check_live(spoken, duty["card"], state.get('duty_report'))
+            if duty.get('purpose') == 'progress':
+                from briefing import check_progress
+                state['duty_report'] = check_progress(spoken, duty['progress_reference'])
+            else:
+                state["duty_report"] = await briefing_check_live(spoken, duty["card"], state.get('duty_report'))
             history = [{"role": m["role"], "content": m["content"]} for m in state["messages"][-8:]]
             history.append({"role": "user", "content": utterance})
             try:
@@ -410,7 +419,9 @@ class Engine:
                                                               duty.get("teacher_corrections"),
                                                               duty.get("teacher_materials"),
                                                               transcript=spoken, report=state["duty_report"],
-                                                              timeout_seconds=llm.VOICE_REPLY_TIMEOUT_SECONDS - (asyncio.get_running_loop().time() - started)))
+                                                              timeout_seconds=llm.VOICE_REPLY_TIMEOUT_SECONDS - (asyncio.get_running_loop().time() - started),
+                                                              purpose=duty.get('purpose', 'initial'),
+                                                              progress=duty.get('progress_reference')))
             except (httpx.HTTPError, ValueError, KeyError, TypeError):
                 text = "Повторите, пожалуйста, последнюю фразу."
                 state["provider_error"] = "Сервис диалога недоступен. Повторите запрос позднее."
@@ -578,8 +589,14 @@ async def validate_scenario(scenario: Scenario):
     return {"valid": True, "rules": rules_for(scenario.model_dump())}
 
 
+@app.post('/api/v1/scenarios/practice-draft', dependencies=[Depends(authorized), Depends(accounts.require('teacher'))])
+async def draft_practice(scenario: Scenario):
+    return {'steps': practice_draft(scenario.model_dump())}
+
+
 @app.post("/api/v1/scenarios", response_model=ScenarioView, status_code=201, dependencies=[Depends(authorized), Depends(accounts.require('teacher'))])
 async def create_scenario(scenario: Scenario, user=Depends(accounts.require('teacher'))):
+    scenario.practice_approved_version = ''
     if store.scenario(scenario.id):
         raise HTTPException(409, "Сценарий с таким кодом уже существует")
     with store.db:
@@ -606,7 +623,19 @@ async def update_scenario(scenario_id: str, scenario: ScenarioUpdate, user=Depen
         raise HTTPException(404, "Сценарий не найден")
     if scenario.version != scenario_version(current):
         raise HTTPException(409, 'Сценарий изменён в другом окне. Ваши поля сохранены в форме: создайте копию или перечитайте актуальную версию.')
-    value = store.put_scenario(Scenario.model_validate(scenario.model_dump(exclude={'version'})))
+    updated = Scenario.model_validate(scenario.model_dump(exclude={'version', 'practice_confirm'}))
+    updated.practice_approved_version = ''
+    digest = practice_fingerprint(updated.model_dump())
+    if scenario.practice_confirm:
+        if not updated.practice_plan:
+            raise HTTPException(422, 'Подготовьте подсказки перед утверждением')
+        expected_keys = {(s['phase'], s['update_id']) for s in practice_draft(updated.model_dump())}
+        if {(s.phase, s.update_id) for s in updated.practice_plan} != expected_keys:
+            raise HTTPException(422, 'Обновите черновик: нужны подсказки для всех этапов и докладов сценария')
+        updated.practice_approved_version = digest
+    elif current.get('practice_approved_version') == digest:
+        updated.practice_approved_version = digest
+    value = store.put_scenario(updated)
     return scenario_view(value, user)
 
 

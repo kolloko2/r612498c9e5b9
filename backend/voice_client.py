@@ -12,6 +12,7 @@ TLS и то же сообщение об ошибке.
 from __future__ import annotations
 
 import os
+import re
 
 import httpx
 from fastapi import HTTPException
@@ -44,3 +45,15 @@ async def request(path: str, method: str = "GET", body=None):
         raise HTTPException(503, 'Голосовой модуль недоступен. Проверьте Voice и назначенный учебный SIP-номер.') from None
     except httpx.HTTPError:
         raise HTTPException(503, "Голосовой модуль недоступен. Проверьте Voice и назначенный учебный SIP-номер.")
+
+
+def caller(name: str = "", phone: str = "") -> dict:
+    """Кто звонит на учебный IP-телефон: имя и номер (АОН) для экрана MicroSIP.
+
+    Без этих сведений телефон показывает «anonymous». Кавычки, угловые скобки и
+    управляющие символы из имени убираются: они ломают заголовок SIP From.
+    """
+    cleaned = re.sub(r'["<>\\\x00-\x1f]', "", str(name or "")).strip()[:60]
+    digits = re.sub(r"\D", "", str(phone or ""))[:15]
+    number = ("+" + digits if str(phone or "").strip().startswith("+") else digits) if digits else ""
+    return {key: val for key, val in (("caller_name", cleaned), ("caller_number", number)) if val}
