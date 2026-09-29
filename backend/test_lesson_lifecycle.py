@@ -319,6 +319,8 @@ def test_adaptive_is_off_by_default(classroom):
 
 
 def test_guided_step_is_broadcast_to_the_group(classroom):
+    from test_practice_restart import approve_fixture
+    approve_fixture(classroom)
     """«Делай как я»: преподаватель ведёт группу по шагам вводного курса."""
     client, h = classroom["client"], classroom["headers"]
     lesson = create_lesson(classroom, practice_with_hints=True).json()

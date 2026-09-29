@@ -170,3 +170,20 @@ and Backend/PostgreSQL stop/restart remain host administration operations.
 
 Focused checks:13 worker tests,2 Backend operations/RBAC tests,3 existing BFF tests,
 Python/JavaScript syntax and secret-pattern/diff checks. No load run or SIP call.
+
+## Administrator access reset
+
+Passwords are stored as scrypt hashes and cannot be recovered. To hand full access to a
+reviewer or restore a lost administrator, run on the server (Backend image built from this
+revision or later):
+
+```bash
+docker compose --env-file .env.docker -f docker-compose.yml exec backend python reset_admin.py --username tech.admin
+```
+
+The command creates the administrator or sets a new generated password, re-activates the
+account, restores the admin role, and clears lockout, MFA and old sessions. The password is
+printed once; the audit log records `account.admin_created` or `account.admin_reset` without
+it. To set a chosen password instead, pass `RESET_ADMIN_PASSWORD` through the environment
+(`exec -e RESET_ADMIN_PASSWORD ...`), never on the command line. Hand the credentials over
+through a protected channel and change the password after the review.

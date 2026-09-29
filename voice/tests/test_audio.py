@@ -102,3 +102,29 @@ async def test_close_cancels_tasks_even_when_media_flush_fails():
         await playback.close()
     assert playback.worker.done() and playback.renderer.done()
     await peer.close()
+
+
+async def test_reply_waiting_for_the_operator_is_not_speaking():
+    """Ответ, ждущий конца фразы оператора, не глушит микрофон.
+
+    Иначе VAD не получает тишину, фраза не заканчивается и ответ вместе с
+    дальнейшими репликами оператора висит до конца звонка (живая приёмка 28.09).
+    """
+    quiet = asyncio.Event()  # operator currently speaking
+    peer = MockPeer(lambda pcm: None)
+
+    async def on_error(*args, **kwargs):
+        pass
+
+    playback = Playback(Settings(_env_file=None), peer, Environment(), quiet, on_error, lambda *args: None)
+    try:
+        reply = CallerReply(reply_id=uuid4(), text="Ответ заявителя")
+        await playback.submit(reply, TurnMetrics(str(reply.reply_id)))
+        await asyncio.sleep(0.02)
+        assert playback.active and not playback.speaking
+        quiet.set()
+        await asyncio.sleep(0.05)
+        assert not playback.waiting_for_quiet
+    finally:
+        await playback.close()
+        await peer.close()

@@ -15,6 +15,17 @@ from starlette.responses import JSONResponse
 DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
+
+def route_template(scope) -> str:
+    """Шаблон маршрута без значений параметров. Новые FastAPI хранят во вложенном
+    роутере путь без префикса подключения; префикс восстанавливается по сегментам пути."""
+    template = getattr(scope.get("route"), "path", None)
+    if not template:
+        return "[unmatched]"
+    parts = scope.get("path", "").rstrip("/").split("/")
+    keep = len(parts) - template.rstrip("/").count("/")
+    return "/".join(parts[:keep]) + template if keep > 1 else template
+
 class VoiceAuditLog:
     minimum_retention_days = 183
 
@@ -88,7 +99,7 @@ class VoiceAuditMiddleware:
             await self.app(scope, receive, observed)
         finally:
             event = {**base, "at": time.time(), "phase": "finished", "status": status,
-                     "route": getattr(scope.get("route"), "path", "[unmatched]"),
+                     "route": route_template(scope),
                      "elapsed_ms": round((time.monotonic() - started) * 1000)}
             try:
                 await asyncio.to_thread(self.audit.append, event)
@@ -134,7 +145,7 @@ class VoiceAuditMiddleware:
         finally:
             event = {"request_id": request_id, "at": time.time(), "method": "WS",
                      "phase": "finished", "actor": "service", "status": status,
-                     "route": getattr(scope.get("route"), "path", "[unmatched]"),
+                     "route": route_template(scope),
                      "received_messages": received_messages, "sent_messages": sent_messages,
                      "received_bytes": received_bytes, "sent_bytes": sent_bytes,
                      "elapsed_ms": round((time.monotonic() - started) * 1000)}

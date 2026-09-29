@@ -180,7 +180,9 @@ async def run(args: argparse.Namespace) -> dict:
             stream = log_path.open("w", encoding="utf-8")
             process = subprocess.Popen(
                 [sys.executable, "-m", "uvicorn", "server:app", "--host", "127.0.0.1", "--port", str(port),
-                 "--log-level", "warning", "--no-access-log"],
+                 "--log-level", "warning", "--no-access-log",
+                 # Несколько процессов Backend — как две реплики поставки; только с PostgreSQL.
+                 *(["--workers", str(args.backend_workers)] if name == "backend" and args.backend_workers > 1 else [])],
                 cwd=cwd, env=env, stdout=stream, stderr=subprocess.STDOUT,
             )
             process._acceptance_stream = stream  # type: ignore[attr-defined]
@@ -354,7 +356,7 @@ async def run(args: argparse.Namespace) -> dict:
             "generated_at_epoch": round(time.time(), 3),
             "synthetic_only": True,
             "configuration": {
-                "backend_workers": 1, "frontend_workers": 1, "database": "temporary SQLite",
+                "backend_workers": args.backend_workers, "frontend_workers": 1, "database": "temporary SQLite",
                 "llm_provider": "mock", "read_users": args.read_users,
                 "database": "postgresql" if args.database_url else "sqlite",
                 "security_audit": bool(args.security_audit),
@@ -432,9 +434,13 @@ def main() -> int:
     parser.add_argument("--keep-temp", action="store_true")
     parser.add_argument("--database-url", default=None,
                         help="PostgreSQL URL to measure the deployed database instead of temporary SQLite")
+    parser.add_argument("--backend-workers", type=int, default=1,
+                        help="Backend processes sharing the port, like the two replicas of the deployment (PostgreSQL only)")
     parser.add_argument("--security-audit", action="store_true",
                         help="Enable SECURITY_AUDIT_DIR, as the Compose deployment does")
     args = parser.parse_args()
+    if args.backend_workers > 1 and not args.database_url:
+        parser.error("several Backend processes need a shared PostgreSQL database (--database-url)")
     if args.read_users < args.write_sessions or min(args.write_sessions, args.write_seconds,
                                                      args.offered_write_rate, args.required_write_rate) <= 0:
         parser.error("counts, rates and duration must be positive; read-users must cover write-sessions")

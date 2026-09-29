@@ -90,7 +90,7 @@ def test_next_report_waits_until_previous_is_reflected():
     start = datetime.now(timezone.utc) - timedelta(seconds=600)
     planned = [{'id': 'go', 'after_seconds': 10, 'unlocks_status': 'Начало реагирования'},
                {'id': 'there', 'after_seconds': 20, 'unlocks_status': 'Прибытие'}]
-    value = {'created_at': start.isoformat(), 'owner_service': 'Деп. ЖКХ', 'events': [
+    value = {'created_at': start.isoformat(), 'exercise_mode': 'actions', 'owner_service': 'Деп. ЖКХ', 'events': [
         {'type': 'situation.update', 'at': (start + timedelta(seconds=15)).isoformat(), 'detail': {'id': 'go'}}]}
     assert report_due(value, planned[0], planned)
     assert not report_due(value, planned[1], planned)  # статус по «выехали» ещё не поставлен

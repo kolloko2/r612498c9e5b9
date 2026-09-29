@@ -1,0 +1,20 @@
+.route{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px;position:sticky;top:0;z-index:5;background:#eceff2;padding:8px 0}
+.route a{display:flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid #cfd6dc;border-radius:999px;background:#fff;color:#243240;text-decoration:none;font-weight:600}
+.route a b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#34495a;color:#fff;font-size:12px}
+.route a:hover{border-color:#34495a}
+section.panel{scroll-margin-top:64px}
+.pairs{display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:6px 16px;margin:0}.pairs dt{color:#5b6670}.pairs dd{margin:0;word-break:break-word}
+.norms{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px}
+.norm{border:1px solid #dde3e8;border-radius:10px;padding:12px}.norm h3{margin:0 0 4px;font-size:15px}.norm p{margin:0 0 8px;color:#52514e}
+.status{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid;white-space:nowrap}
+.status.good{color:#0a6b0a;border-color:#0ca30c;background:#eaf7ea}.status.good::before{content:'✓ '}
+.status.critical{color:#a12828;border-color:#d03b3b;background:#fbeaea}.status.critical::before{content:'✕ '}
+.status.neutral{color:#52514e;border-color:#b9bcc0;background:#f3f4f5}
+.actor{display:inline-block;padding:2px 8px;border-radius:6px;font-size:12px}.actor.student{background:#e6f0fb;color:#1d4f8f}.actor.system{background:#f0f0ee;color:#52514e}
+.call{border:1px solid #dde3e8;border-radius:10px;padding:12px;margin-bottom:12px}.call-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.call-head h3{margin:0}
+.transcript{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:6px}.transcript li{padding:8px 10px;border-radius:8px;max-width:760px}.transcript b{display:block;font-size:12px;color:#5b6670;margin-bottom:2px}
+.transcript .caller{background:#f5f5f3}.transcript .student{background:#e6f0fb;margin-left:auto}
+.score{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px}.score strong{font-size:34px}
+audio{max-width:100%}
+@media print{header .identity,.route{display:none}section.panel{break-inside:avoid-page}.transcript .student{margin-left:0}}
+.record-tools{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}.record-tools button{padding:4px 10px;font-size:13px}

@@ -23,6 +23,8 @@
 <label>Первая реплика<textarea data-key="opening" required minlength="3" maxlength="1000"></textarea></label>
 <label><span><input data-key="enabled" type="checkbox"> Доступен для новых занятий</span></label>
 <label><span><input data-key="text_input_allowed" type="checkbox" checked> Разрешить текстовый ввод диалога и докладов</span><small>Если выключено, нужен IP-телефон и SIP-номер ученика. Заполнение карточки и комментариев остаётся доступным.</small></label>
+<section id="practiceEditor"><h3>Подсказки для практики ДДС</h3><p>Подготовьте черновик, проверьте каждый шаг и утвердите. Изменение сценария требует повторного утверждения. Уже выданные карточки сохраняют прежнюю версию.</p><p id="practiceState"></p><textarea data-key="practice_plan" hidden></textarea><button id="practiceDraft" type="button">Подготовить черновик подсказок</button><div id="practiceSteps"></div><button id="practiceApprove" type="button">Сохранить и утвердить подсказки</button></section>
+<script src="/assets/practice-editor.js" defer></script>
 <footer><button id="save" type="submit">Сохранить</button><button id="validate" type="button">Проверить структуру</button></footer>
 </fieldset></form><p class="hint">Отключение сценария запрещает новые попытки по его назначениям, но не удаляет историю.</p>
 </main></body></html>

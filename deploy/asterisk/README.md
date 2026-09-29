@@ -57,6 +57,8 @@ ports to the Internet. UDP port publishing on Docker Desktop must preserve the
 same RTP range. NAT behaviour still needs the physical media-spike acceptance test
 in `voice/README.md`; a healthy container does not prove phone audio or echo isolation.
 
+Browser phones: for every provisioned extension N the renderer adds endpoint `wN` (`webrtc=yes`, DTLS-SRTP, ICE, PCMU/PCMA) on a `ws`/`wss` transport served by the Asterisk HTTP server at `/ws`. Its password is HMAC-SHA256(`ARI_PASSWORD`, `webrtc:N`), truncated to 32 hex characters; Voice derives the same value, so no extra secret is configured. With `SIP_EXTERNAL_ADDRESS` set, `rtp.conf` maps the container addresses to it in `[ice_host_candidates]`, so browsers receive a reachable ICE candidate. The Compose service sets `hostname: asterisk`: the hostname appears in From/Contact headers, and a container ID that starts with digits is rejected by the JsSIP parser. Extension `100` in `training-only` is a headset echo test and routes nowhere else.
+
 The image health check verifies Asterisk 22, ARI/HTTP on 8088, PJSIP, WebSocket
 media, Stasis, and softmix modules. Inspect registrations with:
 

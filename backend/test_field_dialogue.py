@@ -1,6 +1,19 @@
 import pytest
 import llm
 from field_dialogue import answer, report_context
+
+
+@pytest.mark.asyncio
+async def test_arrival_question_uses_confirmed_eta_not_departure_as_answer(monkeypatch):
+    async def no_model(*args, **kwargs):
+        raise AssertionError('Arrival time must not be invented by the model')
+    monkeypatch.setattr(llm, 'reply', no_model)
+    history = [{'role': 'user', 'content': 'Когда приедете?'}]
+    reply = await answer({'text': 'Бригада выехала к месту вызова.'}, history)
+    assert 'Точного времени прибытия пока нет' in reply
+    assert 'выехала' in reply
+    assert 'через' not in reply
+    assert 'уже на месте' in await answer({'text': 'Бригада прибыла на место.'}, history)
 from test_dialogue import event
 from server import Engine, Store
 from uuid import uuid4

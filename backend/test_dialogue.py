@@ -313,3 +313,33 @@ async def test_voice_playback_receipt_is_persisted_and_idempotent(tmp_path):
     assert await engine.handle(sid, receipt) is None
     assert await engine.handle(sid, receipt) is None
     assert store.load(sid)['playback'][reply['payload']['reply_id']] == 'played'
+
+
+@pytest.mark.asyncio
+async def test_operator_phrase_is_visible_before_the_reply_and_not_duplicated():
+    import asyncio
+    release = asyncio.Event()
+
+    async def slow(messages):
+        await release.wait()
+        # Модель получает только роль и текст, без служебной пометки события.
+        assert all(set(m) == {'role', 'content'} for m in messages)
+        return 'Помогите, человеку плохо'
+    store = Store(':memory:'); engine = Engine(store, slow); sid = str(uuid4())
+    scenario = Scenario.model_validate({**store.first_enabled(), 'id': 'visible_phrase'})
+    store.put_scenario(scenario)
+    await engine.handle(sid, event(sid, 'call.connected', scenario_id='visible_phrase'))
+    utterance = event(sid, 'operator.utterance', 'Сто двенадцать, что случилось?')
+    task = asyncio.create_task(engine.handle(sid, utterance))
+    for _ in range(50):
+        await asyncio.sleep(0.01)
+        if any(m['role'] == 'user' for m in store.load(sid)['messages']):
+            break
+    # Модель ещё думает, а фраза оператора уже в диалоге.
+    assert [m['role'] for m in store.load(sid)['messages']] == ['assistant', 'user']
+    release.set()
+    await task
+    assert [m['role'] for m in store.load(sid)['messages']] == ['assistant', 'user', 'assistant']
+    # Повторная доставка того же события ничего не добавляет.
+    await engine.handle(sid, utterance)
+    assert len(store.load(sid)['messages']) == 3

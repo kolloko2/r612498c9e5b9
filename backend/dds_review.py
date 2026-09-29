@@ -245,7 +245,9 @@ def _briefing(value: dict, expectation: dict) -> list[dict]:
     if value.get('assigned_crew'):
         checks.append(_check("crew_briefing", "Задача передана бригаде по телефону", bool(crew_reports),
                              "" if crew_reports else "Бригаде не передан адрес и обстоятельства."))
-    source = reports or crew_reports
+    # The first accepted call conveys the original card. Later calls to the
+    # superior report progress and must not be regraded as initial dispatch.
+    source = reports[:1] or crew_reports[:1]
     if source:
         # Факты доклада сверены при его приёме: незавершённый доклад в
         # телефонограмму не попадает, поэтому наличие записи и есть полнота.
@@ -254,7 +256,8 @@ def _briefing(value: dict, expectation: dict) -> list[dict]:
         # against which the dispatcher is assessed.
         card = reference_card(value, expectation, at=source[-1].get('at'))
         accepted_report = source[-1].get('briefing_report') or {}
-        verified_report = briefing_check(spoken, card, accepted_report.get('semantic_evidence'))
+        verified_report = briefing_check(spoken, card, accepted_report.get('semantic_evidence'),
+                                         accepted_report.get('field_evidence'))
         lost = [item['label'] for item in verified_report['checks']
                 if not item['passed']]
         lost.extend(word for word in expectation.get('brief_keywords', [])
@@ -262,10 +265,15 @@ def _briefing(value: dict, expectation: dict) -> list[dict]:
         checks.append(_check("briefing_facts", "Сведения переданы без потерь", not lost,
                              ("В докладе не прозвучало: " + ", ".join(lost)) if lost else "",
                              critical=True, actual=spoken, missing=lost))
-        credited = next((item for item in verified_report['checks'] if item.get('granted_by') == 'model'), None)
-        if credited and not lost:
-            checks[-1].update(granted_by='model',
-                              detail=f"Тип происшествия засчитан по смыслу: «{credited['quote']}».")
+        by_model = [item for item in verified_report['checks'] if item.get('granted_by') == 'model']
+        approximate = [item['label'] for item in verified_report['checks'] if item.get('granted_by') == 'approximate']
+        if (by_model or approximate) and not lost:
+            notes = [f"{item['label']} — «{item['quote']}»" for item in by_model]
+            detail = ("Засчитано ИИ по смыслу: " + "; ".join(notes) + "." if notes else "")
+            if approximate:
+                detail = (detail + " " if detail else "") + ("ИИ был недоступен, приблизительно засчитано: "
+                                                             + ", ".join(approximate) + ".")
+            checks[-1].update(granted_by='model' if by_model else 'approximate', detail=detail)
     return checks
 
 
@@ -339,8 +347,8 @@ def review(value: dict, expectation: dict | None) -> dict | None:
         checks.append(_check('receipt_time',
                              f"Карточка открыта за {timing.get('response_limit_seconds') or 30} секунд",
                              timing.get('response_within_limit') is True,
-                             'Карточка не открыта.' if not value.get('opened_at')
-                             else f"Открытие через {timing.get('response_seconds')} с.",
+                             f"Открытие через {timing.get('response_seconds')} с."
+                             if timing.get('response_seconds') is not None else 'Карточка не открыта.',
                              critical=True))
         checks.append(_check('first_record',
                              f"Первая запись (статус и текст) за {timing.get('limit_seconds') or 180} секунд",

@@ -11,6 +11,7 @@ class Playback:
 
     def __init__(self, settings, peer, environment, quiet, on_error, on_fatal, call_id="test", on_status=None):
         self.settings, self.peer, self.environment, self.quiet = settings, peer, environment, quiet
+        self.waiting_for_quiet = False
         self.on_error, self.on_fatal = on_error, on_fatal
         self.call_id = call_id
         self.on_status = on_status
@@ -32,6 +33,16 @@ class Playback:
     @property
     def active(self):
         return self.current is not None and not self.current.done()
+
+    @property
+    def speaking(self):
+        """Ответ звучит, а не ждёт, пока оператор договорит.
+
+        Пока ответ ждёт тишины, речь оператора должна доходить до VAD: иначе
+        VAD не увидит конца фразы, тишина не наступит, и ответ с дальнейшими
+        репликами оператора зависнут до конца звонка.
+        """
+        return self.active and not self.waiting_for_quiet
 
     async def submit(self, reply, metrics):
         if reply.should_interrupt:
@@ -87,7 +98,11 @@ class Playback:
 
     async def _reply(self, reply, metrics):
         if not reply.should_interrupt:
-            await self.quiet.wait()
+            self.waiting_for_quiet = True
+            try:
+                await self.quiet.wait()
+            finally:
+                self.waiting_for_quiet = False
         names = [self.settings.tts_provider]
         if self.settings.tts_fallback_provider:
             names.append(self.settings.tts_fallback_provider)

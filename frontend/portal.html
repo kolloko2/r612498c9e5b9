@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="/assets/apple-touch-icon.png"><title>Кабинет · Тренажёр 112</title>
   <link rel="stylesheet" href="/assets/portal.css">
+  <script src="/assets/mfa.js" defer></script>
   <script src="/assets/portal.js" defer></script>
 <link rel="stylesheet" href="/assets/cabinet.css"></head>
 <body>
@@ -34,6 +35,7 @@
           <label>Ошибок входа до блокировки<input id="policyFailures" type="number" min="3" max="10" required></label>
           <label>Блокировка входа, с<input id="policyLock" type="number" min="30" max="3600" required></label>
           <label>Хранить журнал входов и учётных записей, дней (не менее 183)<input id="policyRetention" type="number" min="183" max="3650" required></label>
+          <fieldset class="checks"><legend>Обязательный двухфакторный вход для ролей</legend><label class="check"><input type="checkbox" name="mfaRole" value="admin"> Администратор</label><label class="check"><input type="checkbox" name="mfaRole" value="teacher"> Преподаватель</label><label class="check"><input type="checkbox" name="mfaRole" value="student"> Студент</label></fieldset>
           <label>Уровень журнала сервера<select id="policyLogLevel"><option value="DEBUG">Отладка</option><option value="INFO">Информация</option><option value="WARNING">Предупреждения</option><option value="ERROR">Только ошибки</option></select></label>
           <button class="primary" type="submit">Сохранить политику</button>
         </form>
@@ -57,7 +59,33 @@
           <div id="assignments" class="cards compact"></div>
         </section>
       </div>
-<section class="panel"><h2>Общее занятие · серия карточек</h2><form id="lessonForm" class="stack"><label>Название<input id="lessonTitle" required maxlength="160"></label><label>Группа<select id="lessonGroup" required></select></label><label>Категории событий (не выбрано — все)<select id="lessonCategories" multiple size="4"></select></label><label>Режим<select id="lessonMode"><option value="actions">Работа диспетчера ДДС · готовые карточки</option><option value="fill">Полный цикл 112 · приём вызова и заполнение</option><option value="mixed">Смешанное занятие</option></select></label><label class="check"><input type="checkbox" id="lessonModeSwitch"> Разрешить обучающемуся переключать режим (нужно смешанное занятие)</label><label>Готовые карточки, сформированные из сценариев<select id="lessonGenerated" multiple size="4" disabled></select></label><label>Карточки из завершённых работ<select id="lessonSources" multiple size="5" disabled></select></label><label>Сценарии (можно несколько)<select id="lessonScenarios" multiple required size="5"></select></label><label>Карточек каждому студенту<input id="lessonCount" type="number" min="1" max="200" value="3" required></label><label>Одновременно открытых карточек<input id="lessonParallel" type="number" min="1" max="10" value="1" required></label><label class="check"><input type="checkbox" id="lessonAdaptive"> Подбирать сложность по результатам обучающегося</label><div id="lessonPlaces" class="stack"></div><label><span><input id="lessonUnlimited" type="checkbox"> Выдавать карточки до остановки преподавателем</span></label><p>Готовая карточка поступает данными. При назначенном SIP-номере диспетчер может отдельно позвонить дежурному службы. Выбор карточек случайный, возможны повторения. После подготовки нажмите «Начать».</p><button>Подготовить занятие</button></form><div id="lessons" class="cards"></div></section>
+<section class="panel lesson-builder"><h2>Новое занятие для группы</h2><p class="hint">Заполните четыре шага. Внизу видно, что именно получит каждый обучающийся; после подготовки нажмите «Начать» в карточке занятия.</p><form id="lessonForm" class="stack">
+ <fieldset class="step"><legend><b>1</b> Что и кому</legend>
+  <label>Название<input id="lessonTitle" required maxlength="160" placeholder="Например: Реагирование ДДС, занятие 3"></label>
+  <label>Группа<select id="lessonGroup" required></select></label>
+  <label>Режим<select id="lessonMode"><option value="actions">Работа диспетчера ДДС · готовые карточки</option><option value="fill">Полный цикл 112 · приём вызова и заполнение</option><option value="mixed">Смешанное занятие</option></select></label>
+  <label class="check"><input type="checkbox" id="lessonModeSwitch"> Разрешить обучающемуся переключать режим (только для смешанного занятия)</label>
+ </fieldset>
+ <fieldset class="step"><legend><b>2</b> Какие карточки</legend>
+  <label>Категории событий (не выбрано — все)<select id="lessonCategories" multiple size="4"></select></label>
+  <label>Готовые карточки, сформированные из сценариев<select id="lessonGenerated" multiple size="4" disabled></select></label>
+  <label>Карточки из завершённых работ<select id="lessonSources" multiple size="5" disabled></select></label>
+  <label>Сценарии (можно несколько)<select id="lessonScenarios" multiple required size="5"></select></label>
+  <p class="hint">Выбор карточек случайный, возможны повторения. Адресно конкретному месту сценарий назначается в шаге 3.</p>
+ </fieldset>
+ <fieldset class="step" id="lessonHow"><legend><b>3</b> Как проходит</legend>
+  <div class="columns"><label>Карточек каждому студенту<input id="lessonCount" type="number" min="1" max="200" value="3" required></label><label>Одновременно открытых карточек<input id="lessonParallel" type="number" min="1" max="10" value="1" required></label></div>
+  <label><span><input id="lessonUnlimited" type="checkbox"> Выдавать карточки до остановки преподавателем</span></label>
+  <label class="check"><input type="checkbox" id="lessonAdaptive"> Подбирать сложность по результатам обучающегося</label>
+  <div id="lessonPlaces" class="stack"></div>
+  <p class="hint">Готовая карточка поступает данными. При назначенном SIP-номере диспетчер может отдельно позвонить дежурному службы.</p>
+ </fieldset>
+ <fieldset class="step" id="lessonNorms"><legend><b>4</b> Нормативы и оценка</legend>
+  <div class="columns"><label>Норматив реакции, секунд<input id="lessonNorm" type="number" min="10" max="3600" placeholder="30 (по сценарию)"></label><label>Порог зачёта, баллов<input id="lessonPass" type="number" min="0" max="100" step="5" placeholder="по правилам сценария"></label></div>
+  <p class="hint">Норматив реакции — от поступления карточки до её открытия (ДДС) или до первого действия (приём вызова 112). Пусто — норматив сценария, по умолчанию 30 секунд. Порог зачёта: попытка с баллом ниже не засчитывается.</p>
+ </fieldset>
+ <p id="lessonSummary" class="lesson-summary" role="status" aria-live="polite"></p>
+ <button class="primary">Подготовить занятие</button></form><div id="lessons" class="cards"></div></section>
       <section class="panel sessions"><h2>Занятия</h2><button id="refreshSessions" type="button">Обновить</button><div id="sessions" class="cards compact"></div></section>
       <dialog id="sessionDialog"><div class="dialog-head"><h2>Занятие</h2><button id="closeSession" type="button" aria-label="Закрыть">×</button></div><div id="sessionDetail"></div></dialog>
     </section>

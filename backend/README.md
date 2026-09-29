@@ -1,5 +1,29 @@
 # Backend
 
+Student lesson summaries include `restart_session_id` for the latest
+non-superseded own card. This lets the training strip restart a completed
+one-card lesson without relying on which incident the student currently views.
+
+`student/inbox/poll` skips saved cards from lessons that no longer include the
+student. Removing a student from an old group therefore does not stop live
+telephone-report updates in the student's current card.
+
+For voice-only DDS lessons, the student response omits report text and source
+from delivered situation updates and their events. Authored practice hints in
+this mode give only a neutral status/comment instruction; the full report remains
+available to internal grading and the teacher.
+
+Создание телефонного доклада возвращает `recipient_hint` из известной должности
+собеседника; приём подтверждения не требует выдумывать фамилию.
+
+`field_dialogue.py` отвечает на вопрос о времени прибытия без выдуманного срока.
+`briefing.py` различает первичный доклад и повторный доклад о ходе работ после
+новой вводной; голосовая и текстовая ветки используют одинаковую проверку.
+
+`practice_plan.py` validates authored coaching and selects one approved step from
+the event history. No runtime generation; approval is tied to the entire scenario.
+Regression: test_practice_plan.py, test_scenario_authoring.py, test_practice_restart.py.
+
 Practice permission defaults off and is teacher-controlled at assignment/lesson
 issuance. A backward-compatible assignments column stores this setting; existing
 rows remain off. `test_practice_restart.py` covers audited retries, access control,

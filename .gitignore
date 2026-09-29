@@ -57,3 +57,4 @@ output/documentation-*/~$*
 
 # Внутренние рабочие заметки команды (не публикуются)
 docs-internal/
+output/private/

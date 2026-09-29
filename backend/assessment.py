@@ -9,6 +9,36 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from cluster import Coordinator, ClusterUnavailable, LockUnavailable
+import forecast as forecasting
+
+# Действия обучающегося: по ним считается реакция и последнее действие попытки.
+# Закрытие нерезультативного вызова — тоже действие оператора.
+STUDENT_ACTION_TYPES = frozenset({'card.saved', 'service.updated', 'notification.recorded',
+                                  'card.processed', 'card.linked', 'card.forwarded', 'operator.utterance',
+                                  'card.error_reported', 'card.unproductive'})
+
+
+def last_activity(value):
+    """Время последнего действия обучающегося; автоматические события не считаются."""
+    stamps = [value['created_at'], value.get('opened_at'), value.get('first_action_at')]
+    stamps += [e['at'] for e in value.get('events', []) if e.get('type') in STUDENT_ACTION_TYPES]
+    return max(datetime.fromisoformat(stamp) for stamp in stamps if stamp)
+
+
+def active_seconds(value):
+    """Время работы над попыткой для статистики.
+
+    Если попытку завершил сам обучающийся, это полное время карточки. Если её
+    закрыли преподаватель, система или перезапуск, время считается до последнего
+    действия обучающегося: часы простоя брошенной карточки не искажают средние.
+    """
+    elapsed = value.get('elapsed_seconds')
+    if elapsed is None:
+        return None
+    if (value.get('completed_by') or {}).get('role') in (None, 'student'):
+        return elapsed
+    worked = (last_activity(value) - datetime.fromisoformat(value['created_at'])).total_seconds()
+    return max(0, min(elapsed, round(worked)))
 
 EventType = Literal['card.saved', 'service.updated', 'notification.recorded', 'card.processed', 'card.linked', 'card.forwarded', 'call.requested', 'session.finished', 'crew.assigned', 'situation.update', 'field_report.call_started']
 
@@ -131,6 +161,18 @@ def expert_history(store, sid):
 def effective(value, expert):
     if expert:
         return {'score_percent': expert['score_percent'], 'passed': expert['passed'], 'source': 'expert'}
+    result = _automatic(value)
+    # Порог зачёта занятия: ниже порога — не засчитано; выше — засчитано, если
+    # правила преподавателя не решили иначе.
+    verdict = (value.get('lesson_verdict') or {}).get('passed')
+    if verdict is False:
+        result['passed'] = False
+    elif verdict is True and result['passed'] is None:
+        result['passed'] = True
+    return result
+
+
+def _automatic(value):
     if value.get('exercise_mode') == 'actions' and value.get('dds_review'):
         review = value['dds_review']
         policy = value.get('policy_result')
@@ -146,10 +188,30 @@ def effective(value, expert):
             'passed': (value.get('policy_result') or {}).get('passed'), 'source': 'automatic'}
 
 
+def timing_view(value):
+    """Соблюдение нормативов попытки: реакция и первая запись (ДДС) или лимит карточки (112)."""
+    timing = (value.get('evaluation') or {}).get('timing') or {}
+    return {'response_within_limit': timing.get('response_within_limit'),
+            'within_limit': timing.get('within_limit'),
+            'response_seconds': timing.get('response_seconds'),
+            'response_limit_seconds': timing.get('response_limit_seconds'),
+            'limit_seconds': timing.get('limit_seconds'),
+            'first_record_seconds': timing.get('first_record_seconds')}
+
+
+def failed_checks(value):
+    """Названия непройденных проверок попытки: решения ДДС, поля эталона и шаги правил."""
+    labels = [c['label'] for c in (value.get('dds_review') or {}).get('checks', []) if c.get('passed') is False]
+    if not value.get('dds_review'):
+        labels += [c['label'] for c in (value.get('evaluation') or {}).get('criteria', []) if not c.get('passed')]
+    labels += [s['label'] for s in (value.get('policy_result') or {}).get('steps', []) if not s.get('passed')]
+    return labels
+
+
 def summary(rows):
     completed = [r for r in rows if r['status'] == 'Завершена']
     scores = [r['effective']['score_percent'] for r in completed if r['effective']['score_percent'] is not None]
-    times = [r['elapsed_seconds'] for r in completed if r.get('elapsed_seconds') is not None]
+    times = [active_seconds(r) for r in completed if active_seconds(r) is not None]
     return {'attempts': len(rows), 'completed': len(completed), 'graded': len(scores),
             'passed': sum(r['effective']['passed'] is True for r in completed),
             'failed': sum(r['effective']['passed'] is False for r in completed),
@@ -245,7 +307,11 @@ def router(store, accounts, learning, authorize, coordinator=None):
                 store.db.execute('INSERT INTO expert_reviews VALUES (?,?,?,?)', (str(sid), review['revision'], str(body.request_id), json.dumps(review, ensure_ascii=False)))
             return assessment(sid, user)
 
-    def statistics(user, group_id=None):
+    def collect(user, group_id=None):
+        stats = statistics(user, group_id, keep_values=True)
+        return {'completed': stats.pop('_completed'), 'source': stats['source']}
+
+    def statistics(user, group_id=None, keep_values=False):
         roster = []
         if user['role'] == 'teacher':
             if group_id:
@@ -268,6 +334,8 @@ def router(store, accounts, learning, authorize, coordinator=None):
             v['effective'] = effective(v, review if review and review['action'] == 'grade' else None)
         completed = sorted([v for v in values if v['status'] == 'Завершена'], key=lambda v: (v.get('finished_at', ''), v['id']))
         progress = [{'session_id': v['id'], 'title': v['title'], 'finished_at': v.get('finished_at'),
+                     'scenario_id': v.get('scenario_id'), 'attempt_outcome': v.get('attempt_outcome'),
+                     'active_seconds': active_seconds(v), **timing_view(v),
                      'difficulty': v.get('difficulty', 'basic'), 'dds_profile': v.get('dds_profile', 'general'), **v['effective']} for v in completed[-200:]]
         if user['role'] == 'teacher':
             for item, value in zip(progress, completed[-200:]):
@@ -324,10 +392,75 @@ def router(store, accounts, learning, authorize, coordinator=None):
             'checks': list(dict.fromkeys(c['label'] for c in cells)),
             'cells': cells,
         }
-        return {'summary': summary(values), 'progress': progress,
+        stages = []
+        for key, label in (('response_within_limit', 'Реакция на карточку'),
+                           ('within_limit', 'Первая запись / лимит карточки')):
+            measured = [v for v in completed if timing_view(v)[key] is not None]
+            stages.append({'id': key, 'label': label, 'measured': len(measured),
+                           'within': sum(timing_view(v)[key] is True for v in measured)})
+        finished = [v.get('finished_at') for v in completed if v.get('finished_at')]
+        source = {'attempts': len(values), 'completed': len(completed),
+                  'scored': sum(v['effective']['score_percent'] is not None for v in completed),
+                  'students': len({v.get('student_id') for v in completed}),
+                  'period_from': min(finished) if finished else None, 'period_to': max(finished) if finished else None,
+                  'generated_at': datetime.now(timezone.utc).isoformat(),
+                  'score_source': 'Балл: экспертная оценка преподавателя, если она есть, иначе автоматическая оценка по эталону.'}
+        return {'summary': summary(values), 'progress': progress, 'timing': stages, 'source': source,
                 'students': [{'student_id': uid, 'display_name': name, **summary([v for v in values if v.get('student_id') == uid])} for uid, name in people.items()],
                 'typical_errors': typical, 'error_heatmap': heatmap,
-                'by_scenario': [{'scenario_id': sid, 'title': rows[-1]['title'], **summary(rows)} for sid, rows in scenarios.items()]}
+                'by_scenario': [{'scenario_id': sid, 'title': rows[-1]['title'], **summary(rows)} for sid, rows in scenarios.items()],
+                **({'_completed': completed} if keep_values else {})}
+
+    def forecast_data(user, group_id=None, threshold=forecasting.PASS_SCORE):
+        """Прогноз по каждому обучающемуся и проверка достоверности на данных стенда."""
+        data = collect(user, group_id)
+        series, names, misses, timed, failures = {}, {}, {}, {}, {}
+        for v in data['completed']:
+            uid = v.get('student_id')
+            names.setdefault(uid, (accounts.get_user(uid) or {}).get('display_name', 'Студент'))
+            view = timing_view(v)
+            measured = [view[k] for k in ('response_within_limit', 'within_limit') if view[k] is not None]
+            if measured:
+                timed[uid] = timed.get(uid, 0) + 1
+                misses[uid] = misses.get(uid, 0) + (False in measured)
+            for label in failed_checks(v):
+                failures.setdefault(uid, {}).setdefault(label, 0)
+                failures[uid][label] += 1
+            score = v['effective']['score_percent']
+            if score is not None:
+                series.setdefault(uid, []).append(float(score))
+        real = forecasting.backtest(series, threshold)
+        synthetic = forecasting.backtest(forecasting.synthetic_cohort(), threshold)
+        enough = real['predictions'] >= 10
+        width = real['interval_width'] if enough else synthetic['interval_width']
+        students = []
+        for uid, name in names.items():
+            top = sorted(failures.get(uid, {}).items(), key=lambda item: -item[1])
+            students.append({'student_id': uid, 'display_name': name, 'scores': series.get(uid, []),
+                             **forecasting.student_forecast(series.get(uid, []), width, threshold,
+                                                             misses.get(uid, 0), timed.get(uid, 0),
+                                                             [label for label, _ in top])})
+        students.sort(key=lambda s: (s.get('readiness') != 'not_ready', s['display_name']))
+        return {'method': forecasting.METHOD, 'threshold': threshold, 'students': students,
+                'interval_source': 'проверка на данных стенда' if enough else
+                'синтетическая когорта: на стенде меньше 10 проверенных прогнозов',
+                'validation': {'real': real, 'synthetic': {**synthetic, 'model_description': forecasting.SYNTHETIC_MODEL}},
+                'source': data['source']}
+
+    @api.get('/api/v1/instructor/forecast')
+    async def teacher_forecast(group_id: UUID | None = Query(None),
+                               threshold: float = Query(forecasting.PASS_SCORE, ge=30, le=100),
+                               user=Depends(teacher)):
+        return forecast_data(user, group_id, threshold)
+
+    @api.get('/api/v1/student/forecast')
+    async def student_forecast(threshold: float = Query(forecasting.PASS_SCORE, ge=30, le=100),
+                               user=Depends(student)):
+        result = forecast_data(user, None, threshold)
+        # Обучающийся видит свой прогноз и сводные показатели проверки, но не строки других людей.
+        for part in result['validation'].values():
+            part.pop('rows', None)
+        return result
 
     @api.get('/api/v1/instructor/statistics')
     async def teacher_statistics(group_id: UUID | None = Query(None), user=Depends(teacher)):

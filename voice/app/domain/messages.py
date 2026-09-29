@@ -45,3 +45,6 @@ class CreateCall(BaseModel):
     session_id: UUID
     extension: str = Field("201", pattern=r"^[0-9]{1,8}$")
     scenario_id: str | None = Field(None, pattern=r"^[a-z0-9][a-z0-9_-]{2,63}$")
+    # Кто звонит — видно на экране IP-телефона: «Старший бригады 01-1», номер АОН.
+    caller_name: str | None = Field(None, max_length=60, pattern=r'^[^"<>\\\x00-\x1f]*$')
+    caller_number: str | None = Field(None, pattern=r"^\+?[0-9]{1,15}$")

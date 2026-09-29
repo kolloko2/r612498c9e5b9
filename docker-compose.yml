@@ -96,6 +96,9 @@ services:
   asterisk:
     <<: *runtime
     image: trainer112-asterisk:dev
+    # Имя хоста попадает в SIP-заголовки From/Contact; имя-идентификатор контейнера
+    # (начинается с цифр) браузерный телефон (JsSIP) не принимает как SIP-хост.
+    hostname: asterisk
     build:
       context: deploy/asterisk
     environment:

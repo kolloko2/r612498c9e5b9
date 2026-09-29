@@ -69,7 +69,8 @@ print(json.dumps(results))
 
 def main(args):
     OUT.mkdir(parents=True, exist_ok=True)
-    teacher, student = client('prepod'), client('kursant1')
+    # Отдельный демо-курсант: история реальных обучающихся не засоряется.
+    teacher, student = client('prepod'), client(os.environ.get('DDS_ACCEPTANCE_STUDENT', 'kursant2'))
     if args.collect:
         collect(json.loads((OUT/'result.json').read_text(encoding='utf-8')),teacher,student)
         return

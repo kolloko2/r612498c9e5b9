@@ -19,6 +19,7 @@ async function serve(page,role){
   let data;
   if(p.startsWith('/api/')){
    if(p==='/api/v1/auth/me')data={id:role+'-test',role,display_name:'Тест',active:true};
+   else if(p==='/api/v1/student/softphone')data={enabled:false,reason:'Номер не назначен'};
    else if(p==='/api/v1/health')data={status:'ok',provider:'mock'};
    else if(p==='/api/v1/student/classifier')data={groups:[],records:[]};
    else if(p==='/api/v1/student/routing/catalog')data={services:['Служба 101'],flags:[]};

@@ -147,3 +147,40 @@ def test_assignment_deactivation_revokes_new_student_access(classroom):
     with pytest.raises(HTTPException) as denied:
         learning.assignment_for_student(assignment["id"], scenario_id, learning.accounts.users["s1"])
     assert denied.value.status_code == 403
+
+
+def test_teacher_removes_member_and_archives_group(classroom):
+    client, store, learning = classroom
+    scenario_id = store.first_enabled()["id"]
+    group = client.post("/api/v1/instructor/groups", headers=headers("t1"), json={"title": "Группа"}).json()
+    assert group["archived"] is False
+    client.post(f"/api/v1/instructor/groups/{group['id']}/members", headers=headers("t1"), json={"student_id": "s1"})
+    client.post("/api/v1/instructor/assignments", headers=headers("t1"), json={
+        "group_id": group["id"], "scenario_id": scenario_id, "title": "Задание"
+    })
+    assert client.get("/api/v1/student/assignments", headers=headers("s1")).json()
+    member = f"/api/v1/instructor/groups/{group['id']}/members/s1"
+    assert client.delete(member, headers=headers("t2")).status_code == 404
+    assert client.delete(member, headers=headers("s1")).status_code == 403
+    assert client.delete(member, headers=headers("t1")).json()["member_ids"] == []
+    assert client.get("/api/v1/student/assignments", headers=headers("s1")).json() == []
+
+    path = f"/api/v1/instructor/groups/{group['id']}"
+    assert client.patch(path, headers=headers("t2"), json={"archived": True}).status_code == 404
+    archived = client.patch(path, headers=headers("t1"), json={"archived": True}).json()
+    assert archived["archived"] is True and archived["archived_at"]
+    assert client.get("/api/v1/instructor/groups", headers=headers("t1")).json()[0]["archived"] is True
+    assert client.patch(path, headers=headers("t1"), json={"archived": False}).json()["archived"] is False
+
+
+def test_assignment_reports_whether_hints_can_be_enabled(classroom):
+    client, store, _ = classroom
+    scenario_id = store.first_enabled()["id"]
+    group = client.post("/api/v1/instructor/groups", headers=headers("t1"), json={"title": "Группа"}).json()
+    assignment = client.post("/api/v1/instructor/assignments", headers=headers("t1"), json={
+        "group_id": group["id"], "scenario_id": scenario_id, "title": "Задание"
+    }).json()
+    assert assignment["practice_available"] is False
+    refused = client.patch(f"/api/v1/instructor/assignments/{assignment['id']}", headers=headers("t1"),
+                           json={"active": True, "practice_with_hints": True})
+    assert refused.status_code == 409

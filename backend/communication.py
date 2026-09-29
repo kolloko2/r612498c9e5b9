@@ -17,7 +17,8 @@ def summary(store, value):
             briefings.append({'id': item['id'], 'transport': mode, 'state': item['state'],
                               'student_turns': turns, 'recipient': item.get('destination') or item.get('service')})
     # Questions during incoming brigade reports are real telephone speech too.
-    for call in [*(value.get('field_report_calls') or {}).values(), value.get('progress_call') or {}]:
+    for call in [*(value.get('field_report_calls') or {}).values(), value.get('progress_call') or {},
+                 *(value.get('repeat_calls') or {}).values()]:
         if call.get('session_id'):
             counts['sip'] += sum(m.get('role') == 'user' for m in store.load(call['session_id']).get('messages', []))
     used = [mode for mode, count in counts.items() if count]

@@ -73,6 +73,7 @@ async function serve(page) {
     if (p.startsWith('/api/')) {
       let data;
       if (p === '/api/v1/auth/me') data = { id: 'student-test', role: 'student', display_name: 'Курсант Петров', active: true };
+      else if (p === '/api/v1/student/softphone') data = { enabled: false, reason: 'Номер не назначен' };
       else if (p === '/api/v1/health') data = { status: 'ok', provider: 'ollama' };
       else if (p === '/api/v1/student/classifier') data = {
         version: 'test-v1', groups: [{ id: '1', title: 'Пожары и задымления' }],
@@ -146,6 +147,8 @@ async function serve(page) {
     await expect(page.locator('.timer.overdue')).toBeVisible({ timeout: 4000 });
     const background = await page.locator('.timer').evaluate(node => getComputedStyle(node).backgroundColor);
     if (background === 'rgb(48, 54, 56)') throw Error('Overdue timer must not keep the normal background');
+    // Под общим временем виден сам норматив и превышение, а не только цвет.
+    await expect(page.locator('#timerNorm')).toContainText('просрочено +');
 
     // Служба от внешней системы помечена ВИС, обычная — нет.
     await expect(page.locator('#services .vis-badge')).toHaveCount(1);
