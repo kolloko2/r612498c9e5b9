@@ -51,6 +51,12 @@ def test_unapproved_practice_is_rejected_before_issuance(classroom):
                        headers=h['teacher1'], json={'active': True, 'practice_with_hints': True})
     assert response.status_code == 409
     assert create_lesson(classroom, practice_with_hints=True).status_code == 409
+    lesson = create_lesson(classroom).json()
+    listed = next(v for v in c.get('/api/v1/instructor/lessons', headers=h['teacher1']).json() if v['id'] == lesson['id'])
+    assert listed['practice_available'] is False
+    approve_fixture(classroom)
+    listed = next(v for v in c.get('/api/v1/instructor/lessons', headers=h['teacher1']).json() if v['id'] == lesson['id'])
+    assert listed['practice_available'] is True
 
 
 def test_lesson_policy_and_same_slot_restart(classroom):

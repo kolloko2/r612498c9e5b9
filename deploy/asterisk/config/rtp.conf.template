@@ -1,5 +1,9 @@
 [general]
 rtpstart=20000
 rtpend=20199
-icesupport=no
+; ICE нужен только телефонам в браузере (webrtc=yes); у IP-телефонов он выключен
+; в настройках абонента. STUN не используется: всё в пределах учебной сети.
+icesupport=yes
 stunaddr=
+
+${ICE_HOST_CANDIDATES}

@@ -76,7 +76,7 @@ def router(accounts, authorize, authenticate, configured):
                     accounts.db.execute('DELETE FROM account_login_failures WHERE username=?', (body.username,))
                     accounts._audit('directory.login.succeeded', uid)
                     request.state.audit_actor = {'id': uid, 'role': current['role']}
-                    result = accounts._issue_session(uid)
+                    result = accounts.finish_login(uid)
             if denied:
                 raise HTTPException(401, AUTH_ERROR)
             return result

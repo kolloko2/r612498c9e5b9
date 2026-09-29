@@ -72,10 +72,11 @@ async def test_originate_shows_who_is_calling_on_the_training_phone():
     topology = Topology(ari, Settings(_env_file=None), uuid4())
     context = CallContext(uuid4(), "201", caller_name="Старший бригады 01-1", caller_number="+79000000101")
     await topology.originate("201", context.caller_id())
-    assert ari.requests[0][2]["params"]["callerId"] == '"Старший бригады 01-1" <+79000000101>'
+    channels = [r for r in ari.requests if r[1] == "channels"]
+    assert channels[0][2]["params"]["callerId"] == '"Старший бригады 01-1" <+79000000101>'
     # Без сведений заголовок не выдумывается.
     await topology.originate("201", CallContext(uuid4(), "201").caller_id())
-    assert "callerId" not in ari.requests[1][2]["params"]
+    assert "callerId" not in [r for r in ari.requests if r[1] == "channels"][1][2]["params"]
 
 
 @pytest.mark.parametrize("name", ['x" <666>', "a\b", "a\nb"])
@@ -84,3 +85,31 @@ def test_caller_name_cannot_break_the_sip_header(name):
     from app.domain.messages import CreateCall
     with pytest.raises(ValidationError):
         CreateCall(session_id=uuid4(), caller_name=name)
+
+
+class BrowserARI(FakeARI):
+    def __init__(self, state):
+        super().__init__()
+        self.state = state
+
+    async def request(self, method, path, **kwargs):
+        self.requests.append((method, path, kwargs))
+        if path.startswith("endpoints/"):
+            if self.state is None:
+                raise RuntimeError("not found")
+            return {"state": self.state}
+        return {}
+
+
+@pytest.mark.parametrize("state,expected", [("online", "PJSIP/w201"), ("offline", "PJSIP/201"), (None, "PJSIP/201")])
+async def test_call_goes_to_browser_phone_only_when_it_is_registered(state, expected):
+    ari = BrowserARI(state)
+    await Topology(ari, Settings(_env_file=None), uuid4()).originate("201")
+    assert [r for r in ari.requests if r[1] == "channels"][0][2]["params"]["endpoint"] == expected
+
+
+async def test_browser_phone_preference_can_be_disabled():
+    ari = BrowserARI("online")
+    await Topology(ari, Settings(_env_file=None, prefer_browser_phone=False), uuid4()).originate("201")
+    assert not any(r[1].startswith("endpoints/") for r in ari.requests)
+    assert [r for r in ari.requests if r[1] == "channels"][0][2]["params"]["endpoint"] == "PJSIP/201"

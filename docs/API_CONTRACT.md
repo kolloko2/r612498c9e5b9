@@ -31,7 +31,7 @@ without approval provide no coaching. Restart validates before stopping a call.
 
 ## Practice permissions and audited retries
 
-CreateLesson/CreateAssignment accept `practice_with_hints: boolean` (default false).
+CreateLesson/CreateAssignment accept `practice_with_hints: boolean` (default false). CreateLesson also accepts `norm_seconds` (10–3600, reaction norm of the lesson: DDS card opening or first action in the 112 cycle; null keeps the scenario norm, 30 s by default) and `pass_score_percent` (0–100; a finished card stores `lesson_verdict` and a score below the threshold is not passed). A lesson attempt without student actions for `CARD_ABANDON_MINUTES` (default 120, 0 disables) is closed by the system with `attempt_outcome: timed_out`; its time counts up to the last student action. Statistics add `timing` (norm compliance by stage), `source` (attempts, period, score source) and per-attempt `active_seconds`. Assignments and planned/running lessons in `GET /instructor/lessons` report `practice_available`: whether every scenario has approved hints, so enabling hints will not be refused with 409.
 UpdateAssignment can change it for future attempts. Issued workspace responses
 freeze the permission; legacy attempts without the field do not enable coaching.
 `PUT /instructor/lessons/{lid}/practice` with that boolean changes the lesson and
@@ -132,6 +132,8 @@ or durable `service_restart`. A stale expected ID returns the current briefing;
 active calls are unchanged. At most three retries in 30 seconds; transcript and
 report remain in the same briefing. Normal hangup never triggers redial. Browser
 polling invokes this while the briefing dialog is open, not after browser closure.
+
+Voice GET `/calls/{call_id}/recording?format=wav|mp3` returns the mixed recording as base64 JSON; GET `/webrtc/{extension}` (service token) returns the browser-phone account `w<ext>` with its derived password and whether it is registered. When `prefer_browser_phone` is on (default), a call to extension N goes to `PJSIP/wN` if the browser phone is registered, otherwise to the IP phone `PJSIP/N`.
 
 Voice GET `/calls/{call_id}` now reads durable terminal snapshots after restart;
 unknown IDs still return 404. Interrupted persisted calls have `service_restart`.
@@ -598,14 +600,30 @@ bootstrap and login do not require a user token; others require `X-User-Session`
 | PATCH | `/admin/users/{uid}` | Admin `{active}`; cannot block oneself or the last active admin, blocking revokes tokens |
 | PATCH | `/admin/users/{uid}/role` | Admin `{role}`; not own role, keeps at least one admin, revokes the user's tokens |
 | GET / PUT | `/admin/policy` | Access and logging policy: `session_hours` 1–24, `failure_limit` 3–10, `lock_seconds` 30–3600, `audit_retention_days` 183–3650 (account/login journal; the security journal is never auto-deleted), `log_level` |
+| POST | `/auth/login` | With second factor enabled returns `{mfa_required:true, mfa_token, expires_in}` instead of a session; the BFF sets no cookie until the code is accepted |
+| POST | `/auth/mfa-login` | `{mfa_token, code}`: TOTP (6 digits, 30 s, ±1 step, a used step is rejected) or a one-time recovery code; the ticket lives 5 min and 5 attempts, then a new password login is needed |
+| GET | `/auth/mfa` | Own second factor: `{enabled, required, recovery_codes_left}`; `/auth/me` also returns it as `mfa` |
+| POST | `/auth/mfa/setup` | New TOTP secret with `otpauth_uri` and inline `qr_svg`; not active until enabled |
+| POST | `/auth/mfa/enable` | `{code}` from the app; returns 10 recovery codes once (only hashes are stored) |
+| POST | `/auth/mfa/disable` | `{code}` (TOTP or recovery); 409 when the role requires a second factor |
+| GET / POST | `/admin/users/{uid}/mfa`, `/admin/users/{uid}/mfa-reset` | Admin: state and reset of another user's second factor (lost phone); audited |
+| — | Policy `mfa_required_roles` | Admin policy lists roles that must use a second factor; until enrolled such users get 403 on everything except `/auth/*` |
 | GET | `/instructor/students` | Teacher: active student IDs, names and usernames |
 | GET / POST | `/instructor/groups` | Own groups / create `{title}` |
 | POST | `/instructor/groups/{gid}/members` | Own group: `{student_id}` |
+| DELETE | `/instructor/groups/{gid}/members/{student_id}` | Own group: remove a member; no new cards from the group's lessons, earlier attempts and reports stay |
+| PATCH | `/instructor/groups/{gid}` | Own group `{archived}`; archived groups keep members, lessons and results and are hidden from new assignments and lessons. Groups return `archived` and `archived_at` |
 | GET / POST | `/instructor/assignments` | Own assignments / create `{group_id,scenario_id,title}` |
 | PATCH | `/instructor/assignments/{aid}` | Own assignment `{active}` |
 | GET | `/instructor/sessions` | Own student sessions, summary and available score |
 | GET | `/instructor/sessions/{sid}` | Own student session, card and messages; not private frozen prompt |
 | GET | `/student/assignments` | Active assignments for current student's groups |
+| GET | `/instructor/forecast?group_id=&threshold=` | Forecast of the next score per student (Holt smoothing α=0.3, β=0.1), readiness against `threshold` (30–100, default 70), explaining factors, and validation: walk-forward backtest on stand attempts vs «last score» and «mean score» baselines, plus a labelled deterministic synthetic cohort that is never stored |
+| GET | `/student/forecast?threshold=` | Own forecast and aggregate validation metrics without other people's rows |
+| GET | `/student/sessions/{sid}/review`, `/instructor/sessions/{sid}/review` | End-to-end attempt review: task, norms (limit, actual, within), timeline with offsets from card arrival, all calls with transcripts, card against the reference, DDS checks (DDS mode only), grade, grammar, AI review |
+| GET | `/student/sessions/{sid}/calls/{call_id}/recording?format=mp3\|wav`, `/instructor/...` | Mixed recording of a call of this attempt as `{format, content_type, duration_seconds, size_bytes, file_base64}`. MP3 (64 kbit/s mono, LAME) is written next to the lossless WAV when the call ends and encoded on first request for older calls; default `mp3`. 404 for calls of other attempts |
+| GET | `/student/softphone?lesson_id=` | Browser phone (WebRTC) for the student's own training number: from the lesson open on the workstation, otherwise the newest running lesson. `{enabled, extension, lesson_id, lesson_title, username (w<ext>), password, uri, ws_path:'/sip-ws', echo_test:'100'}`; `{enabled:false, reason}` without an assigned number. The password is derived by Voice and Asterisk from the ARI secret and is not stored in the database |
+| WS | `/sip-ws` (BFF) | SIP over WebSocket (subprotocol `sip`) proxied to Asterisk `/ws`. Same-origin only, session cookie required, admitted only when `/student/softphone` is enabled for the user; any SIP request whose From is not the user's own `w<ext>` closes the connection. Media is DTLS-SRTP directly between the browser and Asterisk RTP ports |
 
 User: `{id,username,display_name,role,active}`. Roles: admin, teacher, student.
 User creation accepts `{username,password,display_name,role}`; password 12–128

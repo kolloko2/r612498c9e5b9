@@ -22,9 +22,22 @@ class Topology:
     def channel_ids(self):
         return [self.phone, *self.media.values(), *self.snoops.values()]
 
+    async def endpoint_for(self, extension):
+        """Куда звонить: в браузер, если там зарегистрирован телефон, иначе на IP-телефон."""
+        if self.settings.prefer_browser_phone:
+            web = f"{self.settings.webrtc_prefix}{extension}"
+            try:
+                state = (await self.ari.request("GET", f"endpoints/PJSIP/{web}") or {}).get("state")
+            except Exception:
+                state = None
+            if state == "online":
+                return web
+        return str(extension)
+
     async def originate(self, extension, caller_id=""):
+        self.endpoint = await self.endpoint_for(extension)
         params = {
-            "endpoint": f"PJSIP/{extension}", "app": self.settings.ari_app,
+            "endpoint": f"PJSIP/{self.endpoint}", "app": self.settings.ari_app,
             "appArgs": "phone", "channelId": self.phone,
             "timeout": int(self.settings.connect_timeout_s),
         }

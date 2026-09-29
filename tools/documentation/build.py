@@ -100,6 +100,8 @@ def table(doc, rows):
     t.autofit = False
     weights = [max(8, min(60, sum(len(r[i]) for r in rows)/len(rows))) for i in range(n)]
     if n == 3 and rows[0][0] in ('Код', '№'): weights = [7, 53, 40]
+    # Матрица соответствия: короткий номер, требование, место проверки и читаемый статус.
+    if n == 4 and rows[0][0] == '№' and rows[0][3] == 'Статус': weights = [6, 30, 44, 20]
     widths = [16.5*w/sum(weights) for w in weights]
     for i,c in enumerate(t.columns): c.width = Cm(widths[i])
     for ri,row in enumerate(rows):
@@ -213,7 +215,10 @@ def build(src, idx):
             if key in LEGENDS:
                 p=para(d,LEGENDS[key]);p.paragraph_format.first_line_indent=Cm(0);p.paragraph_format.line_spacing=1
                 for r in p.runs:r.font.size=Pt(11)
-        else:para(d,line)
+        else:
+            p=para(d,line)
+            if idx==9 and (line.startswith('Объект — локальный учебный комплекс') or line.startswith('Выдавайте персональные аккаунты.')):
+                p.paragraph_format.first_line_indent=Cm(0)
     if idx==12:
         d.part.drop_rel(picture._inline.graphic.graphicData.pic.blipFill.blip.embed)
         # Replace the formal front matter with a plain customer-facing opening.

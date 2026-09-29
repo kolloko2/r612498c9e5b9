@@ -4,3 +4,17 @@
 
 #heatmap td.heat{text-align:center;font-variant-numeric:tabular-nums}#heatmap td.heat-0{background:#c8e6c9}#heatmap td.heat-20{background:#dcedc8}#heatmap td.heat-40{background:#fff9c4}#heatmap td.heat-60{background:#ffe0b2}#heatmap td.heat-80{background:#ffcdd2}#heatmap td.heat-none{color:var(--muted)}#heatmap th.scenario{min-width:180px}
 #heatmap tr>:first-child{position:sticky;left:0;z-index:1;background:#eef2f4}
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:16px;margin:12px 0}
+.chart{margin:0;background:#fcfcfb;border:1px solid #e1e0d9;border-radius:10px;padding:14px 16px;min-width:0}
+.chart h4{margin:0 0 2px;font-size:15px;color:#0b0b0b}.chart-sub{margin:0 0 8px;color:#52514e;font-size:13px}
+.chart-svg{width:100%;height:auto;display:block;overflow:visible}.chart-svg [tabindex]:focus{outline:2px solid #2a78d6;outline-offset:2px}
+.chart figcaption{font-size:12px;color:#52514e;margin-top:8px;line-height:1.4}
+.chart-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:#52514e;margin-bottom:6px}.chart-legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.chart-data{margin-top:8px;font-size:12px}.chart-data summary{cursor:pointer;color:#34495a}.chart-data table{font-size:12px}.chart-data button{margin-top:6px}
+.chart-tip{position:absolute;z-index:50;background:#0b0b0b;color:#fff;font-size:12px;padding:6px 9px;border-radius:6px;pointer-events:none;max-width:320px}
+.status{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid}.status::before{margin-right:4px}
+.status.good{color:#0a6b0a;border-color:#0ca30c;background:#eaf7ea}.status.good::before{content:'✓'}
+.status.warning{color:#7a5200;border-color:#fab219;background:#fff6e0}.status.warning::before{content:'!'}
+.status.critical{color:#a12828;border-color:#d03b3b;background:#fbeaea}.status.critical::before{content:'✕'}
+.validation-block{border-top:1px solid #e1e0d9;padding-top:10px;margin-top:10px}.warning-note{background:#fff6e0;border-left:4px solid #fab219;padding:8px 10px}
+#forecastChart .chart{max-width:860px}

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import ssl
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -8,7 +9,7 @@ from pathlib import Path
 from uuid import UUID
 from urllib.parse import urlsplit
 import httpx
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -88,7 +89,8 @@ async def local_only(request, call_next):
     response.headers['Cache-Control'] = 'no-store'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     ancestors = "'self'" if request.url.path == '/map' else "'none'"
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors " + ancestors
+    # media-src blob: — прослушивание записей звонков, полученных как файл в разборе попытки.
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self' blob:; frame-ancestors " + ancestors
     if request.url.path == '/map':
         response.headers['Content-Security-Policy'] += "; worker-src 'self'; img-src 'self' data: blob:"
     return response
@@ -140,31 +142,111 @@ async def operations_page():
 async def audit_page():
     return FileResponse(Path(__file__).with_name('audit.html'))
 
+# Телефон в браузере: SIP поверх WebSocket идёт через этот сервер к Asterisk.
+# Браузер видит только свой адрес (тот же сертификат и cookie), Asterisk наружу
+# не открывается. Пускаем только обучающегося, которому назначен учебный номер,
+# и только с запросами от его собственного абонента.
+SIP_WS_URL = os.getenv('SIP_WS_URL', 'wss://asterisk:8089/ws')
+SIP_FROM = re.compile(r'^(?:From|f)\s*:.*?sips?:([^@;>\s]+)@', re.I | re.M)
+
+
+def sip_request_user(message):
+    # Ответы (SIP/2.0 …) и пустые keep-alive (CRLF) пропускаются; в запросах From
+    # обязан быть своим абонентом.
+    if not message.strip() or message.lstrip().startswith('SIP/2.0'):
+        return None
+    match = SIP_FROM.search(message)
+    return match.group(1) if match else ''
+
+
+@app.websocket('/sip-ws')
+async def sip_websocket(ws: WebSocket):
+    import websockets
+    origin, host = ws.headers.get('origin'), ws.url.hostname
+    if host not in ALLOWED_HOSTS or origin not in ALLOWED_ORIGINS | {f'https://{ws.headers.get("host", "")}'}:
+        await ws.close(code=4403)
+        return
+    token = USER_SESSION.set(ws.cookies.get('training_session', ''))
+    try:
+        phone = await dialogue('student/softphone')
+    except HTTPException:
+        phone = {'enabled': False}
+    finally:
+        USER_SESSION.reset(token)
+    if not phone.get('enabled'):
+        await ws.close(code=4403)
+        return
+    await ws.accept(subprotocol='sip' if 'sip' in ws.scope.get('subprotocols', []) else None)
+    verify = internal_http_verify(SIP_WS_URL.replace('wss://', 'https://', 1))
+    try:
+        async with websockets.connect(SIP_WS_URL, subprotocols=['sip'], open_timeout=10, max_size=2 ** 16,
+                                      ssl=verify if SIP_WS_URL.startswith('wss://') else None) as upstream:
+            async def browser_to_asterisk():
+                while True:
+                    message = await ws.receive_text()
+                    user = sip_request_user(message)
+                    if user is not None and user != phone['username']:
+                        raise PermissionError('foreign SIP identity')
+                    await upstream.send(message)
+
+            async def asterisk_to_browser():
+                async for message in upstream:
+                    await ws.send_text(message if isinstance(message, str) else message.decode('utf-8', 'replace'))
+
+            tasks = [asyncio.create_task(browser_to_asterisk()), asyncio.create_task(asterisk_to_browser())]
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+    except (OSError, PermissionError, WebSocketDisconnect, websockets.WebSocketException):
+        pass
+    finally:
+        try:
+            await ws.close()
+        except RuntimeError:
+            pass
+
+
+@app.get('/review')
+async def review_page():
+    return FileResponse(Path(__file__).with_name('review.html'))
+
 @app.get('/dds')
 async def dds_page():
     return FileResponse(Path(__file__).with_name('dds.html'))
 
 @app.get('/api/v1/auth/{action}')
 async def auth_get(action: str):
-    if action not in ('status', 'me', 'directory-status'):
+    if action not in ('status', 'me', 'directory-status', 'mfa'):
         raise HTTPException(404)
     return await dialogue('auth/'+action)
 
+@app.post('/api/v1/auth/mfa/{action}')
+async def auth_mfa(action: str, request: Request):
+    # Настройка второго фактора своей учётной записи: ключ, включение, отключение.
+    if action not in ('setup', 'enable', 'disable'):
+        raise HTTPException(404)
+    body = await request.json() if action != 'setup' else None
+    return await dialogue('auth/mfa/'+action, 'POST', body)
+
 @app.post('/api/v1/auth/{action}')
 async def auth_post(action: str, request: Request):
-    if action not in ('bootstrap', 'login', 'logout', 'directory-login'):
+    if action not in ('bootstrap', 'login', 'logout', 'directory-login', 'mfa-login'):
         raise HTTPException(404)
     body = await request.json() if action != 'logout' else None
     result = await dialogue('auth/'+action, 'POST', body)
     if action == 'logout':
         response = Response(status_code=204)
         response.delete_cookie('training_session', path='/')
+    elif result.get('mfa_required'):
+        # Пароль принят, но сессии ещё нет: браузер получает только одноразовый билет на ввод кода.
+        response = Response(json.dumps({'mfa_required': True, 'mfa_token': result['mfa_token'], 'expires_in': result.get('expires_in')}, ensure_ascii=False), media_type='application/json')
     else:
         response = Response(json.dumps({'user': result['user']}, ensure_ascii=False),media_type='application/json',status_code=201 if action=='bootstrap' else 200)
         response.set_cookie('training_session', result['session_token'], httponly=True, secure=COOKIE_SECURE, samesite='strict', max_age=28800, path='/')
     return response
 
-@app.api_route('/api/v1/admin/{path:path}', methods=['GET', 'POST', 'PATCH'])
+@app.api_route('/api/v1/admin/{path:path}', methods=['GET', 'POST', 'PATCH', 'PUT'])
 async def admin_proxy(path: str, request: Request):
     if '..' in path or '%' in path:
         raise HTTPException(400)

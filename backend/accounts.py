@@ -12,6 +12,14 @@ import time
 from typing import Literal
 from uuid import uuid4
 from security_audit import AUDIT_ACTOR
+import json
+import mfa
+from contextvars import ContextVar
+
+# Путь текущего запроса: пока обязательный второй фактор не настроен, открыт
+# только раздел настройки входа. Заполняется middleware из install_mfa_guard.
+REQUEST_PATH = ContextVar('request_path', default='')
+MFA_SETUP_PATHS = ('/api/v1/auth/',)
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -27,6 +35,9 @@ SCRYPT_P = 1
 SESSION_SECONDS = 8 * 60 * 60
 LOCK_SECONDS = 60
 FAILURE_LIMIT = 5
+MFA_CHALLENGE_SECONDS = 300
+MFA_CHALLENGE_ATTEMPTS = 5
+MFA_ERROR = "Неверный код подтверждения"
 
 
 class Credentials(BaseModel):
@@ -74,6 +85,18 @@ class AccessPolicy(BaseModel):
     # журнал безопасности хранится без автоматического удаления.
     audit_retention_days: int = Field(365, ge=183, le=3650)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # Роли, которым второй фактор обязателен: без него кабинет открывает только
+    # настройку приложения-аутентификатора.
+    mfa_required_roles: list[Literal["admin", "teacher", "student"]] = Field(default_factory=list, max_length=3)
+
+
+class MfaCode(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(min_length=6, max_length=20)
+
+
+class MfaLogin(MfaCode):
+    mfa_token: str = Field(min_length=20, max_length=100)
 
 
 class UserActiveRequest(BaseModel):
@@ -129,6 +152,26 @@ class Accounts:
             self.db.execute("CREATE INDEX IF NOT EXISTS account_sessions_user ON account_sessions(user_id)")
             self.db.execute(
                 "CREATE TABLE IF NOT EXISTS account_policy (id INTEGER PRIMARY KEY, body TEXT NOT NULL)"
+            )
+            # Второй фактор: секрет TOTP, признак включения, последний принятый шаг
+            # (защита от повторного ввода кода) и хеши одноразовых резервных кодов.
+            self.db.execute(
+                """CREATE TABLE IF NOT EXISTS account_mfa (
+                    user_id TEXT PRIMARY KEY,
+                    secret TEXT NOT NULL,
+                    enabled INTEGER NOT NULL,
+                    last_step INTEGER,
+                    recovery TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                )"""
+            )
+            self.db.execute(
+                """CREATE TABLE IF NOT EXISTS account_mfa_challenges (
+                    token_hash TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    expires_at INTEGER NOT NULL,
+                    attempts INTEGER NOT NULL
+                )"""
             )
 
     def policy(self) -> AccessPolicy:
@@ -279,7 +322,145 @@ class Accounts:
             with self.db:
                 self.db.execute("DELETE FROM account_login_failures WHERE username=?", (username,))
                 self._audit("login.succeeded", row[0])
-                return self._issue_session(row[0])
+                return self.finish_login(row[0])
+
+    # ---- Второй фактор (TOTP) ----
+
+    def _mfa_row(self, uid: str):
+        return self.db.execute(
+            "SELECT secret,enabled,last_step,recovery FROM account_mfa WHERE user_id=?", (uid,)
+        ).fetchone()
+
+    def mfa_enabled(self, uid: str) -> bool:
+        row = self._mfa_row(uid)
+        return bool(row and row[1])
+
+    def finish_login(self, uid: str) -> dict:
+        """Пароль принят: сессия сразу или сначала код из приложения-аутентификатора."""
+        if not self.mfa_enabled(uid):
+            return self._issue_session(uid)
+        token = secrets.token_urlsafe(32)
+        now = int(time.time())
+        self.db.execute("DELETE FROM account_mfa_challenges WHERE expires_at < ?", (now,))
+        self.db.execute(
+            "INSERT INTO account_mfa_challenges VALUES (?,?,?,?)",
+            (hashlib.sha256(token.encode("ascii")).hexdigest(), uid, now + MFA_CHALLENGE_SECONDS, 0),
+        )
+        self._audit("login.mfa_challenge", uid)
+        return {"mfa_required": True, "mfa_token": token, "expires_in": MFA_CHALLENGE_SECONDS}
+
+    def _check_second_factor(self, uid: str, code: str) -> bool:
+        """TOTP или неиспользованный резервный код; при успехе состояние обновляется."""
+        row = self._mfa_row(uid)
+        if not row or not row[1]:
+            return False
+        step = mfa.verify(row[0], code, row[2])
+        if step is not None:
+            self.db.execute("UPDATE account_mfa SET last_step=? WHERE user_id=?", (step, uid))
+            return True
+        codes = json.loads(row[3])
+        digest = mfa.hash_recovery(code)
+        if digest in codes:
+            codes.remove(digest)
+            self.db.execute("UPDATE account_mfa SET recovery=? WHERE user_id=?", (json.dumps(codes), uid))
+            self._audit("mfa.recovery_used", uid)
+            return True
+        return False
+
+    def login_mfa(self, token: str, code: str) -> dict:
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        now = int(time.time())
+        with self._lock:
+            with self.db:
+                row = self.db.execute(
+                    "SELECT user_id,expires_at,attempts FROM account_mfa_challenges WHERE token_hash=?", (token_hash,)
+                ).fetchone()
+                expired = not row or row[1] <= now or row[2] >= MFA_CHALLENGE_ATTEMPTS
+                if expired:
+                    self.db.execute("DELETE FROM account_mfa_challenges WHERE token_hash=?", (token_hash,))
+                else:
+                    user = self.get_user(row[0])
+                    accepted = bool(user and user["active"] and self._check_second_factor(row[0], code))
+                    if accepted:
+                        self.db.execute("DELETE FROM account_mfa_challenges WHERE token_hash=?", (token_hash,))
+                        self._audit("login.mfa_succeeded", row[0])
+                        return self._issue_session(row[0])
+                    # Неудачная попытка фиксируется до ответа: транзакция не откатывается.
+                    self.db.execute("UPDATE account_mfa_challenges SET attempts=attempts+1 WHERE token_hash=?", (token_hash,))
+                    self._audit("login.mfa_failed", row[0])
+            if expired:
+                raise HTTPException(401, "Время на ввод кода истекло. Войдите заново.")
+            raise HTTPException(401, MFA_ERROR)
+
+    def _mfa_setup_pending(self, user: dict) -> bool:
+        required = self.policy().mfa_required_roles
+        return bool(required) and user["role"] in required and not self.mfa_enabled(user["id"])
+
+    def install_mfa_guard(self, app) -> None:
+        @app.middleware("http")
+        async def remember_path(request, call_next):
+            token = REQUEST_PATH.set(request.url.path)
+            try:
+                return await call_next(request)
+            finally:
+                REQUEST_PATH.reset(token)
+
+    def mfa_status(self, user: dict) -> dict:
+        row = self._mfa_row(user["id"])
+        return {"enabled": bool(row and row[1]),
+                "required": user["role"] in self.policy().mfa_required_roles,
+                "recovery_codes_left": len(json.loads(row[3])) if row and row[1] else 0}
+
+    def mfa_setup(self, user: dict) -> dict:
+        with self._lock, self.db:
+            if self.mfa_enabled(user["id"]):
+                raise HTTPException(409, "Двухфакторный вход уже включён. Чтобы сменить устройство, сначала отключите его.")
+            secret = mfa.new_secret()
+            self.db.execute(
+                "INSERT INTO account_mfa VALUES (?,?,?,?,?,?) ON CONFLICT (user_id) DO UPDATE SET "
+                "secret=excluded.secret, enabled=0, last_step=NULL, recovery='[]', created_at=excluded.created_at",
+                (user["id"], secret, 0, None, "[]", int(time.time())),
+            )
+        uri = mfa.otpauth_uri(secret, user["username"])
+        return {"secret": secret, "otpauth_uri": uri, "qr_svg": mfa.qr_svg(uri),
+                "digits": mfa.DIGITS, "period": mfa.STEP_SECONDS}
+
+    def mfa_enable(self, user: dict, code: str) -> dict:
+        with self._lock, self.db:
+            row = self._mfa_row(user["id"])
+            if not row:
+                raise HTTPException(409, "Сначала получите ключ для приложения")
+            if row[1]:
+                raise HTTPException(409, "Двухфакторный вход уже включён")
+            step = mfa.verify(row[0], code)
+            if step is None:
+                raise HTTPException(400, "Код не подошёл. Проверьте время на телефоне и введите новый код.")
+            codes = mfa.recovery_codes()
+            self.db.execute(
+                "UPDATE account_mfa SET enabled=1, last_step=?, recovery=? WHERE user_id=?",
+                (step, json.dumps([mfa.hash_recovery(c) for c in codes]), user["id"]),
+            )
+            self._audit("mfa.enabled", user["id"])
+        return {"enabled": True, "recovery_codes": codes}
+
+    def mfa_disable(self, user: dict, code: str) -> dict:
+        with self._lock, self.db:
+            if not self._check_second_factor(user["id"], code):
+                raise HTTPException(400, MFA_ERROR)
+            self.db.execute("DELETE FROM account_mfa WHERE user_id=?", (user["id"],))
+            self._audit("mfa.disabled", user["id"])
+        return {"enabled": False}
+
+    def mfa_reset(self, uid: str, actor_id: str) -> dict:
+        """Администратор снимает второй фактор, если пользователь потерял телефон."""
+        with self._lock, self.db:
+            if not self._user_row(uid=uid):
+                raise HTTPException(404, "Пользователь не найден")
+            self.db.execute("DELETE FROM account_mfa WHERE user_id=?", (uid,))
+            self.db.execute("DELETE FROM account_mfa_challenges WHERE user_id=?", (uid,))
+            self._audit("mfa.reset_by_admin", uid)
+            self._audit("mfa.reset_performed", actor_id)
+        return {"user_id": uid, "enabled": False}
 
     def current(self, token: str) -> dict:
         if not token:
@@ -298,6 +479,8 @@ class Accounts:
                     self.db.execute("DELETE FROM account_sessions WHERE token_hash=?", (token_hash,))
                 raise HTTPException(401, SESSION_ERROR)
             user = self._public(row)
+            if not REQUEST_PATH.get().startswith(MFA_SETUP_PATHS) and self._mfa_setup_pending(user):
+                raise HTTPException(403, "Для вашей роли обязателен двухфакторный вход. Настройте его в кабинете.")
             actor = AUDIT_ACTOR.get()
             if actor is not None:
                 actor.update(id=user['id'], role=user['role'])
@@ -330,7 +513,8 @@ class Accounts:
             rows = self.db.execute(
                 "SELECT id,username,display_name,role,active FROM account_users ORDER BY username"
             ).fetchall()
-            return [self._public(row) for row in rows]
+            enabled = {row[0] for row in self.db.execute("SELECT user_id FROM account_mfa WHERE enabled=1")}
+            return [{**self._public(row), "mfa_enabled": row[0] in enabled} for row in rows]
 
     def create_user(self, username: str, password: str, display_name: str, role: str) -> dict:
         if role not in ("admin", "teacher", "student"):
@@ -350,6 +534,35 @@ class Accounts:
                 if "UNIQUE constraint failed" in str(exc):
                     raise HTTPException(409, "Имя пользователя уже занято") from None
                 raise
+        return self.get_user(uid)
+
+    def reset_admin(self, username: str, password: str, display_name: str) -> dict:
+        """Серверный сброс доступа администратора (reset_admin.py): создаёт учётную
+        запись или задаёт ей новый пароль, включает её и снимает блокировку, второй
+        фактор и прежние сессии. Через API не вызывается."""
+        username = username.strip().lower()
+        salt = secrets.token_bytes(16)
+        password_hash = self._password_hash(password, salt)
+        with self._lock, self.db:
+            row = self._user_row(username=username)
+            if row:
+                uid = row[0]
+                self.db.execute(
+                    "UPDATE account_users SET role='admin', active=1, password_salt=?, password_hash=? WHERE id=?",
+                    (salt, password_hash, uid),
+                )
+                self._audit("account.admin_reset", uid)
+            else:
+                uid = str(uuid4())
+                self.db.execute(
+                    "INSERT INTO account_users VALUES (?,?,?,?,?,?,?,?)",
+                    (uid, username, display_name, "admin", 1, salt, password_hash, int(time.time())),
+                )
+                self._audit("account.admin_created", uid)
+            self.db.execute("DELETE FROM account_sessions WHERE user_id=?", (uid,))
+            self.db.execute("DELETE FROM account_login_failures WHERE username=?", (username,))
+            self.db.execute("DELETE FROM account_mfa WHERE user_id=?", (uid,))
+            self.db.execute("DELETE FROM account_mfa_challenges WHERE user_id=?", (uid,))
         return self.get_user(uid)
 
     def set_active(self, uid: str, active: bool, actor_id: str | None = None) -> dict:
@@ -382,9 +595,31 @@ class Accounts:
         def login(body: Credentials):
             return self.login(body.username, body.password)
 
+        @auth.post("/mfa-login")
+        def login_mfa(body: MfaLogin):
+            return self.login_mfa(body.mfa_token, body.code)
+
         @auth.get("/me")
         def me(user: dict = Depends(self.require())):
-            return user
+            return {**user, "mfa": self.mfa_status(user)}
+
+        @auth.get("/mfa")
+        def mfa_status(user: dict = Depends(self.require())):
+            return self.mfa_status(user)
+
+        @auth.post("/mfa/setup")
+        def mfa_setup(user: dict = Depends(self.require())):
+            return self.mfa_setup(user)
+
+        @auth.post("/mfa/enable")
+        def mfa_enable(body: MfaCode, user: dict = Depends(self.require())):
+            return self.mfa_enable(user, body.code)
+
+        @auth.post("/mfa/disable")
+        def mfa_disable(body: MfaCode, user: dict = Depends(self.require())):
+            if self.mfa_status(user)["required"]:
+                raise HTTPException(409, "Для вашей роли двухфакторный вход обязателен")
+            return self.mfa_disable(user, body.code)
 
         @auth.post("/logout", status_code=204)
         def logout(x_user_session: str = Header("", alias="X-User-Session")):
@@ -405,6 +640,14 @@ class Accounts:
         @admin.patch("/users/{uid}/role")
         def change_role(uid: str, body: UserRoleRequest, user: dict = Depends(self.require("admin"))):
             return self.set_role(uid, body.role, user["id"])
+
+        @admin.get("/users/{uid}/mfa")
+        def user_mfa(uid: str, _user: dict = Depends(self.require("admin"))):
+            return {"user_id": uid, "enabled": self.mfa_enabled(uid)}
+
+        @admin.post("/users/{uid}/mfa-reset")
+        def reset_mfa(uid: str, user: dict = Depends(self.require("admin"))):
+            return self.mfa_reset(uid, user["id"])
 
         @admin.get("/policy")
         def get_policy(_user: dict = Depends(self.require("admin"))):

@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import calls, health, chat, integration
+from app.api import calls, health, chat, integration, webrtc
 from app.asterisk.call_manager import CallManager
 from app.asterisk.media_ws import router as media_router
 from app.config import Settings
@@ -49,6 +49,7 @@ def create_app(settings=None):
     app.include_router(chat.router, prefix="/api/v1")
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(calls.router, prefix="/api/v1")
+    app.include_router(webrtc.router, prefix="/api/v1")
     # Short aliases from the requirements. Canonical documented API is /api/v1.
     app.include_router(calls.router, include_in_schema=False)
     app.include_router(media_router)

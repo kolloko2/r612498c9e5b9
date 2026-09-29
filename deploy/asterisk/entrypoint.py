@@ -3,10 +3,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import ipaddress
 import json
 import os
 import re
+import socket
 import sys
 from pathlib import Path
 from string import Template
@@ -170,6 +173,76 @@ qualify_frequency=30
     return "\n".join(blocks).rstrip()
 
 
+WEB_PREFIX = "w"
+
+
+def web_password(ari_password: str, extension: str) -> str:
+    """Пароль телефона в браузере для учебного номера.
+
+    Выводится из пароля ARI, который уже есть у Asterisk и Voice: отдельный
+    секрет не заводится, а смена пароля ARI меняет и пароли браузерных телефонов.
+    По выведенному паролю нельзя восстановить пароль ARI.
+    """
+    digest = hmac.new(ari_password.encode("utf-8"), f"webrtc:{extension}".encode("ascii"), hashlib.sha256)
+    return digest.hexdigest()[:32]
+
+
+def webrtc_accounts(accounts: list[tuple[str, str]], ari_password: str, *, use_tls: bool = False) -> str:
+    """Абоненты «телефон в браузере» w201…w220 рядом с учебными номерами.
+
+    webrtc=yes включает DTLS-SRTP, ICE, AVPF и rtcp-mux, как требует браузер.
+    Кодеки PCMU/PCMA: Opus в этой сборке Asterisk не установлен.
+    """
+    blocks = []
+    for extension, _ in accounts:
+        name = WEB_PREFIX + extension
+        blocks.append(
+            f"""[{name}]
+type=endpoint
+transport={'transport-wss' if use_tls else 'transport-ws'}
+context=training-only
+disallow=all
+allow=ulaw,alaw
+webrtc=yes
+auth=auth-{name}
+aors={name}
+direct_media=no
+rtp_timeout=15
+rtp_timeout_hold=120
+
+[auth-{name}]
+type=auth
+auth_type=userpass
+username={name}
+password={web_password(ari_password, extension)}
+
+[{name}]
+type=aor
+max_contacts=1
+remove_existing=yes
+qualify_frequency=30
+"""
+        )
+    return "\n".join(blocks).rstrip()
+
+
+def local_addresses() -> list[str]:
+    """IPv4-адреса контейнера: их ICE-кандидаты подменяются внешним адресом."""
+    try:
+        addresses = socket.gethostbyname_ex(socket.gethostname())[2]
+    except OSError:
+        return []
+    return sorted({a for a in addresses if not a.startswith("127.")})
+
+
+def ice_candidates(external: str, addresses: list[str]) -> str:
+    # Браузер не видит адрес контейнера: в кандидатах ICE он заменяется
+    # адресом сервера в учебной сети (SIP_EXTERNAL_ADDRESS).
+    if not external or not addresses:
+        return ""
+    return "[ice_host_candidates]\n" + "".join(f"{a} => {external}\n" for a in addresses)
+
+
 def build_values(env: dict[str, str]) -> dict[str, str]:
     ari_username = validate_identifier(env, "ARI_USERNAME")
     media_username = validate_identifier(env, "MEDIA_USERNAME")
@@ -209,6 +282,9 @@ def build_values(env: dict[str, str]) -> dict[str, str]:
             "method=tlsv1_2\n"
             f"cert_file={cert_file}\npriv_key_file={key_file}\nca_list_file={ca_file}\n"
             "verify_client=no\nrequire_client_cert=no\n"
+            f"{transport_network.rstrip()}\n\n"
+            # Браузерные телефоны: SIP поверх WebSocket на HTTPS-сервере Asterisk (/ws).
+            "[transport-wss]\ntype=transport\nprotocol=wss\nbind=0.0.0.0\n"
             f"{transport_network.rstrip()}"
         )
         websocket_tls = (
@@ -220,6 +296,8 @@ def build_values(env: dict[str, str]) -> dict[str, str]:
         http_tls = ""
         pjsip_transport = (
             "[transport-udp]\ntype=transport\nprotocol=udp\nbind=0.0.0.0:5060\n"
+            f"{transport_network.rstrip()}\n\n"
+            "[transport-ws]\ntype=transport\nprotocol=ws\nbind=0.0.0.0\n"
             f"{transport_network.rstrip()}"
         )
         websocket_tls = ""
@@ -233,7 +311,9 @@ def build_values(env: dict[str, str]) -> dict[str, str]:
         "HTTP_TLS": http_tls,
         "PJSIP_TRANSPORT": pjsip_transport,
         "WEBSOCKET_TLS": websocket_tls,
-        "PJSIP_ACCOUNTS": pjsip_accounts(accounts, external, use_tls=use_tls),
+        "PJSIP_ACCOUNTS": pjsip_accounts(accounts, external, use_tls=use_tls) + "\n\n"
+        + webrtc_accounts(accounts, ari_password, use_tls=use_tls),
+        "ICE_HOST_CANDIDATES": ice_candidates(external, local_addresses()),
     }
 
 

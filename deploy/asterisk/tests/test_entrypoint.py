@@ -49,6 +49,38 @@ class EntrypointTests(unittest.TestCase):
             if os.name != "nt":
                 self.assertTrue(all(path.stat().st_mode & 0o777 == 0o600 for path in paths))
 
+    def test_browser_phones_are_rendered_for_every_extension(self):
+        values = entrypoint.build_values(valid_env())
+        pjsip = values["PJSIP_ACCOUNTS"]
+        self.assertIn("[w201]", pjsip)
+        self.assertIn("[w220]", pjsip)
+        self.assertIn("webrtc=yes", pjsip)
+        self.assertIn("transport=transport-ws", pjsip)
+        self.assertIn("[transport-ws]", values["PJSIP_TRANSPORT"])
+        password = entrypoint.web_password("ari-secret-value-0001", "201")
+        self.assertIn(f"password={password}", pjsip)
+        # Пароль выводится, а не совпадает с паролем ARI или IP-телефона.
+        self.assertNotIn("ari-secret-value-0001", pjsip)
+        self.assertEqual(len(password), 32)
+        self.assertNotEqual(password, entrypoint.web_password("ari-secret-value-0001", "220"))
+
+    def test_ice_candidates_map_container_address_to_external(self):
+        self.assertEqual(entrypoint.ice_candidates("192.0.2.10", ["172.22.0.3"]),
+                         "[ice_host_candidates]\n172.22.0.3 => 192.0.2.10\n")
+        self.assertEqual(entrypoint.ice_candidates("", ["172.22.0.3"]), "")
+
+    def test_tls_browser_phones_use_wss(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env = valid_env()
+            for name in ("ASTERISK_TLS_CERT_FILE", "ASTERISK_TLS_KEY_FILE", "ASTERISK_TLS_CA_FILE"):
+                path = Path(directory) / name
+                path.write_text("x", encoding="utf-8")
+                env[name] = str(path)
+            env.update(ASTERISK_TLS_ENABLED="true", VOICE_MEDIA_URL="wss://voice:8001/media")
+            values = entrypoint.build_values(env)
+            self.assertIn("[transport-wss]", values["PJSIP_TRANSPORT"])
+            self.assertIn("transport=transport-wss", values["PJSIP_ACCOUNTS"])
+
     def test_rejects_config_injection_without_echoing_secret(self):
         env = valid_env()
         env["ARI_PASSWORD"] = "safe-value-123456\n[evil]"

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="/assets/apple-touch-icon.png"><title>Оценка и статистика · Тренажёр 112</title>
-<link rel="stylesheet" href="/assets/portal.css"><link rel="stylesheet" href="/assets/assessment.css"><script src="/assets/assessment.js" defer></script><link rel="stylesheet" href="/assets/cabinet.css"></head>
+<link rel="stylesheet" href="/assets/portal.css"><link rel="stylesheet" href="/assets/assessment.css"><script src="/assets/charts.js" defer></script><script src="/assets/assessment.js" defer></script><link rel="stylesheet" href="/assets/cabinet.css"></head>
 <body><header><div><strong>СИСТЕМА-112</strong><span>Оценка учебных попыток</span></div><a class="button" href="/portal">Вернуться в кабинет</a></header>
 <main><div class="heading"><div><h1 id="pageTitle">Оценка и статистика</h1><p id="intro">Загрузка данных…</p></div><button id="refresh" type="button">Обновить</button></div><p id="status" role="status" aria-live="polite"></p>
 
@@ -20,10 +20,15 @@
 <section id="teacherSessions" class="panel" hidden><h2>Завершённые попытки</h2><div id="sessions" class="cards compact"></div></section>
 
 <section class="panel"><div class="section-head"><div><h2>Статистика</h2><p class="hint">Итоги рассчитаны по всем попыткам; в динамике показаны последние 200.</p></div><div class="card-actions"><label id="groupWrap" hidden>Группа<select id="groupFilter"><option value="">Все группы</option></select></label><label>Раздел CSV<select id="csvSection"><option value="summary">Сводка</option><option value="progress">Динамика</option><option value="students">Студенты</option><option value="typical-errors">Типичные ошибки</option></select></label><button id="exportCsv" type="button">Скачать CSV</button><button id="exportXlsx" type="button">Скачать XLSX</button><button id="exportStats" type="button">Скачать JSON</button></div></div>
- <div id="summary" class="summary"></div><h3>Динамика</h3><div class="table-wrap"><table><thead><tr><th>Занятие</th><th>Завершено</th><th>Балл</th><th>Результат</th><th>Источник</th><th>Уровень / ДДС</th></tr></thead><tbody id="progress"></tbody></table></div>
+ <div id="summary" class="summary"></div><div id="statsCharts" class="chart-grid"></div><h3>Динамика</h3><div class="table-wrap"><table><thead><tr><th>Занятие</th><th>Завершено</th><th>Балл</th><th>Результат</th><th>Источник</th><th>Уровень / ДДС</th><th>Разбор</th></tr></thead><tbody id="progress"></tbody></table></div>
  <section id="studentsSection" hidden><h3>Студенты</h3><div id="studentsStats" class="cards compact"></div></section>
  <div class="split"><section><h3>Типичные ошибки</h3><div id="errors"></div></section><section><h3>По сценариям</h3><div id="scenariosStats"></div></section></div>
  <h3>Тепловая карта ошибок</h3><p class="hint">Доля непройденных проверок по каждому сценарию. Считается по тем же завершённым попыткам, что и таблица типичных ошибок.</p><div class="table-wrap"><table id="heatmap"><thead><tr id="heatmapHead"></tr></thead><tbody id="heatmapBody"></tbody></table></div>
+</section>
+
+<section id="forecastPanel" class="panel"><div class="section-head"><div><h2>Прогноз готовности</h2><p class="hint" id="forecastMethod"></p></div><div class="card-actions"><label>Порог готовности, баллы<input id="forecastThreshold" type="number" min="30" max="100" step="5" value="70"></label><label>Обучающийся<select id="forecastStudent"></select></label></div></div>
+ <div id="forecastChart"></div><h3>Прогноз по обучающимся</h3><div id="forecastStudents"></div>
+ <h3>Достоверность прогноза</h3><p class="hint">Каждая попытка, начиная с третьей, прогнозируется только по предыдущим попыткам того же обучающегося и сравнивается с фактом. Для сравнения — два простых способа: «последний балл» и «средний балл».</p><div id="forecastValidation"></div>
 </section>
 
 <section id="groupInsights" class="panel" hidden><div class="section-head"><div><h2>Рекомендации для группы</h2></div><button id="generateInsights" class="primary" type="button">Сформировать рекомендации</button></div>

@@ -1,6 +1,6 @@
 """Classroom groups, assignments, and role-scoped session discovery."""
 from communication import summary as communication_summary
-from practice_plan import require_approved
+from practice_plan import approved as practice_approved, require_approved
 import json
 from datetime import datetime, timezone
 from typing import Annotated
@@ -27,6 +27,11 @@ class CreateGroup(BaseModel):
 class AddMember(BaseModel):
     model_config = ConfigDict(extra="forbid")
     student_id: str = Field(min_length=1, max_length=100)
+
+
+class UpdateGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    archived: bool
 
 
 class CreateAssignment(BaseModel):
@@ -65,8 +70,12 @@ class Learning:
         store.db.commit()
         if store.db.is_postgres:
             store.db.execute('ALTER TABLE assignments ADD COLUMN IF NOT EXISTS practice_with_hints INTEGER NOT NULL DEFAULT 0')
-        elif 'practice_with_hints' not in {row[1] for row in store.db.execute('PRAGMA table_info(assignments)')}:
-            store.db.execute('ALTER TABLE assignments ADD COLUMN practice_with_hints INTEGER NOT NULL DEFAULT 0')
+            store.db.execute('ALTER TABLE learning_groups ADD COLUMN IF NOT EXISTS archived_at TEXT')
+        else:
+            if 'practice_with_hints' not in {row[1] for row in store.db.execute('PRAGMA table_info(assignments)')}:
+                store.db.execute('ALTER TABLE assignments ADD COLUMN practice_with_hints INTEGER NOT NULL DEFAULT 0')
+            if 'archived_at' not in {row[1] for row in store.db.execute('PRAGMA table_info(learning_groups)')}:
+                store.db.execute('ALTER TABLE learning_groups ADD COLUMN archived_at TEXT')
         store.db.commit()
 
     @staticmethod
@@ -88,6 +97,7 @@ class Learning:
             "scenario_id": row[3], "title": row[4], "active": bool(row[5]),
             "created_at": row[6],
             "practice_with_hints": bool(row[7]),
+            "practice_available": practice_approved(self.store.scenario(row[3])),
         }
 
     def assignment_for_student(self, assignment_id, scenario_id, user):
@@ -136,11 +146,11 @@ class Learning:
     def _group(self, group_id, teacher_id=None):
         if teacher_id is None:
             row = self.store.db.execute(
-                "SELECT id, title, teacher_id, created_at FROM learning_groups WHERE id=?", (str(group_id),)
+                "SELECT id, title, teacher_id, created_at, archived_at FROM learning_groups WHERE id=?", (str(group_id),)
             ).fetchone()
         else:
             row = self.store.db.execute(
-                "SELECT id, title, teacher_id, created_at FROM learning_groups WHERE id=? AND teacher_id=?",
+                "SELECT id, title, teacher_id, created_at, archived_at FROM learning_groups WHERE id=? AND teacher_id=?",
                 (str(group_id), teacher_id),
             ).fetchone()
         if not row:
@@ -154,6 +164,7 @@ class Learning:
             if student:
                 students.append({key: student[key] for key in ("id", "display_name", "username")})
         return {"id": row[0], "title": row[1], "teacher_id": row[2], "created_at": row[3],
+                "archived": bool(row[4]), "archived_at": row[4],
                 "member_ids": member_ids, "students": students}
 
     def router(self, authorize):
@@ -212,6 +223,29 @@ class Learning:
                 self.store.db.execute(
                     "INSERT INTO group_members (group_id,student_id) VALUES (?,?) ON CONFLICT (group_id,student_id) DO NOTHING",
                     (group_id, body.student_id),
+                )
+            return self._group(group_id, user["id"])
+
+        @instructor.delete("/groups/{group_id}/members/{student_id}")
+        async def remove_member(group_id: str, student_id: str, user=Depends(teacher)):
+            # Новые карточки ученик больше не получит; прежние попытки и отчёты остаются.
+            if not self._group(group_id, user["id"]):
+                raise HTTPException(404, "Группа не найдена")
+            with self.store.db:
+                self.store.db.execute(
+                    "DELETE FROM group_members WHERE group_id=? AND student_id=?", (group_id, student_id)
+                )
+            return self._group(group_id, user["id"])
+
+        @instructor.patch("/groups/{group_id}")
+        async def update_group(group_id: str, body: UpdateGroup, user=Depends(teacher)):
+            # Архив скрывает группу из рабочих списков; состав, занятия и результаты сохраняются.
+            if not self._group(group_id, user["id"]):
+                raise HTTPException(404, "Группа не найдена")
+            with self.store.db:
+                self.store.db.execute(
+                    "UPDATE learning_groups SET archived_at=? WHERE id=? AND teacher_id=?",
+                    (now() if body.archived else None, group_id, user["id"]),
                 )
             return self._group(group_id, user["id"])
 

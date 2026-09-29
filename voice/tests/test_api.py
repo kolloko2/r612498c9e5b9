@@ -85,3 +85,64 @@ def test_health_is_unavailable_when_speech_model_files_are_missing(tmp_path):
     with TestClient(create_app(settings)) as client:
         response = client.get("/api/v1/health")
     assert response.status_code == 503 and response.json()["status"] == "degraded"
+
+
+def test_recording_is_served_by_call_id(tmp_path):
+    import base64
+    import wave
+    from uuid import uuid4
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.config import Settings
+    call_id = uuid4()
+    folder = tmp_path / "recordings" / str(uuid4()) / str(call_id)
+    folder.mkdir(parents=True)
+    with wave.open(str(folder / "mixed.wav"), "wb") as audio:
+        audio.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
+        audio.writeframes(b"\0\0" * 16000)
+    settings = Settings(_env_file=None, recording_dir=tmp_path / "recordings", outbox_dir=tmp_path / "outbox")
+    with TestClient(create_app(settings)) as client:
+        body = client.get(f"/api/v1/calls/{call_id}/recording").json()
+        assert body["duration_seconds"] == 1.0 and base64.b64decode(body["file_base64"])[:4] == b"RIFF"
+        assert client.get(f"/api/v1/calls/{uuid4()}/recording").status_code == 404
+
+
+def test_recording_mp3_is_encoded_once_and_cached(tmp_path):
+    import base64
+    import wave
+    from uuid import uuid4
+    import numpy as np
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.config import Settings
+    call_id = uuid4()
+    folder = tmp_path / "recordings" / str(uuid4()) / str(call_id)
+    folder.mkdir(parents=True)
+    tone = (np.sin(np.arange(32000) * 2 * np.pi * 440 / 16000) * 8000).astype("<i2").tobytes()
+    with wave.open(str(folder / "mixed.wav"), "wb") as audio:
+        audio.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
+        audio.writeframes(tone)
+    settings = Settings(_env_file=None, recording_dir=tmp_path / "recordings", outbox_dir=tmp_path / "outbox")
+    with TestClient(create_app(settings)) as client:
+        body = client.get(f"/api/v1/calls/{call_id}/recording?format=mp3").json()
+        data = base64.b64decode(body["file_base64"])
+        assert body["content_type"] == "audio/mpeg" and body["duration_seconds"] == 2.0
+        assert data[:3] == b"ID3" or data[0] == 0xFF  # заголовок MP3
+        assert (folder / "mixed.mp3").exists() and len(data) < (folder / "mixed.wav").stat().st_size / 3
+        assert client.get(f"/api/v1/calls/{call_id}/recording?format=ogg").status_code == 422
+
+
+def test_webrtc_credentials_are_derived_and_limited_to_provisioned_numbers(tmp_path):
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.config import Settings
+    from app.api.webrtc import web_password
+    settings = Settings(_env_file=None, api_token="service-token-000001", ari_password="ari-secret-value-0001",
+                        allowed_extensions="201,202", recording_dir=tmp_path / "r", outbox_dir=tmp_path / "o")
+    with TestClient(create_app(settings)) as client:
+        auth = {"Authorization": "Bearer service-token-000001"}
+        assert client.get("/api/v1/webrtc/201").status_code == 401
+        body = client.get("/api/v1/webrtc/201", headers=auth).json()
+        assert body["username"] == "w201" and body["password"] == web_password("ari-secret-value-0001", "201")
+        assert body["registered"] is False
+        assert client.get("/api/v1/webrtc/219", headers=auth).status_code == 404

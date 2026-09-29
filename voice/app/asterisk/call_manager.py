@@ -270,6 +270,22 @@ class CallRuntime:
         audio = bytearray()
         last_partial = ""
         timeout = self.settings.provider_timeout_s
+        # Фраза с паузой между предложениями распадается на несколько реплик VAD.
+        # Если оператор продолжил говорить сразу, собеседник получает их одной
+        # репликой, а не отвечает на каждый обрывок отдельно.
+        pending = None
+        lookahead = None
+        grace = self.settings.utterance_merge_ms / 1000
+
+        async def send(item):
+            text, utterance_id, metrics = item
+            if metrics:
+                metrics.mark("backend_send_ms")
+            await self.backend.emit("operator.utterance", {
+                "call_id": str(self.context.call_id), "utterance_id": utterance_id,
+                "text": text, "is_final": True, "mode": self.mode})
+            if metrics:
+                metrics.report(str(self.context.call_id))
 
         async def open_provider(name):
             nonlocal provider
@@ -294,7 +310,10 @@ class CallRuntime:
             except Exception as exc:
                 await recover(exc)
             while True:
-                kind, utterance_id, pcm = await self.stt_input.get()
+                if lookahead:
+                    (kind, utterance_id, pcm), lookahead = lookahead, None
+                else:
+                    kind, utterance_id, pcm = await self.stt_input.get()
                 if kind == "start":
                     audio.clear()
                     last_partial = ""
@@ -320,15 +339,25 @@ class CallRuntime:
                     if metrics:
                         metrics.mark("stt_final_ms")
                     self.manager.chat.message(self.context.call_id, utterance_id, role="me", text=final.strip(), status="recognized" if final.strip() else "error")
-                    if final.strip():
-                        if metrics:
-                            metrics.mark("backend_send_ms")
-                        await self.backend.emit("operator.utterance", {
-                            "call_id": str(self.context.call_id), "utterance_id": utterance_id,
-                            "text": final.strip(), "is_final": True, "mode": self.mode})
-                    if metrics:
-                        metrics.report(str(self.context.call_id))
                     audio.clear()
+                    if final.strip():
+                        text = f"{pending[0]} {final.strip()}" if pending else final.strip()
+                        pending = (text, utterance_id, metrics)
+                    elif not pending:
+                        if metrics:
+                            metrics.report(str(self.context.call_id))
+                        continue
+                    if not self.quiet.is_set():
+                        continue  # оператор уже говорит дальше: ждём конца фразы
+                    if grace:
+                        try:
+                            lookahead = await asyncio.wait_for(self.stt_input.get(), grace)
+                        except TimeoutError:
+                            pass
+                    if lookahead and lookahead[0] == "start":
+                        continue
+                    item, pending = pending, None
+                    await send(item)
         finally:
             if provider:
                 await provider.close()

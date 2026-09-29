@@ -347,8 +347,8 @@ def review(value: dict, expectation: dict | None) -> dict | None:
         checks.append(_check('receipt_time',
                              f"Карточка открыта за {timing.get('response_limit_seconds') or 30} секунд",
                              timing.get('response_within_limit') is True,
-                             'Карточка не открыта.' if not value.get('opened_at')
-                             else f"Открытие через {timing.get('response_seconds')} с.",
+                             f"Открытие через {timing.get('response_seconds')} с."
+                             if timing.get('response_seconds') is not None else 'Карточка не открыта.',
                              critical=True))
         checks.append(_check('first_record',
                              f"Первая запись (статус и текст) за {timing.get('limit_seconds') or 180} секунд",

@@ -41,6 +41,42 @@ async def get_call(call_id: UUID, request: Request):
     return snapshot
 
 
+@router.get("/calls/{call_id}/recording")
+async def get_recording(call_id: UUID, request: Request, format: str = "wav"):
+    """Общая запись звонка (оператор и собеседник) для разбора попытки.
+
+    Файл ищется по идентификатору звонка в каталоге записей, поэтому доступен
+    и после перезапуска модуля. Ответ — JSON с base64: так его без изменений
+    передают Backend и BFF, которые проксируют только JSON.
+    """
+    import asyncio
+    import base64
+    import wave
+    from app.audio import mp3
+    if format not in ("wav", "mp3"):
+        raise HTTPException(422, "format must be wav or mp3")
+    root = request.app.state.manager.settings.recording_dir
+    matches = sorted(root.glob(f"*/{call_id}/mixed.wav"))
+    if not matches:
+        raise HTTPException(404, "Recording not found")
+    path = matches[-1]
+    if path.stat().st_size > 30 * 1024 * 1024:
+        raise HTTPException(413, "Recording is too large")
+    with wave.open(str(path), "rb") as audio:
+        seconds = round(audio.getnframes() / audio.getframerate(), 1)
+    if format == "mp3":
+        # Записи до появления MP3 кодируются при первом запросе и сохраняются рядом.
+        target = path.with_suffix(".mp3")
+        if not target.exists():
+            if not mp3.available():
+                raise HTTPException(503, "MP3 encoder is not installed")
+            await asyncio.to_thread(mp3.encode, path)
+        path = target
+    return {"call_id": str(call_id), "format": format, "content_type": "audio/mpeg" if format == "mp3" else "audio/wav",
+            "duration_seconds": seconds, "size_bytes": path.stat().st_size,
+            "file_base64": base64.b64encode(path.read_bytes()).decode("ascii")}
+
+
 @router.post("/calls/{call_id}/hangup")
 async def hangup_call(call_id: UUID, request: Request):
     snapshot = await request.app.state.manager.hangup(call_id)

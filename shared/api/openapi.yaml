@@ -1390,6 +1390,692 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - bearerAuth: []
+  /instructor/groups/{group_id}:
+    patch:
+      summary: Update Group
+      operationId: update_group_api_v1_instructor_groups__group_id__patch
+      parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Group Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGroup'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /instructor/groups/{group_id}/members/{student_id}:
+    delete:
+      summary: Remove Member
+      operationId: remove_member_api_v1_instructor_groups__group_id__members__student_id__delete
+      parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Group Id
+      - name: student_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Student Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /auth/mfa-login:
+    post:
+      summary: Login Mfa
+      operationId: login_mfa_api_v1_auth_mfa_login_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaLogin'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /auth/mfa:
+    get:
+      summary: Mfa Status
+      operationId: mfa_status_api_v1_auth_mfa_get
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /auth/mfa/setup:
+    post:
+      summary: Mfa Setup
+      operationId: mfa_setup_api_v1_auth_mfa_setup_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /auth/mfa/enable:
+    post:
+      summary: Mfa Enable
+      operationId: mfa_enable_api_v1_auth_mfa_enable_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCode'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /auth/mfa/disable:
+    post:
+      summary: Mfa Disable
+      operationId: mfa_disable_api_v1_auth_mfa_disable_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCode'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /admin/users/{uid}/mfa:
+    get:
+      summary: User Mfa
+      operationId: user_mfa_api_v1_admin_users__uid__mfa_get
+      parameters:
+      - name: uid
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Uid
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /admin/users/{uid}/mfa-reset:
+    post:
+      summary: Reset Mfa
+      operationId: reset_mfa_api_v1_admin_users__uid__mfa_reset_post
+      parameters:
+      - name: uid
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Uid
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /instructor/forecast:
+    get:
+      summary: Teacher Forecast
+      operationId: teacher_forecast_api_v1_instructor_forecast_get
+      parameters:
+      - name: group_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Group Id
+      - name: threshold
+        in: query
+        required: false
+        schema:
+          type: number
+          maximum: 100
+          minimum: 30
+          default: 70.0
+          title: Threshold
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /student/forecast:
+    get:
+      summary: Student Forecast
+      operationId: student_forecast_api_v1_student_forecast_get
+      parameters:
+      - name: threshold
+        in: query
+        required: false
+        schema:
+          type: number
+          maximum: 100
+          minimum: 30
+          default: 70.0
+          title: Threshold
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /student/sessions/{sid}/review:
+    get:
+      summary: Attempt Review View
+      description: Сквозной разбор попытки для обучающегося (своя) и преподавателя (свои
+        занятия).
+      operationId: attempt_review_view_api_v1_student_sessions__sid__review_get
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /instructor/sessions/{sid}/review:
+    get:
+      summary: Attempt Review View
+      description: Сквозной разбор попытки для обучающегося (своя) и преподавателя (свои
+        занятия).
+      operationId: attempt_review_view_api_v1_instructor_sessions__sid__review_get
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /student/sessions/{sid}/calls/{call_id}/recording:
+    get:
+      summary: Attempt Recording
+      description: Запись звонка попытки; доступна только владельцу попытки и её преподавателю.
+      operationId: attempt_recording_api_v1_student_sessions__sid__calls__call_id__recording_get
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: call_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Call Id
+      - name: format
+        in: query
+        required: false
+        schema:
+          enum:
+          - wav
+          - mp3
+          type: string
+          default: mp3
+          title: Format
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /instructor/sessions/{sid}/calls/{call_id}/recording:
+    get:
+      summary: Attempt Recording
+      description: Запись звонка попытки; доступна только владельцу попытки и её преподавателю.
+      operationId: attempt_recording_api_v1_instructor_sessions__sid__calls__call_id__recording_get
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: call_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Call Id
+      - name: format
+        in: query
+        required: false
+        schema:
+          enum:
+          - wav
+          - mp3
+          type: string
+          default: mp3
+          title: Format
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /student/softphone:
+    get:
+      summary: Softphone
+      description: 'Телефон в браузере: учётные данные только для номера, назначенного
+        этому обучающемуся.
+  
+  
+        Номер берётся из подготовленного или идущего занятия. Пароль выдаёт Voice
+  
+        (выводится из секрета Asterisk); в базе Backend он не хранится.'
+      operationId: softphone_api_v1_student_softphone_get
+      parameters:
+      - name: lesson_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Lesson Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Authorization
+      - name: x-user-session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
   /instructor/assignments:
     get:
       summary: Assignments
@@ -5753,6 +6439,46 @@ components:
       - password
       - display_name
       title: BootstrapRequest
+    UpdateGroup:
+      properties:
+        archived:
+          type: boolean
+          title: Archived
+      additionalProperties: false
+      type: object
+      required:
+      - archived
+      title: UpdateGroup
+    MfaCode:
+      properties:
+        code:
+          type: string
+          maxLength: 20
+          minLength: 6
+          title: Code
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      title: MfaCode
+    MfaLogin:
+      properties:
+        code:
+          type: string
+          maxLength: 20
+          minLength: 6
+          title: Code
+        mfa_token:
+          type: string
+          maxLength: 100
+          minLength: 20
+          title: Mfa Token
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - mfa_token
+      title: MfaLogin
     CreateAssignment:
       properties:
         group_id:
@@ -6335,6 +7061,20 @@ components:
           type: object
           maxProperties: 100
           title: Student Scenarios
+        norm_seconds:
+          anyOf:
+          - type: integer
+            maximum: 3600.0
+            minimum: 10.0
+          - type: 'null'
+          title: Norm Seconds
+        pass_score_percent:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: 'null'
+          title: Pass Score Percent
       additionalProperties: false
       type: object
       required:
@@ -7760,6 +8500,16 @@ components:
           - ERROR
           title: Log Level
           default: INFO
+        mfa_required_roles:
+          items:
+            type: string
+            enum:
+            - admin
+            - teacher
+            - student
+          type: array
+          maxItems: 3
+          title: Mfa Required Roles
       additionalProperties: false
       type: object
       title: AccessPolicy

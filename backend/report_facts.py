@@ -126,9 +126,11 @@ def valid(evidence, transcript: str) -> bool:
             and isinstance(evidence.get('fields'), dict))
 
 
-def current(evidence, transcript: str, card_reference: dict) -> bool:
-    """Прочтение действительно для этого текста и этих значений карточки."""
-    return valid(evidence, transcript) and evidence.get('reference') == card_reference
+def current(evidence, transcript: str, card_reference: dict, needed: list[str] | None = None) -> bool:
+    """Прочтение действительно для этого текста, этих значений карточки и нужных полей."""
+    requested = set((evidence or {}).get('requested') or FIELDS)
+    return (valid(evidence, transcript) and evidence.get('reference') == card_reference
+            and set(needed or ()) <= requested)
 
 
 def available() -> bool:
@@ -136,21 +138,36 @@ def available() -> bool:
     return config['provider'] == 'ollama' and bool(config['configured'])
 
 
-async def extract(transcript: str, *, timeout: float, card_reference: dict | None = None) -> dict | None:
+EMPTY = {'value': '', 'quote': '', 'match': ''}
+
+
+async def extract(transcript: str, *, timeout: float, card_reference: dict | None = None,
+                  fields: list[str] | None = None) -> dict | None:
+    """Прочитать доклад моделью.
+
+    fields — только сведения, которые правила не нашли: модель выписывает их, а не
+    все десять полей со значением, цитатой и оценкой. Это в разы меньше токенов
+    ответа (на RTX 5060 Ti — около 0,6 с вместо 2,5 с). Остальные поля
+    возвращаются пустыми: их прочтение модели не используется.
+    """
     config = llm.phone_configuration()
-    if (not available() or timeout <= 0
+    wanted = [f for f in (fields or FIELDS) if f in FIELDS]
+    if (not available() or timeout <= 0 or not wanted
             or not transcript.strip() or len(transcript) > MAX_TRANSCRIPT):
         return None
+    schema = {**SCHEMA, 'required': wanted, 'properties': {f: SCHEMA['properties'][f] for f in wanted}}
+    reference = {k: v for k, v in (card_reference or {}).items() if k in wanted}
     try:
         raw = await asyncio.wait_for(llm.complete([
             {'role': 'system', 'content': PROMPT},
-            {'role': 'user', 'content': json.dumps({'доклад': transcript, 'карточка': card_reference or {}},
-                                                   ensure_ascii=False)},
-        ], max_tokens=380, json_mode=SCHEMA, phone=True), timeout=timeout)
-        fields = json.loads(raw)
-        if not isinstance(fields, dict) or set(fields) != set(FIELDS):
+            {'role': 'user', 'content': json.dumps({'доклад': transcript, 'карточка': reference,
+                                                    'выписать': wanted}, ensure_ascii=False)},
+        ], max_tokens=40 + 34 * len(wanted), json_mode=schema, phone=True), timeout=timeout)
+        read = json.loads(raw)
+        if not isinstance(read, dict) or not set(wanted) <= set(read):
             return None
-        return {'fields': fields, 'fingerprint': fingerprint(transcript), 'reference': card_reference or {},
+        return {'fields': {f: read.get(f, dict(EMPTY)) for f in FIELDS}, 'requested': wanted,
+                'fingerprint': fingerprint(transcript), 'reference': card_reference or {},
                 'model': config.get('model', ''), 'provider': 'ollama'}
     except Exception:
         # Failure never grants credit; the rules keep asking a clear question.

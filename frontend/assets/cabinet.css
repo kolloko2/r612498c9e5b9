@@ -34,3 +34,9 @@ body:has(#loginForm){background:#e8edf0}body:has(#loginForm)>main{max-width:470p
 .student-section>p.muted{color:#5f707e}
 #lessons .card>button,#lessons .card>.guided-control{margin:8px 8px 0 0}
 .lessons-done>summary{cursor:pointer;font-weight:600;padding:12px 0;color:#34495a}.lessons-done[open]>summary{margin-bottom:8px}
+.group-members{list-style:none;margin:8px 0;padding:0;display:grid;gap:6px}.group-members li{display:flex;align-items:center;justify-content:space-between;gap:8px}.group-members button{padding:4px 10px;font-size:13px}
+.mfa-panel .mfa-pair{display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin:12px 0}.mfa-panel svg{width:180px;height:180px;background:#fff;border:1px solid #d5dbe0;border-radius:8px}.mfa-secret{display:block;font-size:17px;letter-spacing:1px;margin-top:4px;word-break:break-all}.mfa-codes{columns:2;font-family:monospace;font-size:16px;max-width:360px}.mfa-required{background:#fff4e5;border-left:4px solid #b7791f;padding:10px 12px}.mfa-status.error{color:#b3261e}fieldset.checks{border:1px solid #d5dbe0;border-radius:8px;padding:8px 12px}
+.lesson-builder fieldset.step{border:1px solid #d5dbe0;border-radius:10px;padding:12px 14px 14px;margin:0 0 12px}.lesson-builder legend{font-weight:700;padding:0 6px;display:flex;align-items:center;gap:8px}.lesson-builder legend b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#34495a;color:#fff;font-size:12px}
+.lesson-summary{background:#eef4fa;border-left:4px solid #2a78d6;padding:10px 12px;margin:4px 0 12px;line-height:1.45}.lesson-summary.warning{background:#fff6e0;border-left-color:#fab219}
+.lesson-builder label.check,.mfa-panel label.check,fieldset.checks label.check{display:flex!important;flex-direction:row!important;align-items:center;gap:8px}.lesson-builder label.check input,fieldset.checks label.check input{width:auto;margin:0}
+.lesson-builder fieldset.step{align-self:start}

@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     media_username: str = "asterisk"
     media_password: SecretStr = SecretStr("")
     allowed_extensions: str = "201"
+    # Телефон в браузере для номера N — абонент Asterisk «wN». Если он
+    # зарегистрирован, звонок идёт в браузер, иначе — на IP-телефон.
+    webrtc_prefix: str = Field("w", pattern=r"^[a-z]{1,4}$")
+    prefer_browser_phone: bool = True
     connect_timeout_s: float = Field(40, gt=0, le=180)
     provider_timeout_s: float = Field(20, gt=0, le=120)
     max_call_s: int = Field(1800, ge=5, le=14400)
@@ -60,6 +64,9 @@ class Settings(BaseSettings):
     preroll_ms: int = Field(200, ge=100, le=1000)
     utterance_limit_s: int = Field(30, ge=1, le=120)
     echo_guard_ms: int = Field(1400, ge=200, le=5000)
+    # Пауза после распознанной реплики, в которую продолжение речи оператора
+    # склеивается с ней в одну реплику для собеседника. 0 — без ожидания.
+    utterance_merge_ms: int = Field(150, ge=0, le=2000)
     # Перебивание: речь оператора громче эха динамика и дольше barge_in_ms
     # останавливает ответ собеседника. 0 — полудуплекс без перебивания.
     barge_in_ms: int = Field(400, ge=0, le=2000)

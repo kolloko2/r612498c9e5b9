@@ -51,6 +51,7 @@ async function serve(page){
   if(p.startsWith('/api/')){
    let data,status=200;
    if(p==='/api/v1/auth/me')data={id:'student-test',role:'student',display_name:'Диспетчер Учебный',active:true};
+   else if(p==='/api/v1/student/softphone')data={enabled:false,reason:'Номер не назначен'};
    else if(p==='/api/v1/health')data={status:'ok',provider:'mock'};
    else if(p==='/api/v1/student/classifier')data={version:'test-v1',groups:[],records:[]};
    else if(p==='/api/v1/student/routing/catalog')data={rules_version:'full-v2',services:['Служба 101'],flags:[]};

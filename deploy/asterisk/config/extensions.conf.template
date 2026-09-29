@@ -9,6 +9,10 @@ exten => s,1,Hangup()
 
 [training-only]
 ; Registered training phones cannot dial another endpoint, a trunk, or PSTN.
+; 100 — эхо-тест гарнитуры: собственный голос возвращается, других маршрутов нет.
+exten => 100,1,Answer()
+ same => n,Echo()
+ same => n,Hangup()
 exten => _X!,1,Hangup()
 exten => s,1,Hangup()
 

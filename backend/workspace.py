@@ -33,7 +33,8 @@ from teacher_guidance import examples as guidance_examples, initialize as initia
 from materials import material_context
 from categories import CATEGORIES, CategoryId
 from curriculum import Difficulty, DdsProfile, metadata, matches
-from assessment import initialize as initialize_assessment, policy_for, evaluate_policy
+from assessment import initialize as initialize_assessment, policy_for, evaluate_policy, STUDENT_ACTION_TYPES, last_activity, expert_history, effective
+import attempt_review
 from service_workflow import allowed_statuses, validate_transition, incident_status, STATUS_ALIASES, no_brigade_completion, NO_BRIGADE_COMMENT
 from cluster import Coordinator, ClusterUnavailable, LockUnavailable
 
@@ -171,6 +172,11 @@ class CreateLesson(BaseModel):
     # Адресное задание: конкретному месту — конкретный сценарий. Без записи
     # обучающийся получает случайный сценарий занятия, как раньше.
     student_scenarios: dict[str, str] = Field(default_factory=dict, max_length=100)
+    # Норматив реакции занятия, секунд: открытие карточки в ДДС или первое
+    # действие в приёме вызова 112. None — норматив сценария (по умолчанию 30 с).
+    norm_seconds: int | None = Field(default=None, ge=10, le=3600)
+    # Порог зачёта занятия: попытка с баллом ниже порога не засчитывается.
+    pass_score_percent: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
 
 
 class GuidedStep(BaseModel):
@@ -471,6 +477,12 @@ def update_elapsed(value: dict, item: dict) -> float:
 
 
 REPORT_GAP_SECONDS = 20
+# Попытка занятия без действий обучающегося дольше этого срока закрывается
+# системой: брошенная карточка не висит часами с растущим таймером. 0 — не закрывать.
+ABANDON_MINUTES = int(os.environ.get('CARD_ABANDON_MINUTES', '120'))
+ABANDON_SWEEP_SECONDS = 300
+
+
 
 
 def report_due(value: dict, item: dict, planned: list[dict]) -> bool:
@@ -634,12 +646,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
     # В полном цикле 112 сохраняется время первого действия обучающегося.
     # Для готовой карточки ДДС 30 секунд считаются отдельно — до открытия
     # входящей строки, а решение службы оценивается другим критерием.
-    STUDENT_ACTIONS = {'card.saved', 'service.updated', 'notification.recorded',
-                       'card.processed', 'card.linked', 'card.forwarded', 'operator.utterance',
-                       'card.error_reported',
-                       # Закрытие нерезультативного вызова — тоже действие
-                       # оператора, и норматив реакции к нему применим.
-                       'card.unproductive'}
+    STUDENT_ACTIONS = STUDENT_ACTION_TYPES
 
     def persist(value, kind, detail=None):
         if kind in STUDENT_ACTIONS and not value.get('first_action_at'):
@@ -889,6 +896,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             state['assessment_policy'] = policy_for(store, body.scenario_id, assignment['teacher_id'] if assignment else None)
         value["assessment_enabled"] = assessment["rubric"] is not None
         value["time_limit_seconds"] = assessment["rubric"]["time_limit_seconds"] if assessment["rubric"] else None
+        # Норматив реакции (первое действие) показывается на таймере отдельно от лимита карточки.
+        value["response_limit_seconds"] = assessment["rubric"].get("response_limit_seconds", DEFAULT_RESPONSE_LIMIT_SECONDS) if assessment["rubric"] else None
         if template:
             value.update(card=template['card'], revision=1, status='В работе', exercise_mode='actions',
                          initial_card=template['card'], routing=preview(template['card']),
@@ -927,6 +936,16 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         elif template and owner:
             value['dds_expectation'] = {'should_accept': True, 'brief_service': owner,
                                         'update_response_limit_seconds': 90}
+        if lesson_assignment:
+            # Нормативы и порог зачёта занятия фиксируются в карточке при выдаче.
+            if lesson_assignment.get('norm_seconds'):
+                value['lesson_norm_seconds'] = lesson_assignment['norm_seconds']
+                if value.get('exercise_mode') == 'actions':
+                    value['time_limit_seconds'] = lesson_assignment['norm_seconds']
+                else:
+                    value['response_limit_seconds'] = lesson_assignment['norm_seconds']
+            if lesson_assignment.get('pass_score_percent') is not None:
+                value['lesson_pass_score'] = lesson_assignment['pass_score_percent']
         store.save(sid, state)
         persist(value, "session.created")
         if body.transport == "text" and not template:
@@ -1661,7 +1680,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                 if error.status_code != 404:
                     raise
 
-    async def complete_session(sid, completed_by):
+    async def complete_session(sid, completed_by, finished_at=None):
         value = load(sid)
         if value["status"] == "Завершена":
             return public(value)
@@ -1674,8 +1693,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         value = load(sid)
         value["status"] = "Завершена"
         value['completed_by'] = completed_by
-        value["finished_at"] = now()
-        value["elapsed_seconds"] = round((datetime.now(timezone.utc) - datetime.fromisoformat(value["created_at"])).total_seconds())
+        value["finished_at"] = finished_at or now()
+        value["elapsed_seconds"] = max(0, round((datetime.fromisoformat(value["finished_at"]) - datetime.fromisoformat(value["created_at"])).total_seconds()))
         value["checks"] = [{"field": key, "passed": bool(value["card"][key])} for key in ("caller_name", "street", "house", "description", "incident_type", "services")]
         dds_card = value.get('exercise_mode') == 'actions' and value.get('owner_service')
         # Норматив 30 секунд в ДДС — от появления карточки до её открытия.
@@ -1695,6 +1714,12 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         value["evaluation"] = evaluate(assessment["rubric"], value["card"], value["elapsed_seconds"],
                                        value.get('response_seconds'))
         apply_default_norms(value)
+        if value.get('lesson_norm_seconds') and value.get('exercise_mode') != 'actions':
+            # Норматив реакции занятия перекрывает норматив эталона сценария.
+            timing = value['evaluation']['timing']
+            timing['response_limit_seconds'] = value['lesson_norm_seconds']
+            timing['response_within_limit'] = (None if timing.get('response_seconds') is None
+                                               else timing['response_seconds'] <= value['lesson_norm_seconds'])
         # Смысловая доводка идёт после детерминированной оценки и только в плюс:
         # см. semantic_grading.py. Сбой модели оставляет оценку как есть.
         await semantic_review(value["evaluation"])
@@ -1721,8 +1746,128 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             value['action_report'] = {'changed_fields': [key for key in value['card'] if value['card'][key] != value['initial_card'].get(key)],
                                       'service_actions': sum(e['type'] == 'service.updated' for e in value['events']),
                                       'note': 'Отчёт фиксирует действия. Порядок проверяется только при наличии правил преподавателя; содержательную правильность реагирования оценивает преподаватель.'}
+        if value.get('lesson_pass_score') is not None:
+            score = ((value.get('dds_review') or {}).get('score_percent') if value.get('exercise_mode') == 'actions'
+                     else value['evaluation'].get('score_percent'))
+            value['lesson_verdict'] = {'threshold': value['lesson_pass_score'], 'score_percent': score,
+                                       'passed': None if score is None else score >= value['lesson_pass_score']}
         persist(value, "session.finished", completed_by)
         return public(value)
+
+    async def close_abandoned():
+        """Закрыть попытки занятий, в которых обучающийся давно ничего не делал.
+
+        Время попытки считается до последнего действия, а не до момента проверки,
+        чтобы в отчётах не появлялись часы простоя. Решение фиксируется как
+        закрытие системой с причиной, преподаватель видит его в отчёте.
+        """
+        if ABANDON_MINUTES <= 0:
+            return 0
+        closed = 0
+        rows = store.db.execute("SELECT id, body FROM workspace WHERE json_text(body,'status')<>'Завершена'").fetchall()
+        for sid, encoded in rows:
+            value = json.loads(encoded)
+            if not value.get('lesson_id') or value.get('status') == 'Завершена':
+                continue
+            idle = datetime.now(timezone.utc) - last_activity(value)
+            if idle.total_seconds() < ABANDON_MINUTES * 60:
+                continue
+            try:
+                async with coordinated('workspace-session', sid):
+                    fresh = load(sid)
+                    if fresh['status'] == 'Завершена':
+                        continue
+                    finished_at = last_activity(fresh).isoformat()
+                    await complete_session(sid, {'role': 'system', 'reason': 'timeout',
+                                                 'name': 'Система', 'idle_minutes': ABANDON_MINUTES},
+                                           finished_at=finished_at)
+                    fresh = load(sid)
+                    fresh['attempt_outcome'] = 'timed_out'
+                    with store.db:
+                        store.db.execute('UPDATE workspace SET body=? WHERE id=?',
+                                         (json.dumps(fresh, ensure_ascii=False), sid))
+                    closed += 1
+            except HTTPException:
+                continue
+        return closed
+
+    abandon_task = None
+
+    async def sweep_abandoned():
+        while True:
+            await asyncio.sleep(ABANDON_SWEEP_SECONDS)
+            try:
+                await close_abandoned()
+            except Exception as error:  # сбой проверки не должен останавливать сервер
+                print('abandoned sweep failed:', type(error).__name__, flush=True)
+
+    async def start_sweep():
+        nonlocal abandon_task
+        if ABANDON_MINUTES > 0:
+            abandon_task = asyncio.create_task(sweep_abandoned())
+
+    async def stop_sweep():
+        if abandon_task:
+            abandon_task.cancel()
+
+    @api.get('/softphone')
+    async def softphone(lesson_id: UUID | None = Query(None)):
+        """Телефон в браузере: учётные данные только для номера, назначенного этому обучающемуся.
+
+        Номер берётся из подготовленного или идущего занятия. Пароль выдаёт Voice
+        (выводится из секрета Asterisk); в базе Backend он не хранится.
+        """
+        user = actor.get()
+        if not user:
+            raise HTTPException(403)
+        # Номер занятия, открытого на рабочем месте; без него — самого свежего идущего занятия.
+        candidates = []
+        for (encoded,) in store.db.execute("SELECT body FROM lessons WHERE json_text(body,'state') IN ('planned','running')").fetchall():
+            lesson = json.loads(encoded)
+            if (lesson.get('sip_extensions') or {}).get(user['id']):
+                candidates.append(lesson)
+        chosen = next((l for l in candidates if lesson_id and l['id'] == str(lesson_id)), None)
+        if not chosen and candidates:
+            chosen = max(candidates, key=lambda l: (l['state'] == 'running', l.get('created_at', '')))
+        extension = chosen['sip_extensions'][user['id']] if chosen else None
+        if not extension:
+            return {'enabled': False, 'reason': 'Преподаватель не назначил вам учебный номер в текущем занятии.'}
+        creds = await voice(f'webrtc/{extension}')
+        return {'enabled': True, 'extension': extension, 'lesson_id': chosen['id'], 'lesson_title': chosen.get('title'),
+                'username': creds['username'],
+                'password': creds['password'], 'uri': f"sip:{creds['username']}@trainer112.local",
+                'ws_path': '/sip-ws', 'display_name': user.get('display_name') or extension,
+                'echo_test': '100'}
+
+    @api.get('/sessions/{sid}/review')
+    @instructor.get('/sessions/{sid}/review')
+    async def attempt_review_view(sid: UUID):
+        """Сквозной разбор попытки для обучающегося (своя) и преподавателя (свои занятия)."""
+        value = load(sid)
+        lesson = None
+        if value.get('lesson_id'):
+            row = store.db.execute('SELECT body FROM lessons WHERE id=?', (value['lesson_id'],)).fetchone()
+            lesson = json.loads(row[0]) if row else None
+        result = None
+        if value['status'] == 'Завершена':
+            expert = expert_history(store, str(sid))
+            result = {'effective': effective(value, expert['current']), 'expert': expert['current'],
+                      'automatic_score': (value.get('evaluation') or {}).get('score_percent'),
+                      'dds_score': (value.get('dds_review') or {}).get('score_percent') if value.get('exercise_mode') == 'actions' else None,
+                      'policy_result': value.get('policy_result')}
+        review = attempt_review.build(store, value, lesson, result)
+        if accounts and value.get('student_id'):
+            review['student_name'] = (accounts.get_user(value['student_id']) or {}).get('display_name')
+        return review
+
+    @api.get('/sessions/{sid}/calls/{call_id}/recording')
+    @instructor.get('/sessions/{sid}/calls/{call_id}/recording')
+    async def attempt_recording(sid: UUID, call_id: UUID, format: Literal['wav', 'mp3'] = 'mp3'):
+        """Запись звонка попытки; доступна только владельцу попытки и её преподавателю."""
+        value = load(sid)
+        if str(call_id) not in attempt_review.call_ids(store, value):
+            raise HTTPException(404, 'Звонок не относится к этой попытке')
+        return await voice(f'calls/{call_id}/recording?format={format}')
 
     @api.get("/sessions/{sid}/report")
     async def report(sid: UUID):
@@ -1959,7 +2104,14 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         if not user:
             raise HTTPException(403)
         rows = store.db.execute("SELECT body FROM lessons WHERE json_text(body,'teacher_id')=? ORDER BY json_text(body,'created_at') DESC,id DESC", (user['id'],)).fetchall()
-        return [{**json.loads(row[0]), 'cards': [{'id': c['id'], 'student_id': c['student_id'], 'status': c['status'], 'number': c['number']} for c in lesson_cards(json.loads(row[0])['id'])]} for row in rows]
+        result = []
+        for (encoded,) in rows:
+            value = json.loads(encoded)
+            item = {**value, 'cards': [{'id': c['id'], 'student_id': c['student_id'], 'status': c['status'], 'number': c['number']} for c in lesson_cards(value['id'])]}
+            if value['state'] in ('planned', 'running'):
+                item['practice_available'] = all(practice_approved(s) for s in lesson_practice_scenarios(value))
+            result.append(item)
+        return result
 
     @instructor.post('/lessons/{lid}/start')
     async def start_lesson(lid: UUID):
@@ -2111,15 +2263,19 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             lesson_save(value, 'lesson.guided_step', {'step': body.step})
             return {'id': value['id'], 'guided_step': body.step}
 
+    def lesson_practice_scenarios(value):
+        # Подсказки допустимы, только если у каждого сценария занятия утверждён план подсказок.
+        return ([t['scenario'] for t in value.get('templates', [])] +
+                ([t['scenario'] for t in value['fill_snapshots']] if value.get('fill_snapshots') else
+                 [store.scenario(sid) for sid in value.get('scenario_ids', [])]) +
+                [store.load(c['id']).get('scenario') for c in lesson_cards(value['id']) if c['status'] != 'Завершена'])
+
     @instructor.put('/lessons/{lid}/practice')
     async def set_practice_policy(lid: UUID, body: PracticePolicy):
         async with coordinated('lesson', lid):
             value = lesson_load(lid)
             if body.practice_with_hints:
-                for scenario in ([t['scenario'] for t in value.get('templates', [])] +
-                                 ([t['scenario'] for t in value['fill_snapshots']] if value.get('fill_snapshots') else
-                                  [store.scenario(sid) for sid in value.get('scenario_ids', [])]) +
-                                 [store.load(c['id']).get('scenario') for c in lesson_cards(lid) if c['status'] != 'Завершена']):
+                for scenario in lesson_practice_scenarios(value):
                     require_approved(scenario)
             value['practice_with_hints'] = body.practice_with_hints
             if not body.practice_with_hints:
@@ -2273,4 +2429,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
     combined = APIRouter()
     combined.include_router(api)
     combined.include_router(instructor)
+    combined.add_event_handler('startup', start_sweep)
+    combined.add_event_handler('shutdown', stop_sweep)
+    start_sweep.close_abandoned = close_abandoned  # доступ для проверки без ожидания таймера
     return combined

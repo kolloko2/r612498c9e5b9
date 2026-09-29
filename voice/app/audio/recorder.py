@@ -2,6 +2,8 @@ import asyncio
 import os
 import time
 import wave
+
+from app.audio import mp3
 from pathlib import Path
 
 import numpy as np
@@ -128,4 +130,10 @@ class Recorder:
         self._close_files()
         for name in self.files:
             (self.directory / f"{name}.pcm.tmp").unlink()
+        # Компактная MP3-копия общей записи; её сбой не портит основную запись WAV.
+        if mp3.available():
+            try:
+                mp3.encode(self.directory / "mixed.wav")
+            except (OSError, ValueError, RuntimeError):
+                pass
         return self.paths()

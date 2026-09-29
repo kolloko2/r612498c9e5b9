@@ -307,6 +307,22 @@ async def generate(messages):
     return text
 
 
+def remember_utterance(store, sid, state, eid, utterance):
+    """Сохранить реплику оператора до ответа собеседника.
+
+    Окно разговора показывает фразу сразу после распознавания, а не вместе с
+    ответом модели через несколько секунд. Повторная доставка того же события
+    не задваивает реплику: она помечена идентификатором события.
+    """
+    if not any(m.get("event_id") == eid for m in state["messages"]):
+        state["messages"].append({"role": "user", "content": utterance, "event_id": eid})
+        store.save(sid, state)
+
+
+def plain(messages):
+    return [{"role": m["role"], "content": m["content"]} for m in messages]
+
+
 class Engine:
     def __init__(self, store, model=generate):
         self.store, self.model = store, model
@@ -391,8 +407,8 @@ class Engine:
                 state["replies"][eid] = None
                 self.store.save(sid, state)
                 return None
-            state["messages"].append({"role": "user", "content": utterance})
-            text = spoken_reply(crew_speech(await field_answer(field_report, state["messages"])))
+            remember_utterance(self.store, sid, state, eid, utterance)
+            text = spoken_reply(crew_speech(await field_answer(field_report, plain(state["messages"]))))
         elif duty:
             utterance = event["payload"]["text"].strip()[:4000]
             if not utterance:
@@ -402,7 +418,9 @@ class Engine:
                 state["echoes_ignored"] = state.get("echoes_ignored", 0) + 1
                 self.store.save(sid, state)
                 return None
-            spoken = briefing_join_speech([*(m["content"] for m in state["messages"] if m["role"] == "user"), utterance])
+            earlier = [m for m in state["messages"] if m.get("event_id") != eid]
+            remember_utterance(self.store, sid, state, eid, utterance)
+            spoken = briefing_join_speech([*(m["content"] for m in earlier if m["role"] == "user"), utterance])
             # Полнота доклада считается по сохранённой карточке, а не моделью:
             # ответ собеседника не может подтвердить приём вместо проверки.
             started = asyncio.get_running_loop().time()
@@ -411,7 +429,7 @@ class Engine:
                 state['duty_report'] = check_progress(spoken, duty['progress_reference'])
             else:
                 state["duty_report"] = await briefing_check_live(spoken, duty["card"], state.get('duty_report'))
-            history = [{"role": m["role"], "content": m["content"]} for m in state["messages"][-8:]]
+            history = plain(earlier[-8:])
             history.append({"role": "user", "content": utterance})
             try:
                 text = spoken_reply(await briefing_duty_reply(history, duty.get("known_card") or duty["card"], duty["service"],
@@ -427,7 +445,6 @@ class Engine:
                 state["provider_error"] = "Сервис диалога недоступен. Повторите запрос позднее."
             else:
                 state.pop("provider_error", None)
-            state["messages"].append({"role": "user", "content": utterance})
         else:
             utterance = event["payload"]["text"].strip()[:4000]
             if not utterance:
@@ -440,7 +457,9 @@ class Engine:
             scenario = state.get("scenario")
             if not scenario:
                 raise ValueError("Scenario was not selected")
-            history = state["messages"][-6:] + [{"role": "user", "content": utterance}]
+            earlier = [m for m in state["messages"] if m.get("event_id") != eid]
+            remember_utterance(self.store, sid, state, eid, utterance)
+            history = plain(earlier[-6:]) + [{"role": "user", "content": utterance}]
             deadline = asyncio.get_running_loop().time() + llm.VOICE_REPLY_TIMEOUT_SECONDS
             try:
                 text = people_answer(utterance, scenario) or await asyncio.wait_for(
@@ -461,7 +480,6 @@ class Engine:
                 state["provider_error"] = "Сервис диалога недоступен. Повторите запрос позднее."
             else:
                 state.pop("provider_error", None)
-            state["messages"].append({"role": "user", "content": utterance})
         state["messages"].append({"role": "assistant", "content": text})
         state["seq"] += 1
         payload = {"reply_id": str(uuid4()), "text": text, "should_interrupt": False}
@@ -509,6 +527,7 @@ from workspace import router as workspace_router
 from accounts import Accounts
 from learning import Learning
 accounts = Accounts(store)
+accounts.install_mfa_guard(app)
 from security_audit import install as install_security_audit
 install_security_audit(app, accounts, authorized)
 from operations import router as operations_router

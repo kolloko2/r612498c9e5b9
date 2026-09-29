@@ -619,9 +619,20 @@ function renderServiceHistory() {
 function renderDialogue() {
  const key=JSON.stringify(current.messages); if(key===transcriptKey)return;transcriptKey=key;
  $('transcript').replaceChildren(); for(const m of current.messages){const el=element('div',undefined,'message '+m.role);el.append(element('small',m.role==='user'?'Оператор':'Заявитель'),document.createTextNode(m.content));$('transcript').append(el);}
+ // Фраза оператора уже распознана, ответ собеседника ещё формируется.
+ if(current.messages.at(-1)?.role==='user'&&current.status!=='Завершена')$('transcript').append(element('div','собеседник отвечает…','message pending'));
  $('transcript').scrollTop=$('transcript').scrollHeight;
  $('dialogueError').textContent=current.provider_error||'';
 }
+// Пока открыто окно разговора и идёт звонок, реплики обновляются раз в секунду,
+// а не общим циклом раз в 3 секунды: фраза появляется сразу после распознавания.
+let transcriptPolling=false;
+setInterval(async()=>{
+ if(transcriptPolling||!current||current.transport!=='sip'||!current.call_id||current.status==='Завершена'||!$('dialogueDialog').open)return;
+ transcriptPolling=true;const sid=current.id;
+ try{const data=await api(`student/sessions/${sid}`);if(current?.id===sid){current.messages=data.messages;current.provider_error=data.provider_error;renderDialogue();}}
+ catch{}finally{transcriptPolling=false;}
+},1000);
 function say(text) {
  if(!$('speak').checked || !window.speechSynthesis || current.transport!=='text')return;
  window.speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.lang='ru-RU';const voice=window.speechSynthesis.getVoices().find(v=>v.lang.startsWith('ru'));if(voice)utterance.voice=voice;utterance.rate=1;
@@ -764,6 +775,8 @@ function eventText(event){const d=event.detail||{};
 function showAudit() {
  if(!current){notify('Сначала откройте карточку');return;}$('auditContent').replaceChildren();
  for(const note of current.teacher_feedback||[]){const item=element('article');item.append(element('strong',`Преподаватель · ${note.teacher_name} · ${formatted(note.at)}`),element('p',note.text));$('auditContent').append(item);}
+ if(current.status==='Завершена'){const route=element('a','Открыть сквозной разбор попытки');route.href='/review?session='+encodeURIComponent(current.id);route.target='_blank';route.rel='noopener';route.className='review-link';$('auditContent').append(route);}
+ if(current.completed_by?.role==='system')$('auditContent').append(element('p',`Попытка закрыта системой: не было действий дольше ${current.completed_by.idle_minutes||120} мин. Время засчитано до последнего действия.`));
  if(current.completed_by?.role==='teacher')$('auditContent').append(element('p',`Завершил преподаватель ${current.completed_by.name}: ${current.completed_by.reason}`));
  if(current.unsaved_draft)$('auditContent').append(element('p','Несохранённый черновик не включён в оценку. Он хранится в этой вкладке: восстановите его кнопкой в карточке.'));
  const restart=element('button','Начать эту карточку заново');restart.type='button';restart.onclick=()=>guarded(restartCurrentAttempt);$('auditContent').append(restart,element('p',`Попытка № ${current.attempt_number||1}${current.attempt_outcome==='restarted'?' · прервана для повтора':''}`));
@@ -1046,28 +1059,47 @@ $('refresh').onclick=()=>guarded(loadSessions);$('search').oninput=renderRows;$(
 const advancedInputs=[...$('advancedFilters').querySelectorAll('input,select')];for(const input of advancedInputs)input.addEventListener('input',renderRows);
 function resetFilters(all=false){for(const input of advancedInputs)input.value='';if(all){$('search').value='';$('statusFilter').value='';}renderRows();}
 $('applyAdvanced').onclick=renderRows;$('resetAdvanced').onclick=()=>resetFilters(false);$('resetSearch').onclick=()=>resetFilters(true);
-// В реальной Системе 112 поле таймера краснеет, когда время набора карточки
-// превышено. В ДДС 30 секунд идут от поступления до открытия карточки, 3 минуты —
-// до первой записи (статус и текст); дальше работы не нормируются.
+// В реальной Системе 112 время карточки идёт от её поступления и не
+// останавливается. Под общим временем показан текущий норматив: сколько
+// осталось, когда он близок к пределу и на сколько превышен. В ДДС 30 секунд
+// идут от поступления до открытия карточки, 3 минуты — до первой записи
+// (статус и текст); в приёме вызова 112 — реакция (первое действие) и лимит
+// карточки из эталона. Дальнейшие работы не нормируются.
+const clockText=total=>{const value=Math.abs(Math.round(total));return `${Math.floor(value/60)}:${String(value%60).padStart(2,'0')}`;};
+function normStages(card){
+ const dds=card.exercise_mode==='actions'&&card.owner_service;
+ if(dds)return [{label:'открытие',limit:card.time_limit_seconds||30,done:card.opened_at},{label:'первая запись',limit:180,done:card.first_record_at}];
+ const stages=[];
+ if(card.response_limit_seconds)stages.push({label:'реакция',limit:card.response_limit_seconds,done:card.first_action_at});
+ if(card.time_limit_seconds)stages.push({label:'карточка',limit:card.time_limit_seconds,done:card.finished_at});
+ return stages;
+}
 function tick(){
  const date=new Date();
  $('today').textContent=date.toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
  $('clock').textContent=date.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
  if(!current)return;
- const seconds=Math.max(0,Math.floor(((current.finished_at?new Date(current.finished_at):date)-new Date(current.created_at))/1000));
+ const end=current.finished_at?new Date(current.finished_at):date;
+ const seconds=Math.max(0,Math.floor((end-new Date(current.created_at))/1000));
  $('timer').textContent=`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
- const dds=current.exercise_mode==='actions'&&current.owner_service;
- const stage=!dds?null:!current.opened_at?'open':!current.first_record_at?'record':'free';
- const limit=dds?{open:current.time_limit_seconds||30,record:180,free:null}[stage]:current.time_limit_seconds;
  const since=stamp=>Math.max(0,Math.floor((new Date(stamp)-new Date(current.created_at))/1000));
- // Норматив, уже нарушенный на прошлом этапе, остаётся красным до конца карточки.
- const missed=dds&&((current.opened_at&&since(current.opened_at)>(current.time_limit_seconds||30))
-  ||(current.first_record_at&&since(current.first_record_at)>180));
- const over=missed||(Number.isFinite(limit)&&limit>0&&seconds>limit);
- $('cardPanel').querySelector('.timer').classList.toggle('overdue',over);
- const label=dds?{open:'открытия карточки',record:'первой записи (статус и текст)',free:'—'}[stage]:'занятия';
- if(stage==='free'){$('timer').title=missed?'Норматив открытия или первой записи был превышен. Дальнейшие работы не нормируются.':'Нормативы выполнены. Дальнейшие работы не нормируются.';return;}
- $('timer').title=(limit&&seconds>limit)?`Норматив ${label} ${limit} с превышен`:limit?`Норматив ${label} ${limit} с${missed?' (норматив открытия превышен)':''}`:'Норматив не задан';
+ const stages=normStages(current);
+ // Норматив, нарушенный на прошлом этапе, остаётся отмеченным до конца карточки.
+ const missed=stages.filter(stage=>stage.done&&since(stage.done)>stage.limit);
+ const active=current.finished_at?null:stages.find(stage=>!stage.done);
+ let phase=missed.length?'overdue':'ok',line,title;
+ if(active){
+  const remaining=active.limit-seconds;
+  if(remaining<0){phase='overdue';line=`${active.label}: просрочено +${clockText(remaining)}`;}
+  else{if(phase!=='overdue'&&remaining<=Math.max(5,active.limit/4))phase='warning';line=`${active.label}: осталось ${clockText(remaining)}`;}
+  title=`Норматив «${active.label}» — ${active.limit} с от поступления карточки`+(missed.length?`. Ранее превышен: ${missed.map(stage=>stage.label).join(', ')}`:'');
+ }else if(stages.length){
+  line=missed.length?'норматив нарушен':'нормативы выполнены';
+  title=missed.length?`Превышен норматив: ${missed.map(stage=>`${stage.label} (${stage.limit} с)`).join(', ')}. Дальнейшие работы не нормируются.`:'Нормативы выполнены. Дальнейшие работы не нормируются.';
+ }else{line='минуты · секунды';title='Норматив не задан';}
+ const box=$('cardPanel').querySelector('.timer');
+ box.classList.toggle('overdue',phase==='overdue');box.classList.toggle('warning',phase==='warning');
+ $('timerNorm').textContent=line;$('timer').title=title;$('timerNorm').title=title;
 }
 async function recoverCurrentSession(){
  if(recoveryBusy||!navigator.onLine)return;recoveryBusy=true;

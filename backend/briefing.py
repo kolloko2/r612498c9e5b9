@@ -276,18 +276,26 @@ async def check_live(transcript: str, card: dict, previous: dict | None = None) 
     semantic = (previous or {}).get('semantic_evidence')
     fields = (previous or {}).get('field_evidence')
     card_reference = report_facts.reference(card)
-    fresh = report_facts.current(fields, transcript, card_reference)
     # Пока модель может прочитать доклад, приблизительное правило не решает за неё.
     report = check(transcript, card, semantic, fields, approximate=False if report_facts.available() else None)
     spoken = report_text(transcript)
-    unread = [item for item in report['checks'] if not item['passed'] and model_can_read(item['id'], spoken)]
-    if unread and not fresh:
-        fields = await report_facts.extract(transcript, timeout=deadline - loop.time(), card_reference=card_reference)
-        report = check(transcript, card, semantic, fields)
+    unread = [item['id'] for item in report['checks'] if not item['passed'] and model_can_read(item['id'], spoken)]
+    fresh = report_facts.current(fields, transcript, card_reference, unread)
     incident = next((item for item in report['checks'] if item['id'] == 'incident_type'), None)
-    if incident is None or incident['passed'] or report.get('semantic_evidence'):
+    needs_meaning = not (incident is None or incident['passed'] or report.get('semantic_evidence'))
+    # Факты и смысл типа происшествия независимы: модель читает их одновременно,
+    # и оператор ждёт самый долгий запрос, а не их сумму.
+    jobs = {}
+    if unread and not fresh:
+        jobs['fields'] = report_facts.extract(transcript, timeout=deadline - loop.time(),
+                                              card_reference=card_reference, fields=unread)
+    if needs_meaning:
+        jobs['semantic'] = incident_meaning.assess(transcript, incident['expected'], timeout=deadline - loop.time())
+    if not jobs:
         return report
-    semantic = await incident_meaning.assess(transcript, incident['expected'], timeout=deadline - loop.time())
+    results = dict(zip(jobs, await asyncio.gather(*jobs.values())))
+    fields = results.get('fields', fields)
+    semantic = results.get('semantic', semantic)
     return check(transcript, card, semantic, fields)
 
 

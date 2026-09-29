@@ -94,6 +94,35 @@ async def test_bot_playback_cannot_create_automatic_dialogue(tmp_path):
         await manager.close()
 
 
+async def test_sentence_pause_reaches_backend_as_one_utterance(tmp_path):
+    manager, runtime, _ = await start_call(tmp_path, echo_guard_ms=200)
+    try:
+        # Приветствие доиграло, и эхо-защита после него закончилась.
+        await wait_for(lambda: any(m["status"] == "played" for m in
+                                   runtime.manager.chat.get(runtime.context.call_id)["messages"]))
+        await asyncio.sleep(0.4)
+        tone = pcm16(np.full(320, 0.2))
+        # Пауза между предложениями длиннее конца реплики VAD, но оператор
+        # сразу продолжает: собеседник получает одну реплику, а не два обрывка.
+        for frame in [tone] * 12 + [SILENCE] * 38 + [tone] * 12 + [SILENCE] * 40:
+            runtime.mock_input.put_nowait(frame)
+        await wait_for(lambda: any(e["type"] == "operator.utterance" for e in read_events(runtime)))
+        await asyncio.sleep(0.6)
+        utterances = [e for e in read_events(runtime) if e["type"] == "operator.utterance"]
+        assert [u["payload"]["text"] for u in utterances] == ["Учебная реплика оператора Учебная реплика оператора"]
+        chat = runtime.manager.chat.get(runtime.context.call_id)
+        assert len([m for m in chat["messages"] if m["role"] == "me"]) == 2
+        # Отдельная фраза после ответа собеседника остаётся отдельной репликой.
+        await wait_for(lambda: len([m for m in runtime.manager.chat.get(runtime.context.call_id)["messages"]
+                                    if m["status"] == "played"]) == 2)
+        await asyncio.sleep(0.4)
+        for frame in [tone] * 12 + [SILENCE] * 40:
+            runtime.mock_input.put_nowait(frame)
+        await wait_for(lambda: len([e for e in read_events(runtime) if e["type"] == "operator.utterance"]) == 2)
+    finally:
+        await manager.close()
+
+
 async def test_duplicate_session_does_not_originate_twice(tmp_path):
     manager, runtime, request = await start_call(tmp_path)
     try:

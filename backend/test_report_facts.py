@@ -156,3 +156,31 @@ def test_model_failure_falls_back_to_approximate_rule(monkeypatch):
     monkeypatch.setattr(llm, 'complete', broken)
     item = next(i for i in asyncio.run(check_live(STT, DEPOT))['checks'] if i['id'] == 'object')
     assert item['passed'] and item['granted_by'] == 'approximate'
+
+
+def test_live_check_reads_only_unrecognised_fields_in_parallel_with_meaning(monkeypatch):
+    import time
+    requested = []
+
+    async def complete(messages, **kwargs):
+        requested.append(kwargs['json_mode']['required'])
+        await asyncio.sleep(0.3)
+        return json.dumps({'street': {'value': 'Маршала Жукова', 'quote': 'жукова маршала', 'match': 'yes'}},
+                          ensure_ascii=False)
+
+    async def assess(transcript, expected, timeout):
+        await asyncio.sleep(0.3)
+        return None
+    monkeypatch.setattr(llm, 'phone_configuration', lambda: {'provider': 'ollama', 'configured': True, 'model': 'm'})
+    monkeypatch.setattr(llm, 'complete', complete)
+    monkeypatch.setattr('briefing.incident_meaning.assess', assess)
+    spoken = 'москва жукова маршала дом двенадцать течёт вода'
+    started = time.perf_counter()
+    report = asyncio.run(check_live(spoken, {**CARD, 'street': 'Маршала Жукова'}))
+    elapsed = time.perf_counter() - started
+    # Правила уже нашли город и дом: модель читает только улицу.
+    assert requested == [['street']]
+    assert next(item for item in report['checks'] if item['id'] == 'street')['granted_by'] == 'model'
+    # Факты и смысл типа происшествия запрашиваются одновременно, а не по очереди.
+    assert elapsed < 0.55
+    assert report['field_evidence']['requested'] == ['street']

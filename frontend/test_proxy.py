@@ -111,3 +111,80 @@ def test_auth_cookie_is_server_only_and_identity_header_cannot_be_spoofed(monkey
         assert client.post('/api/v1/auth/logout',headers={'X-Voice-UI':'1'}).status_code==204
         client.get('/api/v1/student/sessions')
         assert observed[-1]==''
+
+
+def test_mfa_challenge_sets_no_cookie_and_csp_allows_only_local_media(monkeypatch):
+    monkeypatch.setenv('ALLOWED_ORIGINS', 'https://training.example')
+    spec = importlib.util.spec_from_file_location('mfa_frontend', Path(__file__).with_name('server.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    original = httpx.AsyncClient
+    def handler(request):
+        if request.url.path.endswith('/auth/login'):
+            return httpx.Response(200, json={'mfa_required': True, 'mfa_token': 't' * 40, 'expires_in': 300})
+        return httpx.Response(200, json={'user': {'id': 'synthetic'}, 'session_token': 'synthetic-token'})
+    monkeypatch.setattr(module.httpx, 'AsyncClient', lambda **kwargs: original(transport=httpx.MockTransport(handler), **kwargs))
+    headers = {'X-Voice-UI': '1', 'Origin': 'https://training.example'}
+    with TestClient(module.app, base_url='https://training.example') as client:
+        challenge = client.post('/api/v1/auth/login', json={}, headers=headers)
+        # Пароль принят, но сессии нет, пока не введён код из приложения.
+        assert challenge.json()['mfa_required'] is True and 'set-cookie' not in challenge.headers
+        confirmed = client.post('/api/v1/auth/mfa-login', json={}, headers=headers)
+        assert 'training_session=' in confirmed.headers['set-cookie']
+        policy = client.get('/review').headers['content-security-policy']
+        assert "media-src 'self' blob:" in policy and '*' not in policy and 'http:' not in policy
+
+
+def test_sip_websocket_admits_only_the_assigned_student_and_their_own_identity(monkeypatch):
+    import asyncio
+    import sys
+    import types
+    import pytest
+    from starlette.websockets import WebSocketDisconnect
+    monkeypatch.setenv('ALLOWED_ORIGINS', 'https://training.example')
+    spec = importlib.util.spec_from_file_location('sip_frontend', Path(__file__).with_name('server.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    phones = {'good': {'enabled': True, 'username': 'w201'}, 'none': {'enabled': False}}
+
+    async def dialogue(path, *args, **kwargs):
+        return phones[module.USER_SESSION.get()]
+    monkeypatch.setattr(module, 'dialogue', dialogue)
+    forwarded = []
+
+    class Upstream:
+        def __init__(self):
+            self.queue = asyncio.Queue()
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *exc):
+            return False
+        async def send(self, message):
+            forwarded.append(message)
+            if message.startswith('REGISTER'):
+                await self.queue.put('SIP/2.0 200 OK\r\n\r\n')
+        def __aiter__(self):
+            return self
+        async def __anext__(self):
+            return await self.queue.get()
+
+    fake = types.SimpleNamespace(connect=lambda *a, **k: Upstream(), WebSocketException=Exception)
+    monkeypatch.setitem(sys.modules, 'websockets', fake)
+    headers = {'origin': 'https://training.example'}
+    with TestClient(module.app, base_url='https://training.example') as client:
+        client.cookies.set('training_session', 'none')
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect('wss://training.example/sip-ws', headers=headers, subprotocols=['sip']) as ws:
+                ws.receive_text()
+        client.cookies.set('training_session', 'good')
+        with client.websocket_connect('wss://training.example/sip-ws', headers=headers, subprotocols=['sip']) as ws:
+            ws.send_text('\r\n\r\n')  # keep-alive не разрывает связь
+            ws.send_text('REGISTER sip:trainer112.local SIP/2.0\r\nFrom: <sip:w201@trainer112.local>;tag=a\r\n\r\n')
+            assert ws.receive_text().startswith('SIP/2.0 200')
+            ws.send_text('REGISTER sip:trainer112.local SIP/2.0\r\nFrom: <sip:w202@trainer112.local>;tag=b\r\n\r\n')
+            with pytest.raises(WebSocketDisconnect):
+                ws.receive_text()
+        assert [m.split('\r\n')[0] for m in forwarded if m.strip()] == ['REGISTER sip:trainer112.local SIP/2.0']
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect('wss://training.example/sip-ws', headers={'origin': 'https://evil.example'}) as ws:
+                ws.receive_text()
