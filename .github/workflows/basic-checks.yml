@@ -16,7 +16,8 @@ jobs:
         run: |
           if git ls-files | grep -E '(^|/)[.]env($|[.])' | grep -vE '(^|/)[.]env[.]example$'; then exit 1; fi
       - name: Validate YAML
-        run: ruby -e "require 'yaml'; Dir['**/*.{yml,yaml}'].reject { |p| p.start_with?('.git/') }.each { |p| YAML.load_file(p) }; puts 'YAML OK'"
+        run: |
+          ruby -e "require 'yaml'; Dir['**/*.{yml,yaml}'].reject { |p| p.start_with?('.git/') }.each { |p| YAML.load_file(p, aliases: true) }; puts 'YAML OK'"
       - name: Install Python checks
         run: python -m pip install -e './voice[test]' -r backend/requirements.txt
       - name: Voice and dialogue tests
