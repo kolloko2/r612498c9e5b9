@@ -52,7 +52,7 @@ function noteDisconnected(){connectionLost=true;renderConnection();}
 function noteConnected(){const recovered=connectionLost;connectionLost=false;renderConnection();if(recovered&&!recoveryBusy)queueMicrotask(()=>guarded(recoverCurrentSession));}
 async function startSipCall(){
  const session=current;
- if(!session||session.status==='Завершена'||session.call_id||pendingCalls.has(session.id))return;
+ if(!session||session.exercise_mode==='actions'||session.status==='Завершена'||session.call_id||pendingCalls.has(session.id))return;
  pendingCalls.add(session.id);$('sipCall').disabled=true;
  try{
   const result=await api(`student/sessions/${session.id}/call`,'POST');
@@ -138,11 +138,7 @@ async function refreshLessonFlow(){
   // «Делай как я»: шаг, выбранный преподавателем, показывается сразу.
   if(window.applyGuidedStep)window.applyGuidedStep(lesson?lesson.guided_step:null);
   // Кнопка появляется, только если преподаватель разрешил переключение.
-  const switchable=!!lesson&&lesson.state==='running'&&lesson.allow_mode_switch;
-  $('modeSwitch').hidden=!switchable;
-  if(switchable)$('modeSwitch').textContent=studentMode==='fill'
-   ? 'Обычный режим: работа диспетчера ДДС'
-   : 'Расширенный режим: полный цикл 112';
+  $('modeSwitch').hidden=true;
   if(!lesson){$('lessonState').textContent=activeLessonId?'Занятие недоступно'
    :'Занятие — это серия карточек от преподавателя. Для одиночной тренировки занятие не нужно: нажмите «создать новую карточку».';return;}
   $('lessonState').textContent=`${lesson.title}: ${labels[lesson.state]} · выполнено ${lesson.completed}${lesson.cards_per_student===null?'':` из ${lesson.cards_per_student}`} · ${lessonExplanation(lesson)}`;
@@ -350,6 +346,8 @@ function renderCard() {
  $('cardPanel').querySelector('.phone-row').after(evidence);
  evidence.replaceChildren();for(const text of current.correction_evidence||[])evidence.append(element('p','Сведения с места — сверьте с карточкой и при ошибке сообщите в 112: '+text));
  $('conversation').hidden=dds;
+ $('showText').hidden=dds;$('showDialogue').hidden=dds;
+ if(dds)$('sipCall').hidden=true;
  if(dds){$('messageForm').hidden=true;$('speak').disabled=true;$('callStatus').textContent='карточка передана Службой 112';}
  $('openNotification').disabled=finished||!current.revision;$('openForward').hidden=dds;$('openForward').disabled=dds||finished||!current.revision;$('openBriefing').disabled=finished||!current.revision;$('openErrorReport').hidden=!dds;$('openErrorReport').disabled=finished||!current.revision||current.card_locked;$('openLinks').disabled=finished||!current.revision;$('openReminder').disabled=finished;$('printCard').hidden=!current.revision;$('printCard').disabled=false;renderSurvey(); renderServices();renderCrew();renderDialogue();renderServiceHistory();renderNotificationHistory();renderLinkedCards();renderSituationUpdates();tick();updateResponseReady();
  const pending=storedMessage(current.id);if(pending&&current.transport==='text'&&current.status!=='Завершена'){$('operatorText').value=pending.text;$('send').textContent='Повторить отправку';}
@@ -648,7 +646,7 @@ async function newSession() {
  if(!catalog)await loadClassifier();
 assignments=await api('student/assignments');const lessons=await api('student/lessons');assignments.push(...lessons.filter(l=>l.state==='running'&&!l.exhausted).map(l=>({...l,lesson:true,scenario_title:`Серия: ${l.completed}/${l.cards_per_student??'∞'}`})));$('scenario').replaceChildren();assignments.forEach(s=>$('scenario').add(new Option(`${s.title} · ${s.scenario_title} · ${s.difficulty||'basic'} · ${s.dds_profile||'general'}${s.learning_objectives?' · '+s.learning_objectives:''}`,s.id)));$('start').disabled=!assignments.length;if(!assignments.length)$('scenario').add(new Option('Нет назначений — обратитесь к преподавателю',''));selectTransport();$('newDialog').showModal();
 }
-function selectTransport(){const assignment=assignments.find(a=>a.id===$('scenario').value);$('transport').disabled=!!assignment?.lesson;if(assignment?.lesson)$('transport').value=assignment.transport||'text';}
+function selectTransport(){const assignment=assignments.find(a=>a.id===$('scenario').value);$('transport').disabled=!!assignment?.lesson;$('transport').value=assignment?.lesson?assignment.transport||'text':'text';}
 $('scenario').addEventListener('change',selectTransport);
 $('newForm').onsubmit=e=>{e.preventDefault();guarded(async()=>{$('start').disabled=true;try{const assignment=assignments.find(a=>a.id===$('scenario').value);if(!assignment)throw Error('Выберите назначенное занятие');if(assignment.lesson)chooseLesson(assignment.id);else chooseLesson('');current=assignment.lesson?await api(`student/lessons/${assignment.id}/next`,'POST',{...nextMode(),workstation:workstation()}):await api('student/sessions','POST',{scenario_id:assignment.scenario_id,assignment_id:assignment.id,transport:$('transport').value,workstation:workstation()});if(current.exercise_mode==='actions')current=await api(`student/sessions/${current.id}/open`,'POST',{});pendingLessonSessionId='';attachStoredDraft(current);if(assignment.lesson&&assignment.active_session_id===current.id)attemptedLessonCalls.add(current.id);dirty=false;viewing=false;transcriptKey='';localStorage.setItem('studentSession',current.id);renderCard();$('newDialog').close();if(current.exercise_mode!=='actions')$('dialogueDialog').showModal();else notify('Готовая карточка: внесите действия и результаты реагирования служб');}finally{$('start').disabled=!assignments.length;}});};
 $('messageForm').onsubmit=e=>{e.preventDefault();if(sending)return;guarded(async()=>{const text=$('operatorText').value.trim();if(!text)return;const sid=current.id,previous=storedMessage(sid),pending=previous?.text===text?previous:{text,message_id:crypto.randomUUID()};storeMessage(sid,pending);sending=true;$('send').disabled=true;$('send').textContent='Заявитель отвечает…';$('dialogueError').textContent='';try{const result=await api(`student/sessions/${sid}/messages`,'POST',pending);if(current?.id!==sid)return;current.messages=result.messages;current.provider_error=result.provider_error;clearMessage(sid);renderDialogue();$('operatorText').value='';if(!result.provider_error)say(result.messages.at(-1)?.content||'');}finally{sending=false;$('send').disabled=false;$('send').textContent=storedMessage(sid)?'Повторить отправку':'Отправить';}});};
@@ -1165,11 +1163,8 @@ setInterval(tick,1000);tick();guarded(async()=>{const user=await api('auth/me');
 
 // Доклад дежурному службы: учебный вызов из ДДС в службу (направление Б→C).
 let briefing=null,briefingTimer=null;
-// Режим следующей карточки: полный цикл 112 или работа диспетчера ДДС.
-// Переключение разрешает преподаватель; текущая карточка не меняется.
-let studentMode='actions';
-// Режим отправляется, только когда кнопка переключения видна.
-const nextMode=()=>$('modeSwitch').hidden?{}:{mode:studentMode};
+// Все новые занятия проходят в режиме диспетчера ДДС.
+const nextMode=()=>({});
 function briefingLine(role,text){const p=element('p',text);p.className=role==='assistant'?'duty':'me';return p;}
 function renderBriefing(){
  const box=$('briefingTranscript');box.replaceChildren();
@@ -1285,15 +1280,6 @@ $('forwardForm').onsubmit=event=>{event.preventDefault();guarded(async()=>{
  notify(`Происшествие перенаправлено: ${service}`);
 });};
 
-$('modeSwitch').onclick=()=>guarded(async()=>{
- studentMode=studentMode==='fill'?'actions':'fill';
- $('modeSwitch').textContent=studentMode==='fill'
-  ? 'Обычный режим: работа диспетчера ДДС'
-  : 'Расширенный режим: полный цикл 112';
- notify(studentMode==='fill'
-  ? 'Следующая карточка придёт с приёмом вызова от заявителя'
-  : 'Следующая карточка придёт готовой, как в ДДС');
-});
 // Открытая карточка перекрывает журнал: шапка журнала и панель занятия под ней
 // скрываются, чтобы не проступать по краям и не ловить фокус клавиатуры.
 new MutationObserver(()=>document.body.classList.toggle('card-open',!$('cardPanel').hidden)).observe($('cardPanel'),{attributes:true,attributeFilter:['hidden']});

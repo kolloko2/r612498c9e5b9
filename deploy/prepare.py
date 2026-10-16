@@ -20,6 +20,9 @@ def settings(source):
         provider = 'ollama'
     accounts = {str(n): secrets.token_hex(20) for n in range(201, 221)}
     return {
+        'OPERATOR_112_ENABLED': previous.get('OPERATOR_112_ENABLED', 'false'),
+        'DEMO_ACCESS_ENABLED': previous.get('DEMO_ACCESS_ENABLED', 'false'),
+        'DEMO_ACCOUNTS_JSON': previous.get('DEMO_ACCOUNTS_JSON', '[]'),
         'POSTGRES_PASSWORD': secrets.token_hex(32),
         'DIALOGUE_TOKEN': secrets.token_hex(32),
         'VOICE_API_TOKEN': secrets.token_hex(32),

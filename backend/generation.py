@@ -16,6 +16,7 @@ from cluster import Coordinator, ClusterUnavailable, LockUnavailable
 from categories import CategoryId
 from evaluation import Rubric
 from curriculum import Difficulty, DdsProfile, metadata, DIFFICULTIES
+from product_mode import operator_112_enabled
 
 
 class GenerateRequest(BaseModel):
@@ -26,7 +27,7 @@ class GenerateRequest(BaseModel):
     difficulty: Difficulty = 'basic'
     dds_profile: DdsProfile = 'general'
     learning_objectives: str = Field('', max_length=1500)
-    mode: str = Field('caller', pattern='^(dds|caller)$')
+    mode: str = Field(default_factory=lambda: 'caller' if operator_112_enabled() else 'dds', pattern='^(dds|caller)$')
     owner_service: str = Field('', max_length=160)
 
 
@@ -342,10 +343,12 @@ def router(store, accounts, authorize, Scenario, coordinator=None):
     @api.get('')
     async def listing(user=Depends(teacher)):
         rows = store.db.execute("SELECT body FROM generation_drafts WHERE teacher_id=? ORDER BY json_text(body,'updated_at') DESC,id DESC", (user['id'],)).fetchall()
-        return [{'id': v['id'], 'status': v['status'], 'revision': v['revision'], 'title': v['scenario']['title'], 'updated_at': v['updated_at']} for v in (json.loads(r[0]) for r in rows)]
+        return [{'id': v['id'], 'status': v['status'], 'revision': v['revision'], 'title': v['scenario']['title'], 'updated_at': v['updated_at']} for v in (json.loads(r[0]) for r in rows) if operator_112_enabled() or v.get('mode') == 'dds']
 
     @api.post('', status_code=201)
     async def create(body: GenerateRequest, user=Depends(teacher)):
+        if body.mode != 'dds' and not operator_112_enabled():
+            raise HTTPException(409, 'Доступна генерация сценариев только для диспетчера ДДС')
         did = str(body.request_id)
         try:
           async with coordinator.hold('generation-teacher', user['id']):
@@ -385,6 +388,8 @@ def router(store, accounts, authorize, Scenario, coordinator=None):
         try:
           async with coordinator.hold('generation-teacher', user['id']):
             value = load(did, user['id'])
+            if value.get('mode', 'caller') != 'dds' and not operator_112_enabled():
+                raise HTTPException(409, 'Режим оператора 112 отключён')
             if value['status'] != 'draft' or value['revision'] != body.revision:
                 raise HTTPException(409, 'Версия изменилась или уже утверждена. Перечитайте черновик.')
             if value['revision'] >= 20:
@@ -405,6 +410,8 @@ def router(store, accounts, authorize, Scenario, coordinator=None):
         try:
           async with coordinator.hold('generation-teacher', user['id']):
             value = load(did, user['id'])
+            if value.get('mode', 'caller') != 'dds' and not operator_112_enabled():
+                raise HTTPException(409, 'Режим оператора 112 отключён')
             if value['revision'] != body.revision:
                 raise HTTPException(409, 'Версия изменилась. Проверьте актуальный предпросмотр.')
             if value['status'] == 'approved':

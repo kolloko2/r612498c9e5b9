@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from service_workflow import incident_status
 from curriculum import metadata
+from product_mode import operator_112_enabled
 
 
 def now():
@@ -129,6 +130,8 @@ class Learning:
         result = []
         for (scenario_id,) in rows:
             scenario = self.store.scenario(scenario_id)
+            if not operator_112_enabled() and not (scenario or {}).get('owner_service'):
+                continue
             if scenario and scenario.get("enabled"):
                 result.append({"id": scenario["id"], "title": scenario["title"], **metadata(scenario)})
         return result
@@ -263,6 +266,8 @@ class Learning:
             scenario = self.store.scenario(body.scenario_id)
             if not scenario or not scenario.get("enabled"):
                 raise HTTPException(404, "Сценарий недоступен")
+            if not operator_112_enabled() and not (scenario.get('owner_service') and scenario.get('prefilled_card')):
+                raise HTTPException(409, 'Назначайте сценарии ДДС с готовой карточкой и своей службой')
             owner = self.store.db.execute(
                 "SELECT teacher_id FROM scenario_owners WHERE scenario_id=?", (body.scenario_id,)
             ).fetchone()
@@ -352,6 +357,8 @@ class Learning:
             for (assignment_id,) in rows:
                 assignment = self._assignment(assignment_id)
                 scenario = self.store.scenario(assignment["scenario_id"])
+                if not operator_112_enabled() and not ((scenario or {}).get('owner_service') and (scenario or {}).get('prefilled_card')):
+                    continue
                 if scenario and scenario.get("enabled"):
                     result.append({**assignment, "scenario_title": scenario["title"], **metadata(scenario)})
             return result

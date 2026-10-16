@@ -294,3 +294,12 @@ Certificates, VIS/DDS, technical configuration preview and WS metadata audit are
 assembled in server.py. Optional Coordinator namespaces and the cluster-wide HTTP
 mutation guard protect multi-replica updates; see CLUSTER.md for limits. ReportLab
 needs DejaVu Sans (`CERTIFICATE_FONT` overrides the Docker-provided font).
+
+# DDS release 2026-10-16
+
+`OPERATOR_112_ENABLED=false` is the default. New lessons and single assignments
+run DDS actions on prefilled cards. Operator/mixed lessons and mode switching
+are blocked; old attempts remain readable. Generation uses DDS mode by default.
+The retained operator implementation is exercised with
+`OPERATOR_112_ENABLED=true` in the historical regression suite. DDS-only behavior
+has separate tests in `test_dds_product_mode.py`.

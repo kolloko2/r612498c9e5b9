@@ -267,31 +267,6 @@ def ensure_lessons(teacher: Client, group_id: str, scenarios: list[str],
         teacher.call("POST", f"/instructor/lessons/{lesson['id']}/start")
         print("создано и запущено занятие:", dds_title)
 
-    text_title = "Полный цикл 112: приём вызова (текст)"
-    if text_title not in titles and len(scenarios) >= 3:
-        # Полный цикл в текстовом канале: заявителя играет модель, и разговор
-        # идёт с клавиатуры, без SIP и речевых моделей. Это самый простой способ
-        # показать диалог на чужой машине.
-        _, lesson = teacher.call("POST", "/instructor/lessons", {
-            "title": text_title, "group_id": group_id, "mode": "fill",
-            "scenario_ids": scenarios[:3], "cards_per_student": 3,
-            "parallel_cards": 1, "workstations": places, "transport": "text",
-        })
-        teacher.call("POST", f"/instructor/lessons/{lesson['id']}/start")
-        print("создано и запущено занятие:", text_title)
-
-    mixed_title = "Смешанное: ДДС + полный цикл 112 (телефон)"
-    if mixed_title not in titles and len(scenarios) >= 6:
-        teacher.call("POST", "/instructor/lessons", {
-            "title": mixed_title, "group_id": group_id, "mode": "mixed",
-            "scenario_ids": scenarios[4:6], "prefilled_scenario_ids": scenarios[:2],
-            "allow_mode_switch": True, "cards_per_student": 4, "parallel_cards": 1,
-            "workstations": places,
-            "transport": "sip",
-            "sip_extensions": {student_ids["kursant1"]: "201", student_ids["kursant2"]: "202"},
-        })
-        print("создано занятие (ожидает старта):", mixed_title)
-
 
 def ensure_materials(teacher: Client, group_ids: list[str]) -> None:
     """Учебные памятки ДДС: порядок работы, образцы записей, доклад по телефону."""

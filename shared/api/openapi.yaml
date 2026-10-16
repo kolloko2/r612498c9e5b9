@@ -18,6 +18,53 @@ servers:
 security:
 - bearerAuth: []
 paths:
+  /auth/demo-access:
+    servers:
+    - url: https://127.0.0.1:3000/api/v1
+      description: Frontend public login panel
+    get:
+      summary: Read explicitly published demo website accounts
+      description: Enabled only by DEMO_ACCESS_ENABLED and DEMO_ACCOUNTS_JSON. No-store. Operational credentials are never read.
+      security: []
+      responses:
+        '200':
+          description: Demo panel configuration, or disabled with an empty list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled, accounts]
+                additionalProperties: false
+                properties:
+                  enabled:
+                    type: boolean
+                  accounts:
+                    type: array
+                    maxItems: 10
+                    items:
+                      type: object
+                      required: [role, username, password, display_name, workstation]
+                      additionalProperties: false
+                      properties:
+                        role:
+                          type: string
+                          enum: [admin, teacher, student]
+                        username:
+                          type: string
+                          minLength: 3
+                          maxLength: 40
+                        password:
+                          type: string
+                          minLength: 1
+                          maxLength: 128
+                        display_name:
+                          type: string
+                          maxLength: 160
+                        workstation:
+                          type: string
+                          maxLength: 160
+        '503':
+          description: Invalid demo account configuration without raw ENV contents
   /map-data/region.pmtiles:
     servers:
     - url: https://127.0.0.1:3000
@@ -6999,7 +7046,8 @@ components:
           - actions
           - mixed
           title: Mode
-          default: fill
+          default: actions
+          description: The DDS release accepts actions only; fill and mixed require the archived operator profile.
         source_session_ids:
           items:
             type: string
@@ -7166,7 +7214,8 @@ components:
           type: string
           pattern: ^(dds|caller)$
           title: Mode
-          default: caller
+          default: dds
+          description: The DDS release rejects caller generation with HTTP 409.
         owner_service:
           type: string
           maxLength: 160

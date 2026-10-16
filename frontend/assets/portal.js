@@ -214,7 +214,7 @@ function addAssignmentPracticeControls(){
 }
 new MutationObserver(addAssignmentPracticeControls).observe(el('assignments'),{childList:true});
 async function loadSessions(){
- const sessions=await api('/api/v1/instructor/sessions');sessionSourcePool=sessions.filter(s=>s.status==='Завершена');refreshLessonChoices();const container=el('sessions');container.replaceChildren();
+ const sessions=await api('/api/v1/instructor/sessions');sessionSourcePool=sessions.filter(s=>s.status==='Завершена'&&s.exercise_mode==='actions'&&s.owner_service);refreshLessonChoices();const container=el('sessions');container.replaceChildren();
  if(!sessions.length){empty(container,'У назначенных вам занятий пока нет попыток');return;}
  // Последние попытки на виду, остальные свёрнуты, чтобы кабинет не превращался в длинную ленту.
  const older=node('details',undefined,'lessons-done');older.append(node('summary',`Более ранние попытки (${Math.max(0,sessions.length-10)})`));
@@ -366,7 +366,19 @@ async function refreshOpenSession(){
  if(!openSessionId||!el('sessionDialog').open||sessionRefreshInFlight)return;sessionRefreshInFlight=true;const id=openSessionId;try{await showSession(id,{open:false});}catch(error){if(openSessionId===id&&el('sessionDialog').open){const state=el('sessionDetail').querySelector('[data-session-host="refresh-state"]');if(state){state.textContent='Данные могли устареть: '+error.message;state.className='error';}}}finally{sessionRefreshInFlight=false;}
 }
 
-async function loadTeacher(){await loadGroups();const scenarios=await api('/api/scenarios');el('scenarioId').replaceChildren();for(const scenario of scenarios.filter(s=>s.enabled))el('scenarioId').add(new Option(`${scenario.title} · ${curriculumTitle('difficulties',scenario.difficulty||'basic')} · ${curriculumTitle('profiles',scenario.dds_profile||'general')}`,scenario.id));el('lessonScenarios').replaceChildren();scenarioPool=scenarios;try{curriculum=await api('/api/v1/instructor/curriculum');}catch{curriculum=fallbackCurriculum;}addLessonCurriculumControls();addLessonTransportControls();try{routingServices=(await api('/api/v1/instructor/routing/catalog')).services||[];}catch{routingServices=[];}const categories=await api('/api/v1/instructor/categories');for(const c of categories)el('lessonCategories').add(new Option(c.title,c.id));refreshLessonChoices();await Promise.all([loadAssignments(),loadSessions(),loadLessons()]);teacherReady=true;updateLessonSummary();}
+async function loadTeacher(){
+ await loadGroups();
+ const scenarios=(await api('/api/scenarios')).filter(s=>s.owner_service&&Object.keys(s.prefilled_card||{}).length);
+ el('scenarioId').replaceChildren();
+ for(const scenario of scenarios.filter(s=>s.enabled))el('scenarioId').add(new Option(`${scenario.title} · ${curriculumTitle('difficulties',scenario.difficulty||'basic')} · ${curriculumTitle('profiles',scenario.dds_profile||'general')}`,scenario.id));
+ el('lessonScenarios').replaceChildren();scenarioPool=scenarios;
+ try{curriculum=await api('/api/v1/instructor/curriculum');}catch{curriculum=fallbackCurriculum;}
+ addLessonCurriculumControls();addLessonTransportControls();
+ try{routingServices=(await api('/api/v1/instructor/routing/catalog')).services||[];}catch{routingServices=[];}
+ const categories=await api('/api/v1/instructor/categories');
+ for(const c of categories)el('lessonCategories').add(new Option(c.title,c.id));
+ refreshLessonChoices();await Promise.all([loadAssignments(),loadSessions(),loadLessons()]);teacherReady=true;updateLessonSummary();
+}
 // Кабинет ученика: сначала то, что можно делать сейчас, затем свободная
 // тренировка; завершённые занятия свёрнуты, чтобы не теряться в длинном списке.
 async function loadStudent(){

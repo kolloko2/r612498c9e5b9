@@ -7,7 +7,7 @@ if(!engine)throw Error('Unknown BROWSER_ENGINE '+process.env.BROWSER_ENGINE);
 const fs=require('node:fs/promises'),path=require('node:path');
 const root=__dirname,origin='http://127.0.0.1:3000';
 const now=new Date().toISOString();
-const scenario={id:'test_case',title:'Учебный пожар',category_id:'fire',enabled:true};
+const scenario={id:'test_case',title:'Учебный пожар',category_id:'fire',enabled:true,owner_service:'Служба 101',prefilled_card:{city:'Москва',description:'Учебное задымление'}};
 let state='planned',cards=[],lessonExists=true,createdBody=null;
 const sipTest=process.env.LESSON_TEST_SIP==='1';let callRequests=0;
 function lesson(){return {id:'lesson-test',title:'Практика',state,mode:'fill',members:['student-test'],cards_per_student:null,completed:cards.filter(c=>c.status==='Завершена').length,active_session_id:cards.find(c=>c.status!=='Завершена')?.id||null,exhausted:false,cards};}
@@ -77,14 +77,16 @@ async function serve(page,role){
   await teacher.locator('#lessonDifficulty').selectOption('basic');await teacher.locator('#lessonProfile').selectOption('general');
   await expect(teacher.locator('#lessonScenarios option')).toHaveCount(1);
   // Рабочее место, адресное задание, многозадачность и адаптация задаются в форме.
-  await teacher.locator('#lessonMode').selectOption('fill');
-  await teacher.locator('#lessonScenarios').selectOption(['test_case']);
+  await expect(teacher.locator('#lessonMode')).toHaveValue('actions');
+  await expect(teacher.locator('#lessonModeSwitch')).toBeHidden();
+  await teacher.locator('#lessonGenerated').selectOption(['test_case']);
   await teacher.locator('#lessonPlaces input[data-place-student-id]').fill('АРМ-7');
   await teacher.locator('#lessonPlaces select[data-target-student-id]').selectOption('test_case');
   await teacher.locator('#lessonParallel').fill('2');await teacher.locator('#lessonAdaptive').check();
   await teacher.locator('#lessonUnlimited').check();await teacher.getByRole('button',{name:'Подготовить занятие'}).click();
   await expect(teacher.getByRole('button',{name:'Начать',exact:true})).toBeVisible();if(createdBody.cards_per_student!==null||createdBody.category_ids.length!==2)throw Error('Invalid lesson payload');
   if(createdBody.difficulty!=='basic'||createdBody.dds_profile!=='general')throw Error('Curriculum filters not submitted');
+  if(createdBody.mode!=='actions'||createdBody.allow_mode_switch||createdBody.prefilled_scenario_ids[0]!=='test_case')throw Error('Only DDS lessons may be created');
   if(createdBody.parallel_cards!==2||createdBody.adaptive_difficulty!==true)throw Error('Multitasking options not submitted');
   if(createdBody.workstations['student-test']!=='АРМ-7')throw Error('Workstation not submitted');
   if(createdBody.student_scenarios['student-test']!=='test_case')throw Error('Addressed task not submitted');

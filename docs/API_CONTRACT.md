@@ -1,5 +1,26 @@
 # API Contract
 
+## DDS release 2026-10-16
+
+New training is DDS-only by default (`OPERATOR_112_ENABLED=false`). Lesson creation
+defaults to `actions`; `fill`, `mixed` and `allow_mode_switch=true` return 409.
+Existing operator lessons are omitted from student/teacher lesson lists and cannot
+start or issue another card. Previously saved attempts remain readable. Standalone
+assignments create a prefilled DDS card only when the scenario has `owner_service`
+and `prefilled_card`; other scenarios return 409. Generation defaults to `dds`;
+an explicit `caller` request returns 409. The archived operator implementation can
+be enabled on the host for historical regression checks; the release UI exposes DDS only.
+
+Frontend-only public `GET /api/v1/auth/demo-access` needs no session or service
+token. With `DEMO_ACCESS_ENABLED=false` it returns `{enabled:false,accounts:[]}`.
+When enabled, `DEMO_ACCOUNTS_JSON` supplies 1–10 explicitly public demo accounts.
+Each response entry contains only `role` (`admin|teacher|student`), `username`,
+`password`, `display_name` and `workstation`. These are demonstration website
+credentials, not SIP, database, deployment or administrator recovery secrets.
+Invalid configuration returns 503 without echoing ENV. Responses use `Cache-Control:
+no-store`. The login page shows the accounts after bootstrap and fills the selected
+credentials without bypassing normal password/MFA authentication.
+
 The briefing creation response includes `recipient_hint`, derived from the
 configured crew leader or the superior's role. The trainee may record that role
 as the recipient when no personal name was spoken, or edit it if the counterpart

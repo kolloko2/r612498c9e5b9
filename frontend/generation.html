@@ -23,7 +23,7 @@
     <section>
       <form id="generateForm" class="panel">
         <h2>Новая задача</h2>
-        <label>Режим сценария<select id="generationMode"><option value="dds">Готовая карточка ДДС</option><option value="caller">Полный цикл 112</option></select></label>
+        <input id="generationMode" type="hidden" value="dds">
         <label id="ownerServiceLabel">Своя служба ДДС<input id="ownerService" maxlength="160" placeholder="Например, Служба 101"></label>
         <label>Учебная категория<select id="category" required><option value="fire">Пожары</option><option value="traffic">ДТП и транспорт</option><option value="medical">Медицина</option><option value="utilities">ЖКХ и инженерные сети</option><option value="public">Общественная безопасность</option><option value="other">Прочее</option></select></label>
         <div class="facts"><label>Уровень сложности<select id="difficulty"><option value="basic">Базовый</option><option value="standard">Стандартный</option><option value="advanced">Повышенный</option></select></label><label>Профиль ДДС<select id="ddsProfile"><option value="general">Общий</option><option value="fire">Пожарная охрана</option><option value="police">Полиция</option><option value="medical">Скорая медицинская помощь</option><option value="gas">Аварийная газовая служба</option><option value="utilities">ЖКХ и инженерные сети</option></select></label></div>

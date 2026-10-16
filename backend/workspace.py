@@ -36,6 +36,7 @@ from curriculum import Difficulty, DdsProfile, metadata, matches
 from assessment import initialize as initialize_assessment, policy_for, evaluate_policy, STUDENT_ACTION_TYPES, last_activity, expert_history, effective
 import attempt_review
 from service_workflow import allowed_statuses, validate_transition, incident_status, STATUS_ALIASES, no_brigade_completion, NO_BRIGADE_COMMENT
+from product_mode import operator_112_enabled, require_dds_lesson
 from cluster import Coordinator, ClusterUnavailable, LockUnavailable
 
 
@@ -150,7 +151,7 @@ class CreateLesson(BaseModel):
     difficulty: Difficulty | None = None
     dds_profile: DdsProfile | None = None
     prefilled_scenario_ids: list[str] = Field(default_factory=list, max_length=20)
-    mode: Literal['fill', 'actions', 'mixed'] = 'fill'
+    mode: Literal['fill', 'actions', 'mixed'] = Field(default_factory=lambda: 'fill' if operator_112_enabled() else 'actions')
     source_session_ids: list[UUID] = Field(default_factory=list, max_length=20)
     cards_per_student: int | None = Field(default=3, ge=1, le=200)
     # Диспетчер в реальной смене ведёт несколько происшествий сразу, поэтому
@@ -845,6 +846,14 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         scenario = template['scenario'] if template else scenario_snapshot or store.scenario(body.scenario_id)
         if not scenario or not scenario["enabled"]:
             raise HTTPException(404, "Сценарий недоступен")
+        if not template and not operator_112_enabled():
+            if not scenario.get('owner_service') or not scenario.get('prefilled_card'):
+                raise HTTPException(409, 'Выберите сценарий ДДС с готовой карточкой и своей службой')
+            try:
+                template = {'scenario': scenario, 'card': prefilled_from_scenario(scenario),
+                            'source_kind': 'scenario'}
+            except ValueError:
+                raise HTTPException(422, 'Готовая карточка сценария ДДС заполнена некорректно') from None
         if (assignment or {}).get('practice_with_hints'):
             require_approved(scenario)
         sid = str(uuid5(NAMESPACE_URL, 'trainer112:restart:' + restart_source['id'])) if restart_source else str(uuid4())
@@ -1961,6 +1970,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
 
     @instructor.post('/lessons', status_code=201)
     async def create_lesson(body: CreateLesson):
+        require_dds_lesson(body.model_dump())
         user = actor.get()
         if not user or not learning or not learning._group(body.group_id, user['id']):
             raise HTTPException(404, 'Группа не найдена')
@@ -2025,6 +2035,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             scenario = store.scenario(scenario_id)
             if not scenario or not scenario['enabled'] or categories and scenario.get('category_id', 'other') not in categories:
                 raise HTTPException(422, 'Сценарий готовой карточки недоступен в выбранных категориях')
+            if not operator_112_enabled() and not (scenario.get('owner_service') and scenario.get('prefilled_card')):
+                raise HTTPException(409, 'Используйте сценарий ДДС с готовой карточкой и своей службой')
             if not matches(scenario, selection):
                 raise HTTPException(422, 'Готовая карточка не соответствует сложности или профилю ДДС')
             try:
@@ -2034,6 +2046,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             templates.append({'card': card, 'scenario': scenario, 'source_kind': 'scenario', 'assessment_policy': policy_for(store, scenario_id, user['id'])})
         for source_id in dict.fromkeys(body.source_session_ids):
             source = load(source_id)
+            if not operator_112_enabled() and (source.get('exercise_mode') != 'actions' or not source.get('owner_service')):
+                raise HTTPException(409, 'Источником может быть только отработанная карточка ДДС')
             if source['status'] != 'Завершена':
                 raise HTTPException(422, 'Используйте только завершённые карточки')
             scenario = store.load(str(source_id)).get('scenario')
@@ -2107,6 +2121,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         result = []
         for (encoded,) in rows:
             value = json.loads(encoded)
+            if not operator_112_enabled() and value.get('mode', 'fill') != 'actions':
+                continue
             item = {**value, 'cards': [{'id': c['id'], 'student_id': c['student_id'], 'status': c['status'], 'number': c['number']} for c in lesson_cards(value['id'])]}
             if value['state'] in ('planned', 'running'):
                 item['practice_available'] = all(practice_approved(s) for s in lesson_practice_scenarios(value))
@@ -2117,6 +2133,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
     async def start_lesson(lid: UUID):
         async with coordinated('lesson', lid):
             value = lesson_load(lid)
+            require_dds_lesson(value)
             if value['state'] == 'running':
                 return value
             if value['state'] != 'planned':
@@ -2158,6 +2175,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         values = [json.loads(r[0]) for r in store.db.execute("SELECT body FROM lessons ORDER BY json_text(body,'created_at') DESC,id DESC")]
         result = []
         for v in values:
+            if not operator_112_enabled() and v.get('mode', 'fill') != 'actions':
+                continue
             planned_member = v['state'] == 'planned' and store.db.execute('SELECT 1 FROM group_members WHERE group_id=? AND student_id=?', (v['group_id'], user['id'])).fetchone()
             if planned_member or user['id'] in v.get('members', []):
                 cards = lesson_cards(v['id'], user['id'])
@@ -2184,6 +2203,9 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
     async def next_lesson_card(lid: UUID, body: NextCard | None = None):
         async with coordinated('lesson', lid):
             value = lesson_load(lid)
+            require_dds_lesson(value)
+            if body and body.mode == 'fill' and not operator_112_enabled():
+                raise HTTPException(409, 'Режим оператора 112 отключён')
             if value['state'] != 'running':
                 raise HTTPException(409, 'Преподаватель ещё не запустил или уже завершил занятие')
             cards = lesson_cards(lid, actor.get()['id'])
@@ -2317,6 +2339,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         """Пройти занятие заново с нуля: прежнее завершается (его результаты
         остаются в отчётах), создаётся и запускается такое же с новыми карточками."""
         source = lesson_load(lid)
+        require_dds_lesson(source)
         if source['state'] != 'finished':
             await finish_lesson(lid, TeacherFinish(reason='Занятие начато заново'))
         settings = CreateLesson.model_validate(

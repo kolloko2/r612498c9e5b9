@@ -1,0 +1,10 @@
+body:has(#loginForm)>main{max-width:1060px;margin:7vh auto;padding:0 28px;background:none;border:0;border-radius:0;box-shadow:none;display:grid;grid-template-columns:minmax(300px,390px) minmax(0,1fr);gap:28px;align-items:start}
+body:has(#loginForm)>main:not(:has(#demoAccess:not([hidden]))){max-width:470px;grid-template-columns:minmax(0,1fr)}
+.login-panel,.demo-panel{background:#fff;border:1px solid #d3dce3;border-radius:12px;padding:30px;box-shadow:0 8px 32px #27384908}
+.login-panel{border-top:4px solid #4a6273}.login-intro,.demo-panel>p{color:#66727e;margin:10px 0 0;font-size:14px}
+.demo-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#526b7e;font-weight:700}.demo-panel h2{font-size:23px;margin:9px 0 0}
+.demo-accounts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:23px}
+.demo-account{border:1px solid #d9e1e7;border-radius:8px;padding:18px;min-width:0;background:#f8fafb}.demo-account h3{font-size:15px;margin:0 0 12px}.demo-account dl{margin:0;display:grid;gap:3px}.demo-account dt{font-size:11px;color:#66727e}.demo-account dd{margin:0 0 9px;font:14px/1.45 Consolas,monospace;overflow-wrap:anywhere;color:#243b4b}.demo-account button{width:100%;margin-top:5px}.demo-account[aria-current=true]{background:#edf5f8;border-color:#6e8d9f}
+#mfaControls{border:0;padding:0;display:grid;gap:16px}
+@media(max-width:800px){body:has(#loginForm)>main{grid-template-columns:minmax(0,1fr);max-width:580px;margin:28px auto;gap:20px}}
+@media(max-width:420px){body:has(#loginForm)>main{padding:0 14px;margin:20px auto}.login-panel,.demo-panel{padding:22px}.demo-accounts{grid-template-columns:minmax(0,1fr)}}

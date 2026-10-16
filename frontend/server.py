@@ -217,9 +217,38 @@ async def dds_page():
 
 @app.get('/api/v1/auth/{action}')
 async def auth_get(action: str):
+    if action == 'demo-access':
+        return demo_access()
     if action not in ('status', 'me', 'directory-status', 'mfa'):
         raise HTTPException(404)
     return await dialogue('auth/'+action)
+
+
+def demo_access():
+    """Only explicitly published demo accounts; never read operational credentials."""
+    if os.getenv('DEMO_ACCESS_ENABLED', 'false').lower() != 'true':
+        return {'enabled': False, 'accounts': []}
+    try:
+        values = json.loads(os.getenv('DEMO_ACCOUNTS_JSON', '[]'))
+        if not isinstance(values, list) or not 1 <= len(values) <= 10:
+            raise ValueError('Invalid demo account list')
+        accounts, usernames = [], set()
+        for value in values:
+            if not isinstance(value, dict) or value.get('role') not in ('admin', 'teacher', 'student'):
+                raise ValueError('Invalid demo role')
+            account = {key: value.get(key, '') for key in
+                       ('role', 'username', 'password', 'display_name', 'workstation')}
+            if any(not isinstance(item, str) or len(item) > 160 for item in account.values()):
+                raise ValueError('Invalid demo account field')
+            if (not re.fullmatch(r'[a-zA-Z0-9_.-]{3,40}', account['username'])
+                    or not 1 <= len(account['password']) <= 128
+                    or account['username'] in usernames):
+                raise ValueError('Invalid demo credentials')
+            usernames.add(account['username'])
+            accounts.append(account)
+        return {'enabled': True, 'accounts': accounts}
+    except (ValueError, TypeError):
+        raise HTTPException(503, 'Демонстрационные доступы пока не настроены') from None
 
 @app.post('/api/v1/auth/mfa/{action}')
 async def auth_mfa(action: str, request: Request):

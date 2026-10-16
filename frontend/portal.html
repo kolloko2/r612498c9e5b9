@@ -63,14 +63,15 @@
  <fieldset class="step"><legend><b>1</b> Что и кому</legend>
   <label>Название<input id="lessonTitle" required maxlength="160" placeholder="Например: Реагирование ДДС, занятие 3"></label>
   <label>Группа<select id="lessonGroup" required></select></label>
-  <label>Режим<select id="lessonMode"><option value="actions">Работа диспетчера ДДС · готовые карточки</option><option value="fill">Полный цикл 112 · приём вызова и заполнение</option><option value="mixed">Смешанное занятие</option></select></label>
-  <label class="check"><input type="checkbox" id="lessonModeSwitch"> Разрешить обучающемуся переключать режим (только для смешанного занятия)</label>
+  <input id="lessonMode" type="hidden" value="actions">
+  <input id="lessonModeSwitch" type="checkbox" hidden disabled>
+  <p>Обучение диспетчера ДДС: приём готовых карточек и организация реагирования.</p>
  </fieldset>
  <fieldset class="step"><legend><b>2</b> Какие карточки</legend>
   <label>Категории событий (не выбрано — все)<select id="lessonCategories" multiple size="4"></select></label>
   <label>Готовые карточки, сформированные из сценариев<select id="lessonGenerated" multiple size="4" disabled></select></label>
   <label>Карточки из завершённых работ<select id="lessonSources" multiple size="5" disabled></select></label>
-  <label>Сценарии (можно несколько)<select id="lessonScenarios" multiple required size="5"></select></label>
+  <label hidden>Архив сценариев<select id="lessonScenarios" multiple size="5" disabled></select></label>
   <p class="hint">Выбор карточек случайный, возможны повторения. Адресно конкретному месту сценарий назначается в шаге 3.</p>
  </fieldset>
  <fieldset class="step" id="lessonHow"><legend><b>3</b> Как проходит</legend>
@@ -82,7 +83,7 @@
  </fieldset>
  <fieldset class="step" id="lessonNorms"><legend><b>4</b> Нормативы и оценка</legend>
   <div class="columns"><label>Норматив реакции, секунд<input id="lessonNorm" type="number" min="10" max="3600" placeholder="30 (по сценарию)"></label><label>Порог зачёта, баллов<input id="lessonPass" type="number" min="0" max="100" step="5" placeholder="по правилам сценария"></label></div>
-  <p class="hint">Норматив реакции — от поступления карточки до её открытия (ДДС) или до первого действия (приём вызова 112). Пусто — норматив сценария, по умолчанию 30 секунд. Порог зачёта: попытка с баллом ниже не засчитывается.</p>
+  <p class="hint">Норматив реакции — от поступления карточки до её открытия. Пусто — норматив сценария, по умолчанию 30 секунд. Порог зачёта: попытка с баллом ниже не засчитывается.</p>
  </fieldset>
  <p id="lessonSummary" class="lesson-summary" role="status" aria-live="polite"></p>
  <button class="primary">Подготовить занятие</button></form><div id="lessons" class="cards"></div></section>

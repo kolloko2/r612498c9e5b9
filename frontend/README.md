@@ -1,5 +1,18 @@
 # Local web console
 
+The 16 October DDS release exposes only dispatcher training. Lesson creation uses
+`actions`, generation uses `dds`, and the learner has no operator-112 switch.
+The source-matched incident card itself retains its original layout.
+
+The login page displays role-based demo website accounts from
+`GET /api/v1/auth/demo-access`. Set `DEMO_ACCESS_ENABLED=true` and provide
+`DEMO_ACCOUNTS_JSON` in the Frontend ENV as an array of objects with `role`,
+`username`, `password`, optional `display_name` and `workstation`. Values stay out
+of static assets; the panel offers explicit autofill followed by ordinary login.
+The default is disabled. Invalid config does not block normal login or expose ENV.
+Checks: `python -m pytest backend/test_demo_access.py` and
+`node frontend/test_login_browser.cjs`.
+
 The top training strip exposes restart for a running single-card lesson once
 its card exists, including after completion. It stays visible over the DDS ARM;
 the original attempt remains in history. The teacher's separate lesson restart
