@@ -19,7 +19,7 @@ async function loadDemoAccess(){
    document.getElementById('mfaBack').click();
    if(directoryChoice)directoryChoice.value='local';
    form.elements.username.value=account.username;form.elements.password.value=account.password;form.elements.workstation.value=account.workstation||'';
-   for(const item of container.children)item.removeAttribute('aria-current');card.setAttribute('aria-current','true');status.textContent='Данные подставлены. Нажмите «Продолжить».';form.querySelector('button[type=submit]').focus();
+   for(const item of container.children)item.removeAttribute('aria-current');card.setAttribute('aria-current','true');status.textContent='Данные подставлены. Нажмите «Войти».';form.querySelector('button[type=submit]').focus();
   };
   card.append(title,values,choose);container.append(card);
  }

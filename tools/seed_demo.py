@@ -73,12 +73,14 @@ class Client:
             raise SystemExit(f"{method} {path} -> {error.code}: {detail}")
 
     def catalog(self):
-        """Каталог сценариев лежит вне /api/v1, поэтому запрашивается отдельно."""
-        saved, self.base_path = self.base_path, "/api"
-        try:
-            status, payload = self.call("GET", "/scenarios", expect=(200, 404))
-        finally:
-            self.base_path = saved
+        """Frontend proxies the scenario library at /api/scenarios; Backend at /api/v1."""
+        status, payload = self.call("GET", "/scenarios", expect=(200, 404))
+        if not isinstance(payload, list):
+            saved, self.base_path = self.base_path, "/api"
+            try:
+                status, payload = self.call("GET", "/scenarios", expect=(200, 404))
+            finally:
+                self.base_path = saved
         return payload if isinstance(payload, list) else []
 
     def login(self, username: str) -> None:
@@ -136,6 +138,23 @@ def ensure_scenarios(teacher: Client) -> list[str]:
     return published
 
 
+def ensure_simple_scenarios(teacher: Client) -> list[str]:
+    """Publish synthetic DDS exercises; never replace an existing teacher edition."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
+    from simple_dds import scenarios as simple_scenarios
+    existing = {item['id'] for item in teacher.catalog()}
+    identifiers = []
+    for scenario in simple_scenarios():
+        if scenario['id'] not in existing:
+            saved, teacher.base_path = teacher.base_path, '/api'
+            try:
+                teacher.call('POST', '/scenarios', scenario, expect=(200, 201, 409))
+            finally:
+                teacher.base_path = saved
+        identifiers.append(scenario['id'])
+    return identifiers
+
+
 def ensure_assignments(teacher: Client, group_id: str, scenarios: list[str],
                        titles_by_id: dict[str, str]) -> None:
     """Прямые назначения: карточку можно создать без входа в занятие.
@@ -147,12 +166,18 @@ def ensure_assignments(teacher: Client, group_id: str, scenarios: list[str],
     _, existing = teacher.call("GET", "/instructor/assignments")
     have = {item["title"] for item in existing}
     made = 0
-    for scenario_id in scenarios[:3] + [s for s in scenarios if s.startswith("refusal_")]:
+    for scenario_id in dict.fromkeys(scenarios[:3] + [s for s in scenarios if s.startswith(("refusal_", "simple_dds_"))]):
         title = "Свободная тренировка: " + titles_by_id.get(scenario_id, scenario_id)[:60]
         if title in have:
             continue
-        teacher.call("POST", "/instructor/assignments",
-                     {"group_id": group_id, "scenario_id": scenario_id, "title": title})
+        status, _ = teacher.call("POST", "/instructor/assignments",
+                                 {"group_id": group_id, "scenario_id": scenario_id, "title": title},
+                                 expect=(200, 201, 409))
+        if status == 409:
+            # Only DDS scenarios with a ready card can be assigned in the DDS release.
+            print("пропущено назначение без готовой карточки ДДС:", scenario_id)
+            continue
+        have.add(title)
         made += 1
     if made:
         print("создано свободных назначений:", made)
@@ -300,10 +325,11 @@ def main() -> None:
     scenarios = ensure_scenarios(teacher)
     if not scenarios:
         scenarios = [item["id"] for item in teacher.catalog() if item.get("enabled")][:6]
+    simple = ensure_simple_scenarios(teacher)
     titles = {item["id"]: item["title"] for item in teacher.catalog()}
     refusals = ensure_refusal_scenarios(teacher)
     titles.update({item["id"]: item["title"] for item in REFUSAL_SCENARIOS})
-    ensure_assignments(teacher, group_id, scenarios + refusals, titles)
+    ensure_assignments(teacher, group_id, scenarios + refusals + simple, titles)
     ensure_lessons(teacher, group_id, scenarios, student_ids)
     ensure_materials(teacher, [group_id])
     print()

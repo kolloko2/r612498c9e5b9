@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMax slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5f9fcf"/>
+      <stop offset="1" stop-color="#9cc8e6"/>
+    </linearGradient>
+    <pattern id="win" width="18" height="22" patternUnits="userSpaceOnUse">
+      <rect x="4" y="5" width="9" height="11" fill="#ffffff" opacity=".35"/>
+    </pattern>
+    <pattern id="winDark" width="44" height="26" patternUnits="userSpaceOnUse">
+      <rect x="6" y="8" width="32" height="7" fill="#9aa7b1"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <!-- дальний план: высотки -->
+  <g fill="#8dbde0">
+    <rect x="40" y="120" width="120" height="780"/>
+    <rect x="190" y="60" width="70" height="840"/>
+    <rect x="300" y="200" width="110" height="700"/>
+    <rect x="980" y="160" width="90" height="740"/>
+    <rect x="1440" y="230" width="120" height="670"/>
+  </g>
+  <g fill="#6f9fc6">
+    <rect x="160" y="0" width="90" height="900"/>
+    <path d="M520 900V300l60-30 60 30v600z"/>
+    <rect x="760" y="390" width="70" height="510"/>
+    <path d="M1120 900V250q55-40 110 0v650z"/>
+  </g>
+  <g fill="url(#win)">
+    <rect x="160" y="0" width="90" height="900"/>
+    <rect x="520" y="300" width="120" height="600"/>
+    <rect x="1120" y="260" width="110" height="640"/>
+  </g>
+  <!-- средний план: светлые башни -->
+  <g fill="#c4def1">
+    <path d="M400 900V330h110v570z"/>
+    <path d="M640 900V420l50-20 50 20v480z"/>
+    <path d="M860 900V350h60l30 20v530z"/>
+    <path d="M1260 900V380h100v520z"/>
+  </g>
+  <g fill="#a9cde8">
+    <rect x="455" y="330" width="55" height="570"/>
+    <rect x="690" y="410" width="50" height="490"/>
+    <rect x="920" y="360" width="30" height="540"/>
+  </g>
+  <!-- передний план: жилые дома -->
+  <g>
+    <rect x="0" y="760" width="260" height="140" fill="#f2f4f6"/>
+    <rect x="60" y="700" width="180" height="200" fill="#e3e7ea"/>
+    <rect x="60" y="700" width="180" height="200" fill="url(#winDark)" opacity=".7"/>
+    <rect x="300" y="780" width="300" height="120" fill="#f5f6f7"/>
+    <rect x="330" y="800" width="240" height="100" fill="url(#winDark)" opacity=".55"/>
+    <rect x="640" y="740" width="220" height="160" fill="#e6e9ec"/>
+    <rect x="660" y="760" width="180" height="140" fill="url(#winDark)" opacity=".6"/>
+    <rect x="900" y="800" width="180" height="100" fill="#f4f5f6"/>
+    <rect x="1100" y="720" width="240" height="180" fill="#e2e6e9"/>
+    <rect x="1120" y="740" width="200" height="160" fill="url(#winDark)" opacity=".65"/>
+    <rect x="1360" y="780" width="240" height="120" fill="#f3f4f5"/>
+    <rect x="1380" y="800" width="200" height="100" fill="url(#winDark)" opacity=".5"/>
+  </g>
+  <!-- вертолёт -->
+  <g transform="translate(560 190)">
+    <rect x="-70" y="-14" width="150" height="3" fill="#2d3a44"/>
+    <rect x="3" y="-14" width="4" height="12" fill="#2d3a44"/>
+    <path d="M-40 18q0-22 32-22h40q22 0 28 14l52 2-4 8-58 6q-10 14-40 14h-24q-26 0-26-22z" fill="#f4f6f8"/>
+    <path d="M-38 24h86q-6 10-26 12h-38q-18 0-22-12z" fill="#e2533a"/>
+    <path d="M-30 4h28v14h-36q2-10 8-14z" fill="#8cc7ea"/>
+    <rect x="-30" y="40" width="60" height="3" fill="#2d3a44"/>
+    <rect x="-20" y="34" width="3" height="7" fill="#2d3a44"/>
+    <rect x="15" y="34" width="3" height="7" fill="#2d3a44"/>
+    <rect x="114" y="0" width="3" height="28" fill="#2d3a44" transform="rotate(20 115 14)"/>
+  </g>
+</svg>

@@ -6,6 +6,7 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="/assets/apple-touch-icon.png"><title>Кабинет · Тренажёр 112</title>
   <link rel="stylesheet" href="/assets/portal.css">
   <script src="/assets/mfa.js" defer></script>
+  <script src="/assets/onboarding-steps.js" defer></script>
   <script src="/assets/portal.js" defer></script>
 <link rel="stylesheet" href="/assets/cabinet.css"></head>
 <body>
@@ -27,8 +28,8 @@
         <button class="primary" type="submit">Создать пользователя</button>
       </form>
       <div id="users" class="cards"></div>
-      <section class="panel">
-        <h2>Политика доступа и журналирования</h2>
+      <details class="panel fold">
+        <summary><h2>Дополнительно: политика доступа</h2><span>срок сессии, блокировка входа, двухфакторный вход, журнал</span></summary>
         <p>Действует для всех реплик сервера сразу, без перезапуска. Изменения записываются в журнал аудита. Основной журнал безопасности (HTTP и WebSocket) архивируется и хранится не менее 183 дней без автоматического удаления.</p>
         <form id="policyForm" class="form-grid">
           <label>Срок сессии, ч<input id="policySession" type="number" min="1" max="24" required></label>
@@ -39,33 +40,19 @@
           <label>Уровень журнала сервера<select id="policyLogLevel"><option value="DEBUG">Отладка</option><option value="INFO">Информация</option><option value="WARNING">Предупреждения</option><option value="ERROR">Только ошибки</option></select></label>
           <button class="primary" type="submit">Сохранить политику</button>
         </form>
-      </section>
+      </details>
     </section>
 
     <section id="teacherPanel" hidden>
-      <div class="heading"><div><h1>Кабинет преподавателя</h1><p>Группы, задания и результаты учебных занятий.</p></div><nav class="heading-actions"><a class="button" href="/assessment">Оценка и статистика</a><a class="button" href="/dds">Журнал ДДС</a><a class="button" href="/materials">Методические материалы</a><a class="button" href="/tickets">Учебные билеты</a><a class="button" href="/scenarios">Сценарии</a><a class="button" href="/instructor">Настроить эталоны</a></nav></div>
-      <div class="columns">
-        <section class="panel"><h2>Группы</h2>
-          <form id="groupForm" class="inline"><input id="groupTitle" required maxlength="160" placeholder="Название группы"><button class="primary">Создать</button></form>
-          <div id="groups" class="cards compact"></div>
-        </section>
-        <section class="panel"><h2>Новое задание</h2>
-          <form id="assignmentForm" class="stack">
-            <label>Группа<select id="assignmentGroup" required></select></label>
-            <label>Сценарий<select id="scenarioId" required></select></label>
-            <label>Название задания<input id="assignmentTitle" required maxlength="160"></label>
-            <button class="primary">Назначить</button>
-          </form>
-          <div id="assignments" class="cards compact"></div>
-        </section>
-      </div>
-<section class="panel lesson-builder"><h2>Новое занятие для группы</h2><p class="hint">Заполните четыре шага. Внизу видно, что именно получит каждый обучающийся; после подготовки нажмите «Начать» в карточке занятия.</p><form id="lessonForm" class="stack">
+      <div class="heading"><div><h1>Кабинет преподавателя</h1><p>Занятия группы, карточки от ИИ и результаты.</p></div><nav class="heading-actions"><a class="button primary" href="/generation">ИИ: создать карточку</a><a class="button" href="/assessment">Оценка и статистика</a><a class="button" href="/scenarios">Сценарии</a><details class="more-menu"><summary class="button">Ещё</summary><div><a href="/dds">Журнал ДДС</a><a href="/materials">Методические материалы</a><a href="/tickets">Учебные билеты</a><a href="/instructor">Настроить эталоны</a></div></details></nav></div>
+<section class="panel lesson-builder"><h2>Новое занятие для группы</h2><form id="lessonForm" class="stack">
  <fieldset class="step"><legend><b>1</b> Что и кому</legend>
   <label>Название<input id="lessonTitle" required maxlength="160" placeholder="Например: Реагирование ДДС, занятие 3"></label>
+  <label class="ai-cards-toggle"><span><input type="checkbox" id="lessonAiCards" checked> <b>Карточки формирует ИИ</b></span><small>Каждый обучающийся получает свою новую карточку, созданную искусственным интеллектом. Подбирать сценарии не нужно; после работы ИИ оценит действия и даст рекомендации.</small><small id="aiPoolStatus" class="ai-pool-status"></small></label>
+  <label class="check" id="lessonApplicantLabel"><input type="checkbox" id="lessonApplicant"> Разрешить звонок заявителю по номеру из карточки</label>
   <label>Группа<select id="lessonGroup" required></select></label>
   <input id="lessonMode" type="hidden" value="actions">
   <input id="lessonModeSwitch" type="checkbox" hidden disabled>
-  <p>Обучение диспетчера ДДС: приём готовых карточек и организация реагирования.</p>
  </fieldset>
  <fieldset class="step"><legend><b>2</b> Какие карточки</legend>
   <label>Категории событий (не выбрано — все)<select id="lessonCategories" multiple size="4"></select></label>
@@ -74,20 +61,41 @@
   <label hidden>Архив сценариев<select id="lessonScenarios" multiple size="5" disabled></select></label>
   <p class="hint">Выбор карточек случайный, возможны повторения. Адресно конкретному месту сценарий назначается в шаге 3.</p>
  </fieldset>
- <fieldset class="step" id="lessonHow"><legend><b>3</b> Как проходит</legend>
-  <div class="columns"><label>Карточек каждому студенту<input id="lessonCount" type="number" min="1" max="200" value="3" required></label><label>Одновременно открытых карточек<input id="lessonParallel" type="number" min="1" max="10" value="1" required></label></div>
+ <fieldset class="step" id="lessonHow"><legend><b id="lessonHowNumber">3</b> Как проходит</legend>
+  <label>Карточек каждому студенту<input id="lessonCount" type="number" min="1" max="200" value="3" required></label>
   <label><span><input id="lessonUnlimited" type="checkbox"> Выдавать карточки до остановки преподавателем</span></label>
-  <label class="check"><input type="checkbox" id="lessonAdaptive"> Подбирать сложность по результатам обучающегося</label>
-  <div id="lessonPlaces" class="stack"></div>
-  <p class="hint">Готовая карточка поступает данными. При назначенном SIP-номере диспетчер может отдельно позвонить дежурному службы.</p>
  </fieldset>
- <fieldset class="step" id="lessonNorms"><legend><b>4</b> Нормативы и оценка</legend>
-  <div class="columns"><label>Норматив реакции, секунд<input id="lessonNorm" type="number" min="10" max="3600" placeholder="30 (по сценарию)"></label><label>Порог зачёта, баллов<input id="lessonPass" type="number" min="0" max="100" step="5" placeholder="по правилам сценария"></label></div>
-  <p class="hint">Норматив реакции — от поступления карточки до её открытия. Пусто — норматив сценария, по умолчанию 30 секунд. Порог зачёта: попытка с баллом ниже не засчитывается.</p>
- </fieldset>
+ <details class="lesson-more" id="lessonMore"><summary>Дополнительные настройки: нормативы, рабочие места, подсказки</summary>
+  <fieldset class="step"><legend>Выдача карточек</legend>
+   <label>Одновременно открытых карточек<input id="lessonParallel" type="number" min="1" max="10" value="1" required></label>
+   <label class="check"><input type="checkbox" id="lessonAdaptive"> Подбирать сложность по результатам обучающегося</label>
+   <div id="lessonPlaces" class="stack"></div>
+  </fieldset>
+  <fieldset class="step" id="lessonNorms"><legend>Нормативы и оценка</legend>
+   <div class="columns"><label>Норматив реакции, секунд<input id="lessonNorm" type="number" min="10" max="3600" placeholder="30 (по сценарию)"></label><label>Порог зачёта, баллов<input id="lessonPass" type="number" min="0" max="100" step="5" placeholder="по правилам сценария"></label></div>
+   <p class="hint">Норматив реакции — от поступления карточки до её открытия. Пусто — норматив сценария, по умолчанию 30 секунд. Порог зачёта: попытка с баллом ниже не засчитывается.</p>
+  </fieldset>
+ </details>
  <p id="lessonSummary" class="lesson-summary" role="status" aria-live="polite"></p>
  <button class="primary">Подготовить занятие</button></form><div id="lessons" class="cards"></div></section>
-      <section class="panel sessions"><h2>Занятия</h2><button id="refreshSessions" type="button">Обновить</button><div id="sessions" class="cards compact"></div></section>
+      <div class="columns">
+        <section class="panel"><h2>Группы</h2>
+          <form id="groupForm" class="inline"><input id="groupTitle" required maxlength="160" placeholder="Название группы"><button class="primary">Создать</button></form>
+          <div id="groups" class="cards compact"></div>
+        </section>
+        <details class="panel fold"><summary><h2>Отдельное задание</h2><span>одному обучающемуся или группе, без занятия</span></summary>
+          <form id="assignmentForm" class="stack">
+            <label>Группа<select id="assignmentGroup" required></select></label>
+            <label>Сценарий<select id="scenarioId" required></select></label>
+            <label>Название задания<input id="assignmentTitle" required maxlength="160"></label>
+            <button class="primary">Назначить</button>
+          </form>
+          <div id="assignments" class="cards compact"></div>
+        </details>
+      </div>
+      <details class="panel fold sessions-fold"><summary><h2>Все карточки обучающихся</h2><span>журнал выданных карточек и их результаты</span></summary>
+      <section class="sessions"><button id="refreshSessions" type="button">Обновить</button><div id="sessions" class="cards compact"></div></section>
+      </details>
       <dialog id="sessionDialog"><div class="dialog-head"><h2>Занятие</h2><button id="closeSession" type="button" aria-label="Закрыть">×</button></div><div id="sessionDetail"></div></dialog>
     </section>
 

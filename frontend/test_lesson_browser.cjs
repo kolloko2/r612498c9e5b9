@@ -36,7 +36,7 @@ async function serve(page,role){
     data=c;
    }else if(p==='/api/scenarios')data=[scenario,{...scenario,id:'medical_case',title:'Учебная медицина',category_id:'medical',difficulty:'advanced',dds_profile:'medical'}];
    else if(p==='/api/v1/instructor/categories')data=[{id:'fire',title:'Пожары'},{id:'medical',title:'Медицина'}];
-   else if(p==='/api/v1/instructor/curriculum')data={difficulties:[{id:'basic',title:'Базовый'},{id:'standard',title:'Стандартный'},{id:'advanced',title:'Повышенный'}],profiles:[{id:'general',title:'Общий профиль 112'},{id:'medical',title:'Скорая помощь'}]};
+   else if(p==='/api/v1/instructor/curriculum')data={difficulties:[{id:'basic',title:'Базовый'},{id:'standard',title:'Стандартный'},{id:'advanced',title:'Повышенный'}],profiles:[{id:'general',title:'Общий профиль ДДС'},{id:'medical',title:'Скорая помощь'}]};
    else if(p==='/api/v1/instructor/routing/catalog')data={rules_version:'full-v2',services:['Служба 101','ЦОДД'],flags:[]};
    else if(p==='/api/v1/instructor/students')data=[{id:'student-test',display_name:'Студент'}];
    else if(p==='/api/v1/instructor/groups')data=[{id:'group-test',title:'Группа',students:[{id:'student-test',display_name:'Студент'}],member_ids:['student-test']}];
@@ -47,6 +47,7 @@ async function serve(page,role){
    }else if(p.endsWith('/lesson-test/start')){state='running';data=lesson();}
    else if(p.endsWith('/lesson-test/finish')){state='finished';data=lesson();}
    else if(p.endsWith('/lesson-test/report'))data={id:'lesson-test',title:'Практика',state,summary:{participants:1,issued:cards.length,completed:cards.length},participants:[{student_id:'student-test',display_name:'Студент',completed:cards.length,cards}],events:[]};
+   else if(p==='/api/v1/instructor/ai-pool')data={enabled:true,target:4,profiles:['utilities'],ready:{utilities:2},issued:0,generating:null,paused_for_calls:false,last_error:''};
    else throw Error('Unexpected API '+p);
    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   }
@@ -73,7 +74,7 @@ async function serve(page,role){
   await page.reload();await expect(page.locator('#lessonState')).toContainText('завершено',{timeout:12000});
   if(errors.length)throw Error(errors.join('\n'));await page.close();
   lessonExists=false;cards=[];const teacher=await browser.newPage();teacher.on('pageerror',e=>errors.push(e.message));teacher.on('dialog',d=>d.accept('Практика завершена'));
-  await serve(teacher,'teacher');await teacher.goto(origin+'/portal');await teacher.locator('#lessonTitle').fill('Практика');await teacher.locator('#lessonCategories').selectOption(['fire','medical']);
+  await serve(teacher,'teacher');await teacher.goto(origin+'/portal');await teacher.locator('#lessonAiCards').uncheck();await teacher.locator('#lessonMore>summary').click();await teacher.locator('#lessonTitle').fill('Практика');await teacher.locator('#lessonCategories').selectOption(['fire','medical']);
   await teacher.locator('#lessonDifficulty').selectOption('basic');await teacher.locator('#lessonProfile').selectOption('general');
   await expect(teacher.locator('#lessonScenarios option')).toHaveCount(1);
   // Рабочее место, адресное задание, многозадачность и адаптация задаются в форме.

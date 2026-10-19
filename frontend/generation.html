@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="/assets/apple-touch-icon.png"><title>ИИ-авторинг · Тренажёр 112</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/favicon-32.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="/assets/apple-touch-icon.png"><title>ИИ: новое упражнение · Тренажёр 112</title>
   <link rel="stylesheet" href="/assets/instructor.css">
   <style>
     .layout{display:grid;grid-template-columns:minmax(230px,1fr) minmax(0,3fr);gap:24px;align-items:start}.panel,.preview-section{background:#fff;border:1px solid #cad3d9;padding:18px;margin-bottom:16px}.drafts{display:grid;gap:8px;margin-top:12px}.draft{width:100%;text-align:left}.draft[aria-current="true"]{border-color:#1878a7;background:#eaf6fb}.meta{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:#5a6a75}.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.fact{margin:0;white-space:pre-wrap}.fact strong{display:block;margin-bottom:5px}.wide{grid-column:1/-1}.rubric{width:100%;border-collapse:collapse}.rubric th,.rubric td{border:1px solid #cad3d9;padding:9px;text-align:left;vertical-align:top}.rubric th{background:#eef4f7}.approval{border-left:4px solid #1878a7}.empty{color:#5a6a75;font-style:italic}.conflict{display:none}.conflict.visible{display:inline-block}.history summary{cursor:pointer}.history article{border-top:1px solid #dce3e7;padding:12px 0}.history article:first-of-type{margin-top:12px}.approved{color:#236529;font-weight:bold}@media(max-width:800px){.layout,.facts{grid-template-columns:1fr}.wide{grid-column:auto}}
@@ -11,9 +11,10 @@
   <script src="/assets/generation.js" defer></script>
 <link rel="stylesheet" href="/assets/cabinet.css"></head>
 <body>
-<header><strong>СИСТЕМА-112 · ИИ-авторинг</strong><a href="/scenarios">Библиотека сценариев</a></header>
+<header><strong>СИСТЕМА-112 · ИИ создаёт упражнение</strong><a href="/scenarios">Библиотека сценариев</a></header>
 <main>
-  <h1>Черновик сценария и эталона</h1>
+  <h1>Создать упражнение ДДС</h1>
+  <p>Выберите профиль и сложность. Ситуацию, карточку, бригады, телефонный справочник, вводные, подсказки и оценку система подготовит вместе. Тему можно не задавать.</p>
   <div class="layout">
     <aside class="panel">
       <h2>Сохранённые черновики</h2>
@@ -24,12 +25,12 @@
       <form id="generateForm" class="panel">
         <h2>Новая задача</h2>
         <input id="generationMode" type="hidden" value="dds">
-        <label id="ownerServiceLabel">Своя служба ДДС<input id="ownerService" maxlength="160" placeholder="Например, Служба 101"></label>
-        <label>Учебная категория<select id="category" required><option value="fire">Пожары</option><option value="traffic">ДТП и транспорт</option><option value="medical">Медицина</option><option value="utilities">ЖКХ и инженерные сети</option><option value="public">Общественная безопасность</option><option value="other">Прочее</option></select></label>
-        <div class="facts"><label>Уровень сложности<select id="difficulty"><option value="basic">Базовый</option><option value="standard">Стандартный</option><option value="advanced">Повышенный</option></select></label><label>Профиль ДДС<select id="ddsProfile"><option value="general">Общий</option><option value="fire">Пожарная охрана</option><option value="police">Полиция</option><option value="medical">Скорая медицинская помощь</option><option value="gas">Аварийная газовая служба</option><option value="utilities">ЖКХ и инженерные сети</option></select></label></div>
+        <label id="ownerServiceLabel">Своя служба ДДС (необязательно)<input id="ownerService" maxlength="160" placeholder="Автоматически по профилю"></label>
+        <label>Учебная категория<select id="category" required><option value="fire">Пожары</option><option value="traffic">ДТП и транспорт</option><option value="medical">Медицина</option><option value="utilities" selected>ЖКХ и инженерные сети</option><option value="public">Общественная безопасность</option><option value="other">Прочее</option></select></label>
+        <div class="facts"><label>Уровень сложности<select id="difficulty"><option value="basic">Базовый</option><option value="standard">Стандартный</option><option value="advanced">Повышенный</option></select></label><label>Профиль ДДС<select id="ddsProfile"><option value="general">Общий</option><option value="fire">Пожарная охрана</option><option value="police">Полиция</option><option value="medical">Скорая медицинская помощь</option><option value="gas">Аварийная газовая служба</option><option value="utilities" selected>ЖКХ и инженерные сети</option></select></label></div>
         <label>Учебные цели<textarea id="learningObjectives" maxlength="1500" rows="4" placeholder="Что должен отработать студент"></textarea></label>
-        <label>Методическое задание<textarea id="brief" required maxlength="3000" rows="7" placeholder="Опишите учебную ситуацию, цели, важные факты и что должен зафиксировать оператор."></textarea></label>
-        <footer><button id="generate" type="submit">Создать черновик</button><span id="briefCount">0 / 3000</span></footer>
+        <label>Тема или пожелания (необязательно)<textarea id="brief" maxlength="3000" rows="5" placeholder="Оставьте пустым — ИИ сам придумает ситуацию. Или укажите, например: мусор во дворе, нужно согласовать уборку с управляющей организацией."></textarea></label>
+        <footer><button id="generate" type="submit">Создать упражнение целиком</button><span id="briefCount">0 / 3000</span></footer>
       </form>
       <section class="panel">
         <h2>Исправления преподавателя для ИИ</h2>
@@ -57,8 +58,8 @@
         </section>
         <section id="approvalPanel" class="preview-section approval">
           <h2>Публикация</h2>
-          <p>До подтверждения ни сценарий, ни эталон не добавляются в учебную библиотеку. Одобрение создаст их вместе.</p>
-          <label><span><input id="approvalCheck" type="checkbox"> Я проверил(а) все факты и критерии</span></label>
+          <p>Проверьте весь комплект ниже. Публикация добавит упражнение в библиотеку и утвердит подготовленные подсказки. Их показ ученику включается отдельно при выдаче.</p>
+          <label><span><input id="approvalCheck" type="checkbox"> Я проверил(а) карточку, контакты, вводные, подсказки и критерии</span></label>
           <footer><button id="approve" type="button" disabled>Одобрить сценарий и эталон</button></footer>
         </section>
         <details class="preview-section history"><summary>История версий</summary><div id="history"></div></details>

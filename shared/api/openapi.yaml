@@ -2450,6 +2450,47 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - bearerAuth: []
+  /student/ai-practice:
+    get:
+      summary: AI self-practice availability
+      operationId: ai_practice_status_api_v1_student_ai_practice_get
+      description: Whether the student belongs to a group and how many AI-authored cards are ready.
+      responses:
+        '200':
+          description: '{available: boolean, ready: integer, generating: boolean}'
+      security:
+      - bearerAuth: []
+    post:
+      summary: Get a new AI-authored card without a teacher
+      operationId: ai_practice_api_v1_student_ai_practice_post
+      description: >-
+        Issues an unused card from the AI pool into the student's permanent
+        "Тренировка с ИИ" lesson of their group (an open card is returned again).
+        409 when the pool is empty ("ИИ готовит для вас новую карточку") or the
+        student has no group. The card carries `source_kind: ai_pool` and
+        `ai_generated {model, provider, generated_at, topic}`.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/NextCard'
+              - type: 'null'
+      responses:
+        '201':
+          description: Card in the workspace format, same as lesson next.
+      security:
+      - bearerAuth: []
+  /instructor/ai-pool:
+    get:
+      summary: AI card pool status
+      operationId: ai_pool_status_api_v1_instructor_ai_pool_get
+      description: '{enabled, target, profiles, ready {profile: count}, issued, generating {profile, topic, started_at} | null, paused_for_calls, last_error, recent [{title, status, created_at}]}'
+      responses:
+        '200':
+          description: Pool status
+      security:
+      - bearerAuth: []
   /instructor/lessons:
     post:
       summary: Create Lesson
@@ -2667,6 +2708,7 @@ paths:
     post:
       summary: Create
       operationId: create_api_v1_instructor_generations_post
+      description: DDS authoring has one total 900-second model budget including structural repair. A teacher-scoped lease protects drafts without blocking unrelated logins or mutations. The fast profile expands compact model facts into the same complete public exercise schema.
       parameters:
       - name: X-User-Session
         in: header
@@ -2732,6 +2774,7 @@ paths:
     post:
       summary: Revise
       operationId: revise_api_v1_instructor_generations__did__revise_post
+      description: DDS revision has one total 900-second model budget including structural repair and the same teacher-scoped lease as creation and approval. A failed revision preserves the previous draft.
       parameters:
       - name: did
         in: path
@@ -5622,6 +5665,78 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - bearerAuth: []
+  /student/sessions/{sid}/phone/contacts:
+    get:
+      summary: Phone Contacts
+      operationId: phone_contacts_api_v1_student_sessions__sid__phone_contacts_get
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+  /student/sessions/{sid}/phone/dial:
+    post:
+      summary: Dial
+      operationId: dial_api_v1_student_sessions__sid__phone_dial_post
+      parameters:
+      - name: sid
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Sid
+      - name: X-User-Session
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-User-Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Dial'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
 components:
   securitySchemes:
     bearerAuth:
@@ -5810,6 +5925,12 @@ components:
           type: array
           maxItems: 20
           title: Crew Options
+        phone_contacts:
+          items:
+            $ref: '#/components/schemas/PhoneContact'
+          type: array
+          maxItems: 10
+          title: Phone Contacts
         prefilled_card:
           additionalProperties: true
           type: object
@@ -6763,6 +6884,12 @@ components:
           type: array
           maxItems: 20
           title: Crew Options
+        phone_contacts:
+          items:
+            $ref: '#/components/schemas/PhoneContact'
+          type: array
+          maxItems: 10
+          title: Phone Contacts
         prefilled_card:
           additionalProperties: true
           type: object
@@ -6938,6 +7065,12 @@ components:
           type: array
           maxItems: 20
           title: Crew Options
+        phone_contacts:
+          items:
+            $ref: '#/components/schemas/PhoneContact'
+          type: array
+          maxItems: 10
+          title: Phone Contacts
         prefilled_card:
           additionalProperties: true
           type: object
@@ -7081,6 +7214,16 @@ components:
           type: boolean
           title: Practice With Hints
           default: false
+        ai_cards:
+          type: boolean
+          title: Ai Cards
+          default: false
+          description: Cards are authored by the AI pool; every student receives a new unused exercise (actions mode only, no hints).
+        allow_applicant_calls:
+          type: boolean
+          title: Allow Applicant Calls
+          default: false
+          description: AI cards keep the applicant phone contact only when the teacher allows calls to the applicant.
         transport:
           type: string
           enum:
@@ -7173,8 +7316,8 @@ components:
         brief:
           type: string
           maxLength: 3000
-          minLength: 3
           title: Brief
+          default: ''
         category_id:
           type: string
           enum:
@@ -7225,7 +7368,6 @@ components:
       type: object
       required:
       - request_id
-      - brief
       title: GenerateRequest
     ReviseRequest:
       properties:
@@ -8069,6 +8211,11 @@ components:
           type: string
           format: uuid
           title: Message Id
+        contact_id:
+          type: string
+          maxLength: 64
+          title: Contact Id
+          default: ''
         crew_id:
           type: string
           maxLength: 160
@@ -8612,6 +8759,7 @@ components:
           - assign
           - crew
           - superior
+          - contact
           - correction
           - update
           - processed
@@ -8623,6 +8771,11 @@ components:
           type: string
           maxLength: 32
           title: Update Id
+          default: ''
+        contact_id:
+          type: string
+          maxLength: 64
+          title: Contact Id
           default: ''
         title:
           type: string
@@ -8660,3 +8813,81 @@ components:
       - text
       - target
       title: PracticeStep
+    Dial:
+      properties:
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+        number:
+          type: string
+          maxLength: 40
+          minLength: 2
+          title: Number
+        transport:
+          type: string
+          enum:
+          - text
+          - sip
+          title: Transport
+          default: sip
+      additionalProperties: false
+      type: object
+      required:
+      - message_id
+      - number
+      title: Dial
+    PhoneContact:
+      properties:
+        id:
+          type: string
+          pattern: ^[a-zA-Z0-9_-]{1,64}$
+          title: Id
+        name:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Name
+        role:
+          type: string
+          enum:
+          - superior
+          - organization_head
+          - response_chief
+          - crew_leader
+          - crew_specialist
+          title: Role
+        number:
+          type: string
+          maxLength: 40
+          minLength: 2
+          title: Number
+        crew_id:
+          type: string
+          maxLength: 160
+          title: Crew Id
+          default: ''
+        facts:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Facts
+        required_keywords:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Required Keywords
+        required:
+          type: boolean
+          title: Required
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - name
+      - role
+      - number
+      title: PhoneContact

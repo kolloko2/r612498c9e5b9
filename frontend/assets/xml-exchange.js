@@ -33,7 +33,7 @@
  }
  if(el('lessonForm')){
   const places=()=>new Map([...el('lessonPlaces').querySelectorAll('[data-place-student-id]')].map(input=>[input.dataset.placeStudentId,input]));
-  toolbar(el('lessonForm'),()=>{
+  toolbar(el('lessonMore')||el('lessonForm'),()=>{
    const map=places();if(!map.size)throw Error('Сначала выберите группу с обучающимися');
    const doc=documentFor('trainer112-workstations');add(doc,doc.documentElement,'group',el('lessonGroup').value);
    for(const [id,input] of map){const station=add(doc,doc.documentElement,'station',input.value);station.setAttribute('student',id);}

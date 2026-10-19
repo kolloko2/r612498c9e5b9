@@ -46,7 +46,7 @@ function storeMessage(sid,value){pendingTextMessages.set(sid,value);const key=me
 function clearMessage(sid){pendingTextMessages.delete(sid);const key=messageKey(sid);if(key)sessionStorage.removeItem(key);}
 function renderConnection(){
  if(typeof renderPresence==='function')renderPresence();
- $('health').textContent=!navigator.onLine?'○ Браузер без сети':connectionLost?'○ Нет связи с Backend':healthText;
+ $('health').textContent=!navigator.onLine?'○ Браузер без сети':connectionLost?'○ Нет связи с сервером':healthText;$('healthStrip').hidden=navigator.onLine&&!connectionLost;
 }
 function noteDisconnected(){connectionLost=true;renderConnection();}
 function noteConnected(){const recovered=connectionLost;connectionLost=false;renderConnection();if(recovered&&!recoveryBusy)queueMicrotask(()=>guarded(recoverCurrentSession));}
@@ -82,7 +82,7 @@ function updateLessonControls(){
  let badge=$('lessonBadge');
  if(!badge){badge=element('span',undefined,'lesson-badge');badge.id='lessonBadge';$('joinLesson').before(badge);}
  const lesson=availableLessons.find(l=>l.id===activeLessonId);
- badge.hidden=!inside;badge.textContent=inside?`✓ Вы в занятии${lesson?': '+lesson.title:''}`:'';
+ badge.hidden=!inside;badge.textContent=inside?`Занятие${lesson?': '+lesson.title:''}`:'';
 }
 function enterLessonCard(data,allowAutomaticSip=true){
  if(!allowAutomaticSip)attemptedLessonCalls.add(data.id);
@@ -95,7 +95,7 @@ function receiveRemoteCompletion(data){
  if(draft)persistDraft(draft);
  current=data;attachStoredDraft(current);attemptedLessonCalls.add(data.id);
  dirty=false;viewing=true;window.speechSynthesis?.cancel();$('dialogueDialog').close();renderCard();showAudit();
- notify(draft?'Преподаватель завершил карточку. Несохранённый черновик доступен в JSON-экспорте.':'Карточка завершена преподавателем',true);
+ notify(draft?'Преподаватель завершил карточку. Несохранённый черновик сохранён в этой вкладке.':'Карточка завершена преподавателем',true);
 }
 // Панель занятия должна объяснять себя: что за карточки прилетают, по какому
 // каналу идёт разговор и что будет после завершения. Без этого «войти в
@@ -107,7 +107,7 @@ function lessonExplanation(lesson){
   ? 'полный цикл 112: карточку заполняете вы со слов заявителя'
   : 'смешанное: и готовые карточки, и приём вызова';
  const channel=lesson.mode==='actions'
-  ? lesson.sip_extension?`доклад голосом или текстом, ваш номер ${lesson.sip_extension}`:'доклад текстом; SIP-номер не назначен'
+  ? lesson.sip_extension?`доклад голосом или текстом, ваш номер ${lesson.sip_extension}`:'доклад текстом; учебный номер не назначен'
   : lesson.transport==='sip'?`разговор по телефону, ваш номер ${lesson.sip_extension||'не назначен'}`:'разговор текстом в окне «Диалог»';
  const next=lesson.state==='running'&&!lesson.exhausted
   ? 'после завершения карточки сразу выдаётся следующая'
@@ -269,7 +269,7 @@ function renderCard() {
  }
  $('registrationInfo').textContent=current.registration?`${current.registration.operator} · ${current.registration.workstation}`:'Регистратор не указан в старой карточке';
  $('cardSeat').textContent=$('registrationInfo').textContent;
- $('cardNumber').textContent='Происшествие '+current.number;
+ $('cardNumber').textContent='Происшествие '+current.number;$('aiBadge').hidden=!current.ai_generated;
  $('savedAt').textContent=(current.saved_at?'Сохр. ':'Созд. ')+formatted(current.saved_at || current.created_at);
  $('addressSummary').textContent=addressText(current.card); $('characters').textContent=current.card.description.length+' / 1999';
  $('saveState').textContent=finished?'Занятие завершено':current.revision?'Сохранено':'Новая карточка';updateIncidentState();
@@ -284,7 +284,7 @@ function renderCard() {
  $('cardSupplement').classList.toggle('active',!readonly);
  $('clearAddress').disabled=readonly; $('addService').hidden=readonly||current.exercise_mode==='actions'; $('responseSection').hidden=!current.revision;
  $('responseService').disabled=finished; $('responseStatus').disabled=finished; $('responseOrderNumber').disabled=finished; $('responseComment').disabled=finished; $('addResponse').disabled=finished;
- $('callStatus').textContent=finished?'завершён':current.transport==='text'?'текстовое обращение':current.call_id?'SIP: проверка связи…':'не подключен';
+ $('callStatus').textContent=finished?'завершён':current.transport==='text'?'текстовое обращение':current.call_id?'Телефон: проверка связи…':'не подключен';
  $('sipCall').hidden=current.transport!=='sip'; $('sipCall').disabled=finished||!!current.call_id;
  $('messageForm').hidden=current.transport!=='text'||finished; $('speak').disabled=current.transport!=='text';
  // Два режима — два разных рабочих пространства, и это должно быть видно, а не
@@ -644,8 +644,25 @@ async function saveCard() {
 async function newSession() {
  if(!confirmLeave())return;
  if(!catalog)await loadClassifier();
-assignments=await api('student/assignments');const lessons=await api('student/lessons');assignments.push(...lessons.filter(l=>l.state==='running'&&!l.exhausted).map(l=>({...l,lesson:true,scenario_title:`Серия: ${l.completed}/${l.cards_per_student??'∞'}`})));$('scenario').replaceChildren();assignments.forEach(s=>$('scenario').add(new Option(`${s.title} · ${s.scenario_title} · ${s.difficulty||'basic'} · ${s.dds_profile||'general'}${s.learning_objectives?' · '+s.learning_objectives:''}`,s.id)));$('start').disabled=!assignments.length;if(!assignments.length)$('scenario').add(new Option('Нет назначений — обратитесь к преподавателю',''));selectTransport();$('newDialog').showModal();
+assignments=await api('student/assignments');const lessons=await api('student/lessons');assignments.push(...lessons.filter(l=>l.state==='running'&&!l.exhausted).map(l=>({...l,lesson:true,scenario_title:`Серия: ${l.completed}/${l.cards_per_student??'∞'}`})));$('scenario').replaceChildren();assignments.forEach(s=>$('scenario').add(new Option(`${s.title} · ${s.scenario_title} · ${LEVEL_TITLES[s.difficulty||'basic']||s.difficulty} · ${PROFILE_TITLES[s.dds_profile||'general']||s.dds_profile}${s.learning_objectives?' · '+s.learning_objectives:''}`,s.id)));$('start').disabled=!assignments.length;if(!assignments.length)$('scenario').add(new Option('Нет назначений — обратитесь к преподавателю',''));selectTransport();$('newDialog').showModal();showAiPractice();
 }
+const LEVEL_TITLES={basic:'базовый',standard:'стандартный',advanced:'повышенный'};
+const PROFILE_TITLES={general:'общий профиль',fire:'пожарная охрана',police:'полиция',medical:'скорая помощь',gas:'газовая служба',utilities:'ЖКХ'};
+async function showAiPractice(){
+ const box=$('aiPracticeBox');box.hidden=true;
+ try{const info=await api('student/ai-practice');if(!info.available)return;box.hidden=false;
+  $('aiPracticeNote').textContent=info.ready?`Готово карточек ИИ: ${info.ready}`:(info.generating?'ИИ сейчас готовит новую карточку, это займёт несколько минут':'ИИ готовит карточки');}catch{}
+}
+$('aiPractice').onclick=()=>guarded(async()=>{
+ $('aiPractice').disabled=true;
+ try{
+  let card=await api('student/ai-practice','POST',{workstation:workstation()});
+  if(card.exercise_mode==='actions'&&card.status!=='Завершена')card=await api(`student/sessions/${card.id}/open`,'POST',{});
+  current=card;chooseLesson(current.lesson_id||'');pendingLessonSessionId='';attachStoredDraft(current);dirty=false;viewing=false;transcriptKey='';
+  localStorage.setItem('studentSession',current.id);renderCard();$('newDialog').close();
+  notify('Карточку сформировал ИИ. Примите её в работу и организуйте реагирование своей службы');refreshLessonFlow();
+ }finally{$('aiPractice').disabled=false;}
+});
 function selectTransport(){const assignment=assignments.find(a=>a.id===$('scenario').value);$('transport').disabled=!!assignment?.lesson;$('transport').value=assignment?.lesson?assignment.transport||'text':'text';}
 $('scenario').addEventListener('change',selectTransport);
 $('newForm').onsubmit=e=>{e.preventDefault();guarded(async()=>{$('start').disabled=true;try{const assignment=assignments.find(a=>a.id===$('scenario').value);if(!assignment)throw Error('Выберите назначенное занятие');if(assignment.lesson)chooseLesson(assignment.id);else chooseLesson('');current=assignment.lesson?await api(`student/lessons/${assignment.id}/next`,'POST',{...nextMode(),workstation:workstation()}):await api('student/sessions','POST',{scenario_id:assignment.scenario_id,assignment_id:assignment.id,transport:$('transport').value,workstation:workstation()});if(current.exercise_mode==='actions')current=await api(`student/sessions/${current.id}/open`,'POST',{});pendingLessonSessionId='';attachStoredDraft(current);if(assignment.lesson&&assignment.active_session_id===current.id)attemptedLessonCalls.add(current.id);dirty=false;viewing=false;transcriptKey='';localStorage.setItem('studentSession',current.id);renderCard();$('newDialog').close();if(current.exercise_mode!=='actions')$('dialogueDialog').showModal();else notify('Готовая карточка: внесите действия и результаты реагирования служб');}finally{$('start').disabled=!assignments.length;}});};
@@ -784,8 +801,9 @@ function showAudit() {
  if(current.action_report)$('auditContent').append(element('p',`Изменено полей: ${current.action_report.changed_fields.length}. Действий служб: ${current.action_report.service_actions}. ${current.action_report.note}`));
  if(finished&&current.lesson_id){const next=element('button','Следующая карточка серии');next.onclick=()=>guarded(async()=>{next.disabled=true;try{const result=await api(`student/lessons/${current.lesson_id}/next`,'POST',{...nextMode(),workstation:workstation()});current=result.exercise_mode==='actions'?await api(`student/sessions/${result.id}/open`,'POST',{}):result;pendingLessonSessionId='';dirty=false;viewing=false;transcriptKey='';localStorage.setItem('studentSession',current.id);$('auditDialog').close();renderCard();if(current.exercise_mode!=='actions')$('dialogueDialog').showModal();else notify('Готовая карточка: внесите действия и результаты реагирования служб');}finally{next.disabled=false;}});$('auditContent').append(next);}
  $('requestReview').hidden=!finished;
- $('requestReview').disabled=pendingReviews.has(current.id)||['ready','mock'].includes(review?.status);
- $('requestReview').textContent=pendingReviews.has(current.id)?'ИИ анализирует…':review?.status==='failed'?'Повторить ИИ-разбор':['ready','mock'].includes(review?.status)?'ИИ-разбор сохранён':'Получить ИИ-разбор';
+ const reviewPending=pendingReviews.has(current.id)||review?.status==='pending';
+ $('requestReview').disabled=reviewPending||['ready','mock'].includes(review?.status);
+ $('requestReview').textContent=reviewPending?'ИИ анализирует…':review?.status==='failed'?'Повторить ИИ-разбор':['ready','mock'].includes(review?.status)?'ИИ-разбор сохранён':'Получить ИИ-разбор';
  if(current.status==='Завершена'){
   const report=current.evaluation;
   $('auditContent').append(element('h3','Результат занятия'));
@@ -802,6 +820,7 @@ function showAudit() {
   $('auditContent').append(element('h3',current.exercise_mode==='actions'?'ИИ-разбор ваших записей · отдельно от итога':'ИИ-разбор текста · отдельно от балла'));
   if(!review)$('auditContent').append(element('p','Разбор ещё не запрашивался. Запустите его кнопкой ниже.'));
   else if(review.status==='failed')$('auditContent').append(element('p',review.error));
+  else if(review.status==='pending'){$('auditContent').append(element('p','Разбор ИИ готовится… Обычно это занимает 3–5 минут; окно обновится само.','subtle'));watchReview(current.id);}
   else{
    $('auditContent').append(element('p',`${review.provider} / ${review.model} · ${formatted(review.created_at)}`,'subtle'),element('p',review.summary));
    const kinds={grammar:'Грамматика',clarity:'Ясность формулировки',contradiction:'Возможное противоречие',omission:'Упущены сведения',inaccuracy:'Сведения искажены',good:'Хорошо'},names={description:'Описание',address_note:'Описательный адрес',caller_name:'Имя заявителя',street:'Улица',house:'Дом',apartment:'Квартира',incident_type:'Тип происшествия'};
@@ -814,6 +833,9 @@ function showAudit() {
  const types={'session.created':'Создано занятие','card.saved':'Сохранена карточка','card.processed':'Происшествие отработано','card.linked':'Добавлена связь карточки','notification.recorded':'Записана телефонограмма','service.updated':'Статус службы','service.status_received':'Статус от службы','caller.repeat_call':'Повторный вызов заявителя','call.requested':'Запрошен звонок','session.finished':'Завершено занятие','review.completed':'ИИ-разбор сохранён','review.failed':'ИИ-разбор недоступен','card.opened':'Открыта карточка','situation.update':'Доклад бригады','crew.assigned':'Назначена бригада','card.error_reported':'Сообщено об ошибке в 112','progress.requested':'Запрошен ход работ','field_report.call_started':'Звонок бригады','call.failed':'Звонок не состоялся','card.forwarded':'Карточка перенаправлена','card.unproductive':'Непродуктивное обращение','card.reminder_set':'Напоминание','service.vis_added':'Добавлена служба','teacher.feedback':'Комментарий преподавателя'};
  for(const event of current.events){const el=element('article');el.append(element('strong',`${formatted(event.at)} · ${types[event.type]||'Событие занятия'}`));const text=eventText(event);if(text)el.append(element('p',text));$('auditContent').append(el);}if(!$('auditDialog').open)$('auditDialog').showModal();
 }
+// Разбор считается в фоне после завершения: опрашиваем, пока окно результата открыто.
+let reviewWatch=null;
+function watchReview(sid){if(reviewWatch)return;reviewWatch=setTimeout(async()=>{reviewWatch=null;if(current?.id!==sid||!$('auditDialog').open)return;try{const fresh=await api('student/sessions/'+sid);if(current?.id!==sid)return;current.ai_review=fresh.ai_review;current.events=fresh.events;if(fresh.ai_review?.status==='pending')watchReview(sid);else showAudit();}catch{watchReview(sid);}},10000);}
 $('requestReview').onclick=()=>guarded(async()=>{
  if(!current||current.status!=='Завершена'||pendingReviews.has(current.id))return;
  const sid=current.id;pendingReviews.add(sid);showAudit();
@@ -823,6 +845,8 @@ $('requestReview').onclick=()=>guarded(async()=>{
 $('sipCall').onclick=startSipCall;
 $('clearAddress').onclick=()=>{for(const f of fields)if(address.some(a=>a[0]===f.dataset.field)||f.dataset.field==='address_note')f.value='';markDirty();};
 for(const id of ['create','emptyCreate'])$(id).onclick=()=>guarded(newSession);
+// Ссылка «Получить карточку от ИИ» из кабинета сразу выдаёт карточку без выбора задания.
+if(new URLSearchParams(location.search).get('ai')==='1'){history.replaceState(null,'',location.pathname);setTimeout(()=>$('aiPractice').click(),300);}
 for(const id of ['journal','closeCard'])$(id).onclick=()=>{journal();releasePresenceAfterCard();};
 $('openCard').onclick=()=>guarded(async()=>{const id=current?.id||localStorage.getItem('studentSession');if(id)await openSession(id);else await newSession();});
 for(const id of ['conversation','showDialogue','showText'])$(id).onclick=()=>{if(!current){notify('Сначала откройте или создайте карточку');return;}$('dialogueDialog').showModal();renderDialogue();};
@@ -1112,7 +1136,7 @@ async function recoverCurrentSession(){
    if(wasDirty){savedServices=new Set(savedCard.services||[]);current.card=draft;current.unsaved_draft=draft;dirty=true;viewing=false;renderCard();markDirty();}
    else{dirty=false;viewing=current.revision>0;renderCard();}
   }
-  healthText='● Связь с Backend восстановлена';renderConnection();notify(wasDirty?'Связь восстановлена. Черновик сохранён и не заменён данными сервера.':'Связь восстановлена. Карточка обновлена с сервера.');
+  healthText='● Связь с сервером восстановлена';renderConnection();notify(wasDirty?'Связь восстановлена. Черновик сохранён и не заменён данными сервера.':'Связь восстановлена. Карточка обновлена с сервера.');
  }finally{recoveryBusy=false;}
 }
 async function refreshHealth(){try{const h=await api('health');healthText=h.status==='ok'?(h.provider==='mock'?'● Mock-режим':'● Сервис диалога подключён'):'○ Сервис диалога не настроен';renderConnection();}catch{renderConnection();}}
@@ -1158,8 +1182,8 @@ let polling=false;setInterval(async()=>{if(polling)return;polling=true;try{if($(
   try{const restored=await api(`student/sessions/${sid}/call/recover?expected_call_id=${encodeURIComponent(call.call_id)}`,'POST');if(current?.id===sid){current.call_id=restored.call_id;$('callStatus').textContent='повторный вызов — примите звонок';}}
   catch(error){$('callStatus').textContent='Восстановление: '+error.message;}
  }
- }}catch{if(current?.transport==='sip')$('callStatus').textContent='нет связи с Voice';}finally{polling=false;}},3000);
-setInterval(tick,1000);tick();guarded(async()=>{const user=await api('auth/me');if(user.role!=='student'){location.replace('/portal');return;}studentUserId=user.id;$('operatorSeat').textContent=`${user.display_name} · АРМ ${workstation()||'не указан'}`;const requested=new URLSearchParams(location.search).get('lesson');if(requested){chooseLesson(requested);history.replaceState(null,'',location.pathname);}activeLessonId=activeLessonId||sessionStorage.getItem('activeLesson:'+studentUserId)||'';await loadClassifier();await loadSessions();await refreshLessonFlow();refreshHealth();setInterval(refreshHealth,15000);});
+ }}catch{if(current?.transport==='sip')$('callStatus').textContent='нет связи с голосовым модулем';}finally{polling=false;}},3000);
+setInterval(tick,1000);tick();guarded(async()=>{const user=await api('auth/me');if(user.role!=='student'){location.replace('/portal');return;}studentUserId=user.id;$('operatorSeat').textContent=`${user.display_name} · ${/^арм/i.test(workstation())?workstation():'АРМ '+(workstation()||'не указан')}`;const requested=new URLSearchParams(location.search).get('lesson');if(requested){chooseLesson(requested);history.replaceState(null,'',location.pathname);}activeLessonId=activeLessonId||sessionStorage.getItem('activeLesson:'+studentUserId)||'';await loadClassifier();await loadSessions();await refreshLessonFlow();refreshHealth();setInterval(refreshHealth,15000);});
 
 // Доклад дежурному службы: учебный вызов из ДДС в службу (направление Б→C).
 let briefing=null,briefingTimer=null;
@@ -1181,11 +1205,15 @@ function renderBriefing(){
   :report.complete?'Сведения названы полностью. Можно завершать доклад.'
   :'Ещё не названо: '+(report.missing||[]).join(', ');
 }
-$('openBriefing').onclick=()=>{
+let briefingContacts=[];
+$('openBriefing').onclick=()=>guarded(async()=>{
  if(dirty){notify('Сначала сохраните карточку',true);return;}
  if(!current?.revision||current.status==='Завершена')return;
  briefing=null;renderBriefing();
  $('briefingService').replaceChildren();
+ const sid=current.id;
+ briefingContacts=await api(`student/sessions/${sid}/phone/contacts`);
+ if(current?.id!==sid)return;
  const dds=current.exercise_mode==='actions';
  for(const service of current.card.services)if(!dds||current.card.service_phones?.[service])$('briefingService').add(new Option(dds&&service===current.owner_service?`${service} · начальник дежурной смены`:service,service));
  if(current.assigned_crew?.phone)$('briefingService').add(new Option(`${current.assigned_crew.id} · ${current.assigned_crew.leader}`,'crew:'+current.assigned_crew.id));
@@ -1193,36 +1221,74 @@ $('openBriefing').onclick=()=>{
  const briefed=(current.notifications||[]).filter(n=>n.counterpart);
  if(current.assigned_crew?.phone&&!briefed.some(n=>n.counterpart==='crew'))$('briefingService').value='crew:'+current.assigned_crew.id;
  else if(dds&&current.card.service_phones?.[current.owner_service])$('briefingService').value=current.owner_service;
+ if(briefingContacts.length){
+  $('briefingService').replaceChildren();
+  for(const contact of briefingContacts){const option=new Option(`${contact.name} · ${contact.role_title} · ${contact.number}`,'contact:'+contact.id);option.disabled=!contact.available;$('briefingService').add(option);}
+  const first=briefingContacts.find(c=>c.available&&c.role==='crew_leader'&&!briefed.some(n=>n.counterpart==='crew'))||briefingContacts.find(c=>c.available);
+  if(first)$('briefingService').value='contact:'+first.id;
+ }
  if(!$('briefingService').options.length){notify('У получателей нет доступных телефонов',true);return;}
  $('briefingPhone').value=current.card.service_phones?.[$('briefingService').value]||'';
  $('briefingPhone').readOnly=current.exercise_mode==='actions';
  $('briefingIntro').textContent='Передайте адрес и обстоятельства бригаде или начальнику смены. При повторном звонке начальнику сообщите новые сведения о ходе работ.';
- $('briefingTransportLabel').hidden=!current.sip_extension||current.exercise_mode==='actions';
- $('briefingTransport').value=current.sip_extension?'sip':'text';
- $('startBriefing').textContent=current.sip_extension?'Позвонить':'Начать текстовый доклад';
- $('briefingMissing').textContent=current.sip_extension?'Голосовой доклад через IP-телефон.':'SIP-номер не назначен. Доступен только текстовый доклад; телефон настраивает преподаватель.';
+ // Основной режим — голос: звонок приходит на IP-телефон (MicroSIP) или в телефон на сайте.
+ // Текст — запасной вариант без гарнитуры, если преподаватель его не запретил.
+ const textAllowed=current.text_input_allowed!==false,voice=!!current.sip_extension;
+ $('briefingTransportLabel').hidden=!voice||!textAllowed;
+ $('briefingTransport').value=voice?'sip':'text';
+ voiceHint();
+ $('startBriefing').textContent=voice?'Позвонить':'Начать разговор текстом';
+ if(!voice)$('briefingMissing').textContent='Учебный номер не назначен — разговор идёт текстом. Голосовой номер назначает преподаватель.';
  $('startBriefing').disabled=!current.sip_extension&&current.text_input_allowed===false;
  $('briefingText').value='';$('briefingRecipient').value='';
  $('briefingService').onchange();
  $('briefingDialog').showModal();
-};
-$('briefingService').onchange=()=>{const crew=$('briefingService').value.startsWith('crew:');if(crew){$('briefingPhone').value=current.assigned_crew.phone;$('briefingDestination').value=current.assigned_crew.leader;}else if(current?.exercise_mode==='actions'){$('briefingPhone').value=current.card.service_phones?.[$('briefingService').value]||'';$('briefingDestination').value='';}};
+});
+$('briefingService').onchange=()=>{const contact=briefingContacts.find(c=>'contact:'+c.id===$('briefingService').value);if(contact){$('briefingPhone').value=contact.number;$('briefingDestination').value=contact.name;return;}const crew=$('briefingService').value.startsWith('crew:');if(crew){$('briefingPhone').value=current.assigned_crew.phone;$('briefingDestination').value=current.assigned_crew.leader;}else if(current?.exercise_mode==='actions'){$('briefingPhone').value=current.card.service_phones?.[$('briefingService').value]||'';$('briefingDestination').value='';}};
 $('startBriefing').onclick=()=>guarded(async()=>{
  if(!$('briefingService').value)throw Error('Сначала сохраните службу в карточке');
  const transport=current.sip_extension?$('briefingTransport').value:'text';
  const crew=$('briefingService').value.startsWith('crew:');
+ const contact=briefingContacts.find(c=>'contact:'+c.id===$('briefingService').value);
  briefing=await api(`student/sessions/${current.id}/briefings`,'POST',{message_id:crypto.randomUUID(),
-  service:crew?current.owner_service:$('briefingService').value,crew_id:crew?current.assigned_crew.id:'',destination:$('briefingDestination').value.trim(),
+  contact_id:contact?.id||'',service:contact||crew?current.owner_service:$('briefingService').value,crew_id:crew?current.assigned_crew.id:'',destination:$('briefingDestination').value.trim(),
   phone:$('briefingPhone').value.trim(),transport});
  $('briefingRecipient').value=briefing.recipient_hint||'';
- $('briefingIntro').textContent=briefing.purpose==='progress'
+ $('briefingIntro').textContent=briefing.purpose==='coordination'
+  ?'Уточните обстановку и согласуйте действия с собеседником. Затем отразите решение в статусе и комментарии.'
+  :briefing.purpose==='progress'
   ?'Повторный доклад начальнику: сообщите, что стало известно от бригады и каков ход или результат работ. Адрес и тип происшествия повторять не требуется.'
   :'Первичный доклад: назовите адрес, тип происшествия и существенные обстоятельства.';
- $('briefingText').placeholder=briefing.purpose==='progress'?'Докладываю о ходе работ: бригада сообщила…, выполнено…':'Докладываю: улица…, дом…, тип происшествия…';
+ $('briefingText').placeholder=briefing.purpose==='coordination'?'Ваш вопрос или обращение по происшествию…':briefing.purpose==='progress'?'Докладываю о ходе работ: бригада сообщила…, выполнено…':'Докладываю: улица…, дом…, тип происшествия…';
  renderBriefing();
  notify(transport==='sip'?'Вызов создан: примите звонок на IP-телефоне':'Открыт текстовый доклад — телефонный звонок не выполняется');
  if(transport==='sip')pollBriefing();
 });
+window.trainerPhone={
+ context:()=>current?{session_id:current.id,lesson_id:current.lesson_id,finished:current.status==='Завершена'}:null,
+ contacts:()=>current?api(`student/sessions/${current.id}/phone/contacts`):Promise.reject(Error('Сначала откройте учебную карточку')),
+ async dial(number){
+  if(!current?.revision||dirty||current.status==='Завершена')throw Error('Откройте и сохраните действующую карточку');
+  const sid=current.id,transport=current.sip_extension?'sip':'text';
+  if(transport==='sip')window.trainerSoftphone?.expectOutgoing(number);
+  let result;
+  try{result=await api(`student/sessions/${sid}/phone/dial`,'POST',{message_id:crypto.randomUUID(),number,transport});}
+  catch(error){window.trainerSoftphone?.expectOutgoing(null);throw error;}
+  if(current?.id!==sid)throw Error('Карточка сменилась. Вернитесь к карточке звонка.');
+  briefing=result;
+  $('briefingService').replaceChildren(new Option(briefing.caller_name,current.owner_service));
+  $('briefingPhone').value=briefing.phone;$('briefingDestination').value=briefing.recipient_hint;
+  $('briefingRecipient').value=briefing.recipient_hint||'';
+  $('briefingIntro').textContent=briefing.purpose==='coordination'?'Уточните сведения или согласуйте действия с собеседником. После разговора отразите решение в статусе и комментарии.':briefing.purpose==='progress'?'Доложите о ходе и результате работ. Повторять первичный адрес не требуется.':'Передайте адрес и обстоятельства происшествия.';
+  $('briefingText').placeholder='Ваше обращение по происшествию…';
+  $('briefingText').value='';
+  $('briefingTransportLabel').hidden=true;
+  $('startBriefing').disabled=true;
+  renderBriefing();if(!$('briefingDialog').open)$('briefingDialog').showModal();
+  if(transport==='sip')pollBriefing();
+  return result;
+ }
+};
 // В голосовом докладе реплики приходят из разговора, поэтому окно их подтягивает.
 function pollBriefing(){
  clearInterval(briefingTimer);
@@ -1284,3 +1350,13 @@ $('forwardForm').onsubmit=event=>{event.preventDefault();guarded(async()=>{
 // скрываются, чтобы не проступать по краям и не ловить фокус клавиатуры.
 new MutationObserver(()=>document.body.classList.toggle('card-open',!$('cardPanel').hidden)).observe($('cardPanel'),{attributes:true,attributeFilter:['hidden']});
 document.body.classList.toggle('card-open',!$('cardPanel').hidden);
+// Строка занятия укорочена до одной линии: полный текст — во всплывающей подсказке.
+new MutationObserver(()=>{$('lessonState').title=$('lessonState').textContent;}).observe($('lessonState'),{childList:true,characterData:true,subtree:true});
+function voiceHint(){
+ const voice=$('briefingTransport').value==='sip',browser=window.trainerSoftphone?.state==='ready';
+ $('startBriefing').textContent=voice?'Позвонить':'Начать разговор текстом';
+ $('briefingMissing').textContent=!voice?'Запасной режим без гарнитуры: разговор идёт текстом.'
+  :browser?'Звонок придёт в телефон на сайте — говорите в гарнитуру.'
+  :'Звонок придёт на ваш IP-телефон (MicroSIP). Чтобы говорить через сайт, подключите зелёный кружок «телефон». Нет гарнитуры — выберите «Текстом».';
+}
+$('briefingTransport').addEventListener('change',voiceHint);

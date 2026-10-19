@@ -8,3 +8,33 @@ body:has(#loginForm)>main:not(:has(#demoAccess:not([hidden]))){max-width:470px;g
 #mfaControls{border:0;padding:0;display:grid;gap:16px}
 @media(max-width:800px){body:has(#loginForm)>main{grid-template-columns:minmax(0,1fr);max-width:580px;margin:28px auto;gap:20px}}
 @media(max-width:420px){body:has(#loginForm)>main{padding:0 14px;margin:20px auto}.login-panel,.demo-panel{padding:22px}.demo-accounts{grid-template-columns:minmax(0,1fr)}}
+/* Вход как в оригинальной системе: город на фоне, справа «112 ВХОД В СИСТЕМУ»,
+   поля с подчёркиванием. Учётные записи стенда — ниже формы. */
+body.login-city:has(#loginForm){min-height:100vh;margin:0;background:#7fb3dc url(/assets/login-city.svg) left bottom/cover no-repeat fixed;color:#fff;font-family:Roboto,"Segoe UI",Arial,sans-serif}
+body.login-city:has(#loginForm)>main{max-width:none!important;margin:0!important;min-height:100vh;padding:7vh 6vw 40px!important;display:flex!important;flex-direction:column;align-items:flex-end;gap:22px!important;background:none}
+body.login-city .login-panel,body.login-city .demo-panel{width:min(560px,100%);background:none;border:0;border-radius:0;box-shadow:none;padding:0}
+body.login-city .login-title{display:flex;align-items:center;gap:22px;margin:0;font-weight:300;line-height:1}
+body.login-city .big112{font-size:96px;font-weight:300;letter-spacing:4px}
+body.login-city #heading{font-size:32px;font-weight:400;text-transform:uppercase;letter-spacing:.5px}
+body.login-city .login-intro{color:#eaf4fb;margin:6px 0 18px;font-size:15px}
+body.login-city #controls,body.login-city #mfaControls{border:0;padding:0;margin:0;display:grid;gap:12px}
+body.login-city label{color:#eaf4fb;font-size:12px;font-weight:400;display:grid;gap:2px}
+body.login-city input,body.login-city select{background:transparent!important;border:0!important;border-bottom:1px solid #eaf4fb!important;border-radius:0!important;color:#fff!important;font-size:18px;padding:4px 2px!important;min-height:0!important}
+body.login-city select option{color:#26313c}
+body.login-city input::placeholder{color:#d9e9f4}
+body.login-city input:focus,body.login-city select:focus{outline:none;border-bottom:2px solid #fff!important}
+body.login-city form button[type=submit]{margin-top:10px;background:#7a7a7a;color:#fff;border:0;border-radius:0;font-size:17px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;padding:12px;min-height:46px}
+body.login-city form button[type=submit]:hover,body.login-city form button[type=submit]:focus-visible{background:#5f5f5f}
+body.login-city #mfaBack{background:transparent;color:#fff;border:1px solid #eaf4fb}
+body.login-city #status{color:#fff;min-height:1.4em;font-size:14px;text-shadow:0 1px 2px #0005}
+body.login-city .demo-panel{background:#ffffffeb;color:#26313c;border-radius:6px;padding:18px 20px;box-shadow:0 8px 28px #0b2a4033}
+body.login-city .demo-panel h2{font-size:17px;margin:0;color:#26313c}
+body.login-city .demo-panel>p{margin:4px 0 0;font-size:13px;color:#5b6873}
+body.login-city .demo-accounts{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+body.login-city .demo-account{padding:10px 12px;background:#f4f8fb}
+body.login-city .demo-account h3{font-size:14px;margin:0 0 6px}
+body.login-city .demo-account dl{grid-template-columns:auto 1fr;column-gap:8px;row-gap:1px}
+body.login-city .demo-account dt{font-size:11px;align-self:center}
+body.login-city .demo-account dd{margin:0;font-size:13px}
+body.login-city .demo-account button{margin-top:8px;padding:5px;min-height:0;font-size:13px}
+@media(max-width:700px){body.login-city:has(#loginForm)>main{align-items:stretch;padding:28px 16px!important}body.login-city .big112{font-size:64px}body.login-city #heading{font-size:22px}body.login-city .demo-accounts{grid-template-columns:1fr}}

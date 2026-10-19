@@ -140,6 +140,8 @@ async def test_cancelled_wait_does_not_orphan_local_or_database_lease():
 def test_fine_grained_http_allowlist_is_exact_and_method_aware():
     sid = "123e4567-e89b-42d3-a456-426614174000"
     allowed = {
+        ("POST", "/api/v1/instructor/generations"),
+        ("POST", f"/api/v1/instructor/generations/{sid}/revise"),
         ("PUT", f"/api/v1/student/sessions/{sid}/card"),
         ("POST", f"/api/v1/student/sessions/{sid}/messages"),
         ("POST", f"/api/v1/student/sessions/{sid}/finish"),
@@ -153,6 +155,10 @@ def test_fine_grained_http_allowlist_is_exact_and_method_aware():
     assert all(uses_fine_grained_mutation_lease(method, path) for method, path in allowed)
 
     guarded = {
+        ("PUT", "/api/v1/instructor/generations"),
+        ("POST", "/api/v1/instructor/generations/not-a-uuid/revise"),
+        ("POST", f"/api/v1/instructor/generations/{sid}/approve"),
+        ("POST", f"/api/v1/instructor/generations/{sid}/revise/extra"),
         ("POST", "/api/v1/student/sessions"),
         ("POST", f"/api/v1/student/sessions/{sid}/ai-review"),
         ("PUT", f"/api/v1/instructor/sessions/{sid}/feedback"),
@@ -162,3 +168,42 @@ def test_fine_grained_http_allowlist_is_exact_and_method_aware():
         ("PATCH", f"/api/v1/student/sessions/{sid}/card"),
     }
     assert not any(uses_fine_grained_mutation_lease(method, path) for method, path in guarded)
+
+
+@pytest.mark.asyncio
+async def test_long_authoring_keeps_teacher_lease_without_blocking_login():
+    import httpx
+    from fastapi import FastAPI
+    from cluster import install_global_mutation_guard
+
+    coordinator = Coordinator(config(True), FakePostgres().database('replica'))
+    app = FastAPI()
+    started, finish = asyncio.Event(), asyncio.Event()
+
+    @app.post('/api/v1/instructor/generations')
+    async def generate():
+        async with coordinator.hold('generation-teacher', 'teacher'):
+            started.set()
+            await finish.wait()
+            return {'done': True}
+
+    @app.post('/api/v1/auth/login')
+    async def login():
+        return {'available': True}
+
+    install_global_mutation_guard(app, coordinator)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+        pending = asyncio.create_task(client.post('/api/v1/instructor/generations'))
+        try:
+            await asyncio.wait_for(started.wait(), 1)
+            with pytest.raises(LockUnavailable):
+                await coordinator.acquire('generation-teacher', 'teacher', 0)
+            response = await asyncio.wait_for(client.post('/api/v1/auth/login'), 1)
+            assert response.status_code == 200
+            assert not pending.done()
+        finally:
+            finish.set()
+            response = await pending
+        assert response.status_code == 200
+    lease = await coordinator.acquire('generation-teacher', 'teacher', 0)
+    await lease.release()

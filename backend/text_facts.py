@@ -71,10 +71,14 @@ def asserted(text, phrase):
     for clause in re.split(r'[.!?;\n]|\b(?:но|однако)\b', text.casefold()):
         raw_words = tokens(clause)
         words = [lemma(w) for w in raw_words]
+        # «дом 12, отсутствует освещение»: a negation after a comma belongs to the
+        # next statement, not to the number before it.
+        chunk = [k for k, part in enumerate(clause.split(',')) for _ in tokens(part)]
         for i in range(len(words)-len(core)+1):
             if not all(word_forms(left) & word_forms(right) for left,right in zip(raw_words[i:i+len(core)], core)):
                 continue
-            after = words[i+len(core):i+len(core)+3]
+            end = i + len(core)
+            after = [w for w, k in zip(words[end:end+3], chunk[end:end+3]) if k == chunk[end-1]]
             negated = any(negates(raw_words, words, j, i) for j in range(max(0, i-3), i))
             negated |= bool(after and after[0] in {'не', 'нет', 'отсутствовать'})
             negated |= after[:2] in [['не', 'подтвердить'], ['не', 'подтвержденный']]
@@ -85,7 +89,9 @@ def asserted(text, phrase):
 def incident_asserted(text, incident):
     # The canonical classifier contains negative states such as «Без сознания».
     # Checking «сознания» on its own reverses the expected meaning.
-    if tokens(incident)[:1] in (['без'], ['не'], ['нет']):
+    # «Отсутствует освещение» is the same kind of state: checking «освещение» alone
+    # would read the dispatcher's «отсутствует освещение» as a contradiction.
+    if tokens(incident)[:1] in (['без'], ['не'], ['нет']) or lemma((tokens(incident) or [''])[0]) in NEGATORS:
         return asserted(text, incident)
     groups = [({'пожар', 'загорание', 'возгорание', 'горение'}, ['пожар', 'возгорание', 'горит']),
               ({'дтп', 'столкновение'}, ['дтп', 'столкновение']),
@@ -105,7 +111,16 @@ def incident_asserted(text, incident):
             return bool(present) and all(asserted(text, word) for word in present)
     # No category synonym dictionary: require all substantive terms, not any word.
     content = [w for w in tokens(incident) if len(w) > 3]
-    return bool(content) and all(asserted(text, w) for w in content)
+    return bool(content) and all(asserted(text, w) or _same_root_asserted(text, w) for w in content)
+
+
+def _same_root_asserted(text, word):
+    """«переполнение» ~ «переполнена»: a long word with the same first six letters,
+    stated without negation. Saves a slow model check for an obvious paraphrase."""
+    if len(word) < 7:
+        return False
+    found = {t for t in tokens(text) if len(t) >= 7 and t[:6] == word[:6]}
+    return bool(found) and all(asserted(text, t) for t in found)
 
 
 # Распознавание речи пишет числа словами («дом двенадцать»), карточка — цифрами.

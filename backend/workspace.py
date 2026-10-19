@@ -1,9 +1,12 @@
 """Student workspace: persisted cards, optimistic locking and an auditable timeline."""
+import contextlib
+import logging
 import asyncio
 import json
 import os
 import random
 import re
+import time
 from practice_plan import require_approved, hint as practice_hint, approved as practice_approved
 from contextlib import asynccontextmanager, AsyncExitStack
 from contextvars import ContextVar
@@ -178,6 +181,12 @@ class CreateLesson(BaseModel):
     norm_seconds: int | None = Field(default=None, ge=10, le=3600)
     # Порог зачёта занятия: попытка с баллом ниже порога не засчитывается.
     pass_score_percent: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    # Карточки формирует ИИ: каждому обучающемуся выдаётся своё новое упражнение
+    # из заранее созданного запаса, без подбора и публикации преподавателем.
+    ai_cards: bool = False
+    # Звонок заявителю только с разрешения преподавателя: иначе заявитель,
+    # которого ИИ добавил в справочник карточки, из справочника убирается.
+    allow_applicant_calls: bool = False
 
 
 class GuidedStep(BaseModel):
@@ -549,7 +558,31 @@ def apply_default_norms(value: dict) -> None:
     timing['within_limit'] = timing['elapsed_seconds'] <= DEFAULT_TIME_LIMIT_SECONDS
 
 
-def router(store, engine, authorize, accounts=None, learning=None, coordinator=None):
+async def yield_to_calls(make, pool, quiet, wait, retries, poll=2):
+    """Run a background review so that it never shares the CPU with a phone call.
+
+    It starts in a quiet moment; a call that starts meanwhile cancels it and it is
+    run again later. After a few tries it runs regardless, so the recommendations
+    always arrive.
+    """
+    for attempt in range(retries + 1):
+        waited = 0
+        while pool and waited < wait and pool.call_active(quiet):
+            await asyncio.sleep(5)
+            waited += 5
+        started = time.time()
+        task = asyncio.ensure_future(make())
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=poll)
+            if done:
+                return task.result()
+            if attempt < retries and pool and pool.last_call() > started:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                break
+
+
+def router(store, engine, authorize, accounts=None, learning=None, coordinator=None, ai_pool=None):
     initialize_guidance(store)
     coordinator = coordinator or Coordinator.from_database(store.db)
     store.db.execute('CREATE TABLE IF NOT EXISTS lessons (id TEXT PRIMARY KEY, body TEXT NOT NULL)')
@@ -921,6 +954,8 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                                                 'comment': '', 'at': value['created_at']}
                                        for service in template['card']['services']}
             value['source_kind'] = template.get('source_kind', 'student_card')
+            if template.get('ai_generated'):
+                value['ai_generated'] = template['ai_generated']
             value['time_limit_seconds'] = 30
             value['crew_options'] = scenario.get('crew_options') or []
             if value['crew_options']:
@@ -940,6 +975,9 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                    if item.get('unlocks_status')}
         if unlocks:
             value['planned_unlocks'] = unlocks
+        value['required_phone_contacts'] = [
+            {'id': item['id'], 'name': item['name']} for item in scenario.get('phone_contacts', [])
+            if item.get('required')]
         if scenario.get('dds_expectation'):
             value['dds_expectation'] = scenario['dds_expectation']
         elif template and owner:
@@ -1761,6 +1799,13 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             value['lesson_verdict'] = {'threshold': value['lesson_pass_score'], 'score_percent': score,
                                        'passed': None if score is None else score >= value['lesson_pass_score']}
         persist(value, "session.finished", completed_by)
+        if value.get('exercise_mode') == 'actions' and value.get('owner_service'):
+            # DDS recommendations are ready by the time the student reads the result.
+            try:
+                await schedule_review(sid, locked=True)
+            except (LockUnavailable, ClusterUnavailable):
+                pass
+            value = load(sid)
         return public(value)
 
     async def close_abandoned():
@@ -2000,7 +2045,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             raise HTTPException(422, 'Выберите сценарии для заполнения')
         prefilled_ids = list(dict.fromkeys(body.prefilled_scenario_ids))
         if (body.mode in ('actions', 'mixed') and not prefilled_ids and not body.source_session_ids
-                and (categories or body.difficulty or body.dds_profile)):
+                and not body.ai_cards and (categories or body.difficulty or body.dds_profile)):
             # Ролевая модель: в ленту ДДС попадают только события её профиля.
             for s in store.list_scenarios():
                 owner = store.db.execute('SELECT teacher_id FROM scenario_owners WHERE scenario_id=?', (s['id'],)).fetchone()
@@ -2016,7 +2061,11 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                 scenario = store.scenario(scenario_id)
                 if scenario and not matches(scenario, selection):
                     raise HTTPException(422, 'Готовая карточка не относится к выбранному профилю ДДС')
-        if body.mode in ('actions', 'mixed') and not (body.source_session_ids or body.prefilled_scenario_ids):
+        if body.ai_cards and body.mode != 'actions':
+            raise HTTPException(422, 'Карточки ИИ выдаются в режиме работы диспетчера ДДС')
+        if body.ai_cards and body.practice_with_hints:
+            raise HTTPException(422, 'Подсказки наставника включаются для проверенных преподавателем сценариев')
+        if body.mode in ('actions', 'mixed') and not (body.source_session_ids or body.prefilled_scenario_ids or body.ai_cards):
             raise HTTPException(422, 'Выберите завершённые карточки для действий')
         if body.mode == 'fill' and (body.source_session_ids or body.prefilled_scenario_ids) or body.mode == 'actions' and ids:
             raise HTTPException(422, 'Источники не соответствуют режиму занятия')
@@ -2160,7 +2209,7 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                 if not matches(scenario, value):
                     raise HTTPException(409, 'Сложность или профиль сценария изменились. Подготовьте занятие заново.')
                 snapshots.append({'scenario': scenario, 'rubric': {**rubric_for(scenario_id, actor.get()['id']), 'assessment_policy': policy_for(store, scenario_id, actor.get()['id'])}})
-            if not snapshots and not value.get('templates'):
+            if not snapshots and not value.get('templates') and not value.get('ai_cards'):
                 raise HTTPException(409, 'Пул карточек пуст')
             value['fill_snapshots'] = snapshots
             value.update(state='running', members=members, started_at=now())
@@ -2195,9 +2244,65 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                                'parallel_cards': v.get('parallel_cards', 1),
                                'guided_step': v.get('guided_step') if v.get('practice_with_hints') else None,
                                'practice_with_hints': v.get('practice_with_hints', False),
+                               'ai_cards': v.get('ai_cards', False), 'self_practice': v.get('self_practice', False),
                                'allow_mode_switch': v.get('allow_mode_switch', False),
                                'exhausted': v['cards_per_student'] is not None and completed >= v['cards_per_student']})
         return result
+
+    @instructor.get('/ai-pool')
+    async def ai_pool_status():
+        """Запас карточек, которые ИИ сформировал заранее, и текущая генерация."""
+        if not ai_pool:
+            return {'enabled': False, 'ready': {}, 'issued': 0, 'generating': None}
+        status = ai_pool.status()
+        status['recent'] = [{'title': json.loads(row[0])['scenario']['title'], 'status': row[1], 'created_at': row[2]}
+                            for row in store.db.execute('SELECT body, status, created_at FROM ai_card_pool '
+                                                        'ORDER BY created_at DESC LIMIT 6').fetchall()]
+        return status
+
+    @api.get('/ai-practice')
+    async def ai_practice_status():
+        """Есть ли у обучающегося доступ к самостоятельной тренировке с карточками ИИ."""
+        user = actor.get()
+        if not user or not ai_pool:
+            return {'available': False, 'ready': 0}
+        return {'available': bool(ai_pool.target and ai_group(user['id'])),
+                'ready': sum(ai_pool.counts().values()), 'generating': bool(ai_pool.generating)}
+
+    def ai_group(student_id):
+        return store.db.execute(
+            'SELECT g.id, g.teacher_id FROM group_members m JOIN learning_groups g ON g.id=m.group_id '
+            'WHERE m.student_id=? AND g.archived_at IS NULL ORDER BY g.created_at DESC', (student_id,)).fetchone()
+
+    @api.post('/ai-practice', status_code=201)
+    async def ai_practice(body: NextCard | None = None):
+        """Самостоятельная тренировка: ИИ сам формирует и выдаёт карточку, преподаватель не участвует.
+
+        Попытки идут в постоянное личное занятие группы обучающегося, поэтому оценка,
+        разбор ИИ и рекомендации видны и ему, и преподавателю группы.
+        """
+        user = actor.get()
+        if not user or user['role'] != 'student' or not ai_pool:
+            raise HTTPException(403, 'Тренировка с ИИ доступна обучающемуся')
+        group = ai_group(user['id'])
+        if not group:
+            raise HTTPException(409, 'Вы не состоите в учебной группе')
+        lid = uuid5(NAMESPACE_URL, 'trainer112:ai-practice:' + user['id'])
+        async with coordinated('lesson', lid):
+            if not store.db.execute('SELECT 1 FROM lessons WHERE id=?', (str(lid),)).fetchone():
+                extension = None
+                for (encoded,) in store.db.execute("SELECT body FROM lessons ORDER BY json_text(body,'created_at') DESC").fetchall():
+                    extension = (json.loads(encoded).get('sip_extensions') or {}).get(user['id'])
+                    if extension:
+                        break
+                value = {**CreateLesson(title='Тренировка с ИИ', group_id=group[0], mode='actions', ai_cards=True,
+                                        dds_profile=(ai_pool.profiles or ['utilities'])[0], cards_per_student=None,
+                                        sip_extensions={user['id']: extension} if extension else {}).model_dump(mode='json'),
+                         'templates': [], 'fill_snapshots': [], 'scenario_ids': [], 'id': str(lid),
+                         'teacher_id': group[1], 'state': 'running', 'members': [user['id']], 'self_practice': True,
+                         'created_at': now(), 'started_at': now(), 'events': []}
+                lesson_save(value, 'lesson.ai_practice_created')
+        return await next_lesson_card(lid, body)
 
     @api.post('/lessons/{lid}/next')
     async def next_lesson_card(lid: UUID, body: NextCard | None = None):
@@ -2230,7 +2335,15 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                 fills = [{'scenario': store.scenario(sid), 'rubric': rubric_for(sid, value['teacher_id'])} for sid in value['scenario_ids'] if (store.scenario(sid) or {}).get('enabled')]
             choices = [(f['scenario']['id'], None, f) for f in fills]
             choices.extend((t['scenario']['id'], t, None) for t in value.get('templates', []))
-            if not choices:
+            ai_template = None
+            if value.get('ai_cards') and not value.get('student_scenarios', {}).get(actor.get()['id']):
+                taken = ai_pool.take(value.get('dds_profile') or 'utilities', value.get('difficulty'),
+                                     actor.get()['id']) if ai_pool else None
+                if taken:
+                    ai_template = ai_lesson_template(taken, value['teacher_id'], value.get('allow_applicant_calls', False))
+                elif not choices:
+                    raise HTTPException(409, 'ИИ готовит для вас новую карточку. Повторите через минуту.')
+            if not choices and not ai_template:
                 raise HTTPException(409, 'В занятии нет доступных сценариев')
             requested_mode = body.mode if body else None
             if requested_mode:
@@ -2257,7 +2370,10 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
                 if not suited and advice['changed']:
                     advice = {**advice, 'changed': False,
                               'reason': 'В занятии нет сценариев рекомендованного уровня'}
-            scenario_id, template, frozen = random.choice(pool)
+            if ai_template:
+                scenario_id, template, frozen = ai_template['scenario']['id'], ai_template, None
+            else:
+                scenario_id, template, frozen = random.choice(pool)
             # Готовая карточка приходит данными, а SIP используется для
             # отдельного исходящего доклада. Не звоним от имени заявителя.
             created = await create_card(CreateSession(scenario_id=scenario_id,
@@ -2284,6 +2400,15 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
             value['guided_step'] = body.step
             lesson_save(value, 'lesson.guided_step', {'step': body.step})
             return {'id': value['id'], 'guided_step': body.step}
+
+    def ai_lesson_template(taken, teacher_id, allow_applicant=False):
+        scenario = taken['scenario']
+        if not allow_applicant:
+            scenario = {**scenario, 'phone_contacts': [c for c in scenario.get('phone_contacts') or []
+                                                       if c.get('role') != 'applicant']}
+        return {'card': prefilled_from_scenario(scenario), 'scenario': scenario, 'source_kind': 'ai_pool',
+                'ai_generated': taken.get('ai_generated') or {},
+                'assessment_policy': policy_for(store, scenario['id'], teacher_id)}
 
     def lesson_practice_scenarios(value):
         # Подсказки допустимы, только если у каждого сценария занятия утверждён план подсказок.
@@ -2409,45 +2534,90 @@ def router(store, engine, authorize, accounts=None, learning=None, coordinator=N
         return {'id': value['id'], 'title': value['title'], 'state': value['state'],
                 'observed_at': observed.isoformat(), 'participants': participants}
 
+    review_tasks = set()
+    # On the minimal CPU server a complete review takes minutes. It runs in the
+    # background from card completion; the student and teacher see «готовится».
+    REVIEW_SECONDS = int(os.getenv('AI_REVIEW_TIMEOUT_SECONDS', '780'))
+    REVIEW_CALL_QUIET_SECONDS, REVIEW_CALL_WAIT_SECONDS, REVIEW_CALL_RETRIES = 45, 120, 3
+
+    async def compute_review(sid, locked=False):
+        value = load(sid)
+        state = store.load(str(sid))
+        config = configuration()
+        try:
+            guidance = guidance_examples(store, value.get('teacher_id'), value.get('dds_profile', 'general'))
+            materials = material_context(store, value.get('teacher_id'), value.get('dds_profile', 'general'),
+                                         value.get('group_id'), query=value['card'].get('description', '') + ' ' + value['card'].get('incident_type', ''))
+            if value.get('exercise_mode') == 'actions' and value.get('owner_service'):
+                # В режиме ДДС ученик не заполняет карточку, а ведёт записи о
+                # реагировании: разбираются они, с цитатами и докладами бригады.
+                result = await yield_to_calls(lambda: asyncio.wait_for(review_dds_actions(
+                    value, value.get('dds_review'), guidance, materials), timeout=REVIEW_SECONDS),
+                    ai_pool, REVIEW_CALL_QUIET_SECONDS, REVIEW_CALL_WAIT_SECONDS, REVIEW_CALL_RETRIES)
+            else:
+                result = await yield_to_calls(lambda: asyncio.wait_for(review_card(value["card"], state.get("scenario", {}),
+                    state.get("evaluation_rubric", {}).get("rubric"), guidance, materials), timeout=REVIEW_SECONDS),
+                    ai_pool, REVIEW_CALL_QUIET_SECONDS, REVIEW_CALL_WAIT_SECONDS, REVIEW_CALL_RETRIES)
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, asyncio.TimeoutError):
+            result = {"status": "failed", "provider": config["provider"], "model": config["model"],
+                      "error": "Не удалось получить проверяемый ИИ-разбор. Можно повторить запрос. Балл и карточка сохранены."}
+        # Feedback and other card updates use workspace-session, and may run
+        # while the provider request is in flight on another replica. Reload
+        # and persist under that same aggregate lease to avoid overwriting them.
+        async with (contextlib.nullcontext() if locked else coordinated('workspace-session', sid)):
+            value = load(sid)
+            value["ai_review"] = {**result, "created_at": now(), "version": "advisory-v1"}
+            persist(value, "review.completed" if result["status"] in ("ready", "mock") else "review.failed",
+                    {"status": result["status"], "provider": result["provider"], "model": result["model"]})
+
+    def review_running(value):
+        review = value.get('ai_review') or {}
+        if review.get('status') != 'pending':
+            return False
+        started = datetime.fromisoformat(review.get('started_at', '1970-01-01T00:00:00+00:00'))
+        # Each try may wait for a quiet moment and be cancelled by a call.
+        return (datetime.now(timezone.utc) - started).total_seconds() < (REVIEW_SECONDS + REVIEW_CALL_WAIT_SECONDS) * (REVIEW_CALL_RETRIES + 1)
+
+    async def schedule_review(sid, locked=False):
+        """Mark the review as pending and compute it in the background; idempotent.
+
+        locked: the caller (card completion) already holds the workspace-session lease.
+        """
+        async with coordinated('review', sid):
+            value = load(sid)
+            review = value.get('ai_review') or {}
+            if value["status"] != "Завершена" or review.get('status') in ('ready', 'mock') or review_running(value):
+                return value
+            config = configuration()
+            if config['provider'] == 'mock':
+                # Without a model the advisory review is instant: no background job.
+                await compute_review(sid, locked)
+                return load(sid)
+            async with (contextlib.nullcontext() if locked else coordinated('workspace-session', sid)):
+                value = load(sid)
+                value['ai_review'] = {'status': 'pending', 'started_at': now(), 'provider': config['provider'],
+                                      'model': config['model']}
+                persist(value, 'review.started', {'provider': config['provider']})
+
+            async def run():
+                try:
+                    await compute_review(sid)
+                except Exception:
+                    logging.getLogger('workspace').exception('AI review failed for %s', sid)
+            task = asyncio.get_running_loop().create_task(run())
+            review_tasks.add(task)
+            task.add_done_callback(review_tasks.discard)
+            return value
+
     @api.post("/sessions/{sid}/ai-review")
     async def ai_review(sid: UUID):
-        # Serialize duplicate requests. Ready/mock results are cached permanently;
-        # only failed requests may retry. Existing grades and cards never change.
+        # Ready/mock results are cached permanently; only failed requests may retry.
+        # Existing grades and cards never change.
         value = load(sid)
         if value["status"] != "Завершена":
             raise HTTPException(409, "ИИ-разбор доступен после завершения занятия")
-        async with coordinated('review', sid):
-            value = load(sid)
-            if value["status"] != "Завершена":
-                raise HTTPException(409, "ИИ-разбор доступен после завершения занятия")
-            if value.get("ai_review", {}).get("status") in ("ready", "mock"):
-                return public(value)
-            state = store.load(str(sid))
-            config = configuration()
-            try:
-                guidance = guidance_examples(store, value.get('teacher_id'), value.get('dds_profile', 'general'))
-                materials = material_context(store, value.get('teacher_id'), value.get('dds_profile', 'general'),
-                                             value.get('group_id'), query=value['card'].get('description', '') + ' ' + value['card'].get('incident_type', ''))
-                if value.get('exercise_mode') == 'actions' and value.get('owner_service'):
-                    # В режиме ДДС ученик не заполняет карточку, а ведёт записи о
-                    # реагировании: разбираются они, с цитатами и докладами бригады.
-                    result = await asyncio.wait_for(review_dds_actions(value, value.get('dds_review'),
-                                                                       guidance, materials), timeout=60)
-                else:
-                    result = await asyncio.wait_for(review_card(value["card"], state.get("scenario", {}),
-                        state.get("evaluation_rubric", {}).get("rubric"), guidance, materials), timeout=45)
-            except (httpx.HTTPError, ValueError, KeyError, TypeError, asyncio.TimeoutError):
-                result = {"status": "failed", "provider": config["provider"], "model": config["model"],
-                          "error": "Не удалось получить проверяемый ИИ-разбор. Можно повторить запрос. Балл и карточка сохранены."}
-            # Feedback and other card updates use workspace-session, and may run
-            # while the provider request is in flight on another replica. Reload
-            # and persist under that same aggregate lease to avoid overwriting them.
-            async with coordinated('workspace-session', sid):
-                value = load(sid)
-                value["ai_review"] = {**result, "created_at": now(), "version": "advisory-v1"}
-                persist(value, "review.completed" if result["status"] in ("ready", "mock") else "review.failed",
-                        {"status": result["status"], "provider": result["provider"], "model": result["model"]})
-                return public(value)
+        await schedule_review(sid)
+        return public(load(sid))
 
     combined = APIRouter()
     combined.include_router(api)

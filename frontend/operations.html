@@ -21,8 +21,7 @@
         <p class="eyebrow">Администрирование</p>
         <h1>Состояние учебного контура</h1>
         <p><a href="/audit">Журнал безопасности и архив действий</a></p>
-        <button id="exportConfigurationXml" type="button">Выгрузить безопасную конфигурацию XML</button>
-        <p>Мониторинг Backend, Voice и Asterisk, резервные копии и безопасные операции обслуживания.</p>
+        <p>Состояние служб, резервные копии и журналы. Редкие настройки — в разделе «Дополнительно» внизу.</p>
       </div>
       <button id="refresh" type="button">Обновить</button>
     </div>
@@ -47,17 +46,6 @@
     </section>
 
     <div class="dashboard-grid">
-      <section class="panel wide">
-        <h2>Настройки SIP, PostgreSQL и ресурсов</h2>
-        <p>Пароли здесь не редактируются. Применение перезапускает службы — завершите занятия перед обслуживанием. Номера должны уже существовать в SIP_ACCOUNTS_JSON.</p>
-        <form id="runtimeForm"><div id="runtimeFields" class="metric-list"></div><button type="submit">Применить с перезапуском служб</button></form>
-        <button id="downloadRuntimeXml" type="button">Экспорт XML настроек</button>
-        <label>Импорт XML<input id="runtimeXml" type="file" accept=".xml,application/xml"></label>
-        <pre id="runtimePreview"></pre><button id="applyRuntimeXml" hidden type="button">Подтвердить импорт и перезапуск</button>
-        <p id="runtimeStatus" role="status"></p>
-        <button id="installUpdate" type="button">Установить подготовленное обновление</button>
-        <p>Только архив образов, заранее одобренный администратором на сервере.</p>
-      </section>
       <section class="panel wide" aria-labelledby="servicesHeading">
         <div class="section-head"><div><h2 id="servicesHeading">Службы</h2><p>Недоступное или устаревшее состояние никогда не считается исправным.</p></div></div>
         <div id="services" class="service-grid"><p class="empty">Нет данных о службах</p></div>
@@ -78,26 +66,44 @@
         <div id="backups" class="list"><p class="empty">Копий пока нет</p></div>
       </section>
 
-      <section class="panel" aria-labelledby="metricsHeading">
-        <div class="section-head"><div><h2 id="metricsHeading">Метрики</h2><p>Последний серверный снимок.</p></div></div>
-        <dl id="metrics" class="metric-list"><div><dt>Данные</dt><dd>Пока не получены</dd></div></dl>
-      </section>
 
-      <section id="configSection" class="panel" aria-labelledby="configHeading" hidden>
-        <div class="section-head"><div><h2 id="configHeading">Конфигурация процесса</h2><p>Безопасные параметры окружения только для чтения.</p></div></div>
-        <dl id="configuration" class="metric-list"></dl>
-      </section>
 
-      <section class="panel" aria-labelledby="jobsHeading">
-        <div class="section-head"><div><h2 id="jobsHeading">Операции</h2><p>Постановка в очередь не означает успешного завершения.</p></div></div>
-        <div id="jobs" class="list"><p class="empty">Операций пока нет</p></div>
-      </section>
 
       <section class="panel wide" aria-labelledby="eventsHeading">
         <div class="section-head"><div><h2 id="eventsHeading">Журнал событий</h2><p>Последние технические события учебного контура.</p></div><button id="exportReport" type="button">Экспорт отчёта JSON</button></div>
         <div id="events" class="timeline"><p class="empty">Событий пока нет</p></div>
       </section>
+      <details class="panel wide fold ops-more"><summary><h2>Дополнительно</h2><span>настройки служб, обновление, метрики, операции, системные журналы, выгрузка конфигурации</span></summary>
+        <div class="dashboard-grid">
+      <section class="panel wide">
+        <h2>Настройки телефонии, базы данных и ресурсов</h2>
+        <p>Пароли здесь не редактируются. Применение перезапускает службы — завершите занятия перед обслуживанием. Номера должны уже существовать в SIP_ACCOUNTS_JSON.</p>
+        <form id="runtimeForm"><div id="runtimeFields" class="metric-list"></div><button type="submit">Применить с перезапуском служб</button></form>
+        <button id="downloadRuntimeXml" type="button">Экспорт XML настроек</button>
+        <label>Импорт XML<input id="runtimeXml" type="file" accept=".xml,application/xml"></label>
+        <pre id="runtimePreview"></pre><button id="applyRuntimeXml" hidden type="button">Подтвердить импорт и перезапуск</button>
+        <p id="runtimeStatus" role="status"></p>
+        <button id="installUpdate" type="button">Установить подготовленное обновление</button>
+        <p>Только архив образов, заранее одобренный администратором на сервере.</p>
+      </section>
+      <section class="panel" aria-labelledby="metricsHeading">
+        <div class="section-head"><div><h2 id="metricsHeading">Метрики</h2><p>Последний серверный снимок.</p></div></div>
+        <dl id="metrics" class="metric-list"><div><dt>Данные</dt><dd>Пока не получены</dd></div></dl>
+      </section>
+      <section id="configSection" class="panel" aria-labelledby="configHeading" hidden>
+        <div class="section-head"><div><h2 id="configHeading">Конфигурация процесса</h2><p>Безопасные параметры окружения только для чтения.</p></div></div>
+        <dl id="configuration" class="metric-list"></dl>
+      </section>
+      <section class="panel" aria-labelledby="jobsHeading">
+        <div class="section-head"><div><h2 id="jobsHeading">Операции</h2><p>Постановка в очередь не означает успешного завершения.</p></div></div>
+        <div id="jobs" class="list"><p class="empty">Операций пока нет</p></div>
+      </section>
       <section class="panel wide"><h2>Системные журналы служб</h2><button type="button" id="loadServiceLogs">Обновить журналы</button><pre id="serviceLogs">Нажмите «Обновить журналы»</pre></section>
+        <section class="panel wide"><h2>Выгрузка конфигурации</h2><p>Безопасная конфигурация без паролей — для переноса на другой сервер.</p>
+        <button id="exportConfigurationXml" type="button">Выгрузить безопасную конфигурацию XML</button>
+        </section>
+        </div>
+      </details>
     </div>
   </main>
 </body>

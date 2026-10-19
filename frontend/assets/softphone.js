@@ -9,20 +9,26 @@ const PREF='softphone.enabled',MIC='softphone.mic';
 const store={get(k){try{return localStorage.getItem(k);}catch{return null;}},set(k,v){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch{}}};
 function make(tag,text,className){const x=document.createElement(tag);if(text!==undefined)x.textContent=String(text);if(className)x.className=className;return x;}
 let account=null,ua=null,session=null,ringer=null,statsTimer=null,levelStop=null,callStarted=0,clockTimer=null;
+let dialNumber='',directoryRequest=0;
+let pendingOutgoing=null;
+function expectOutgoing(number){pendingOutgoing=number&&ua?.isRegistered?.()?{number:String(number).replace(/\D/g,''),until:Date.now()+30000}:null;}
 const remote=make('audio');remote.autoplay=true;remote.setAttribute('data-softphone','remote');
 
 // ---- Интерфейс: кнопка в строке телефона, окно настроек, плашка звонка ----
-const toggle=make('button','телефон в браузере');toggle.type='button';toggle.id='softphoneToggle';
+// Зелёный кружок с трубкой рядом с часами, как просили эксперты: нажатие открывает телефон.
+const toggle=make('button',undefined,'phone-circle');toggle.type='button';toggle.id='softphoneToggle';toggle.setAttribute('aria-label','Телефон');
+toggle.innerHTML='<span class="phone-dot" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg></span><small>телефон</small>';
 const bar=make('section',undefined,'softphone-bar');bar.id='softphoneBar';bar.hidden=true;bar.setAttribute('role','region');bar.setAttribute('aria-label','Звонок в браузере');
 const dialog=make('dialog',undefined,'softphone-dialog');dialog.id='softphoneDialog';
 function setState(state,text){toggle.dataset.state=state;toggle.title=text;const line=byId('softphoneState');if(line){line.textContent=text;line.dataset.state=state;}}
 
 function buildDialog(){
  dialog.replaceChildren();
- const head=make('div',undefined,'dialog-title');const close=make('button','×');close.type='button';close.setAttribute('aria-label','Закрыть');close.onclick=()=>dialog.close();head.append(make('h2','Телефон в браузере'),close);
+ const head=make('div',undefined,'dialog-title');const close=make('button','×');close.type='button';close.setAttribute('aria-label','Закрыть');close.onclick=()=>dialog.close();head.append(make('h2','Виртуальный телефон ДДС'),close);
  const info=make('p',account?.enabled?`Учебный номер ${account.extension} (занятие «${account.lesson_title||''}»). Звонки на этот номер приходят в браузер, пока он подключён; иначе — на IP-телефон.`:(account?.reason||'Телефон в браузере недоступен.'));
  const state=make('p','Не подключён','softphone-state');state.id='softphoneState';state.dataset.state=toggle.dataset.state||'off';state.textContent=toggle.title||'Не подключён';
  dialog.append(head,info,state);
+ buildDialer();
  if(!account?.enabled)return;
  const micLabel=make('label','Микрофон / гарнитура');const mic=make('select');mic.id='softphoneMic';micLabel.append(mic);
  const meter=make('div',undefined,'softphone-meter');meter.append(make('i'));meter.id='softphoneMeter';meter.setAttribute('aria-label','Уровень микрофона');
@@ -32,8 +38,26 @@ function buildDialog(){
  const echo=make('button','Проверить гарнитуру (эхо 100)');echo.type='button';echo.id='softphoneEcho';echo.disabled=!ua;echo.onclick=echoTest;
  actions.append(connect,echo);
  const stats=make('p','','softphone-stats');stats.id='softphoneStats';
- dialog.append(micLabel,meter,actions,stats,make('p','Нужна гарнитура. Браузер один раз попросит доступ к микрофону. Задержка связи показывается во время разговора; по ТЗ она не должна превышать 150 мс.','hint'));
+ dialog.append(micLabel,meter,actions,stats,make('p','Нужна гарнитура. Браузер один раз попросит доступ к микрофону.','hint'));
  fillDevices();mic.onchange=()=>{store.set(MIC,mic.value||null);};
+}
+function buildDialer(){
+ const pane=make('section',undefined,'softphone-dialer');
+ const label=make('label','Номер контакта ДДС');const input=make('input');input.type='tel';input.id='softphoneNumber';input.value=dialNumber;input.maxLength=40;input.autocomplete='off';input.oninput=()=>{dialNumber=input.value;};label.append(input);
+ const keypad=make('div',undefined,'softphone-keypad');keypad.setAttribute('aria-label','Набор номера');
+ for(const digit of ['1','2','3','4','5','6','7','8','9','+','0','⌫']){const button=make('button',digit);button.type='button';button.setAttribute('aria-label',digit==='⌫'?'Удалить цифру':`Цифра ${digit}`);button.onclick=()=>{dialNumber=digit==='⌫'?dialNumber.slice(0,-1):(dialNumber+digit).slice(0,40);input.value=dialNumber;};keypad.append(button);}
+ const call=make('button','Позвонить','primary');call.id='softphoneDial';call.type='button';
+ const error=make('p','','softphone-dial-error');error.setAttribute('role','status');
+ call.onclick=async()=>{call.disabled=true;error.textContent='Соединение…';try{if(session)throw Error('Завершите текущий разговор');if(!window.trainerPhone)throw Error('Сначала откройте учебную карточку');await window.trainerPhone.dial(input.value.trim());dialog.close();}catch(e){error.textContent=e.message;}finally{call.disabled=false;}};
+ const book=make('div',undefined,'softphone-directory');book.setAttribute('aria-label','Справочник ДДС');book.append(make('h3','Контакты текущего задания'),make('p','Загрузка…'));
+ pane.append(label,keypad,call,error,book);dialog.append(pane);
+ const request=++directoryRequest;
+ Promise.resolve().then(()=>window.trainerPhone?.contacts()||Promise.reject(Error('Сначала откройте учебную карточку'))).then(contacts=>{
+  if(request!==directoryRequest)return;
+  book.replaceChildren(make('h3',`Справочник ДДС · ${contacts.length}/10`));
+  if(!contacts.length)book.append(make('p','Преподаватель ещё не задал контакты для этой карточки.'));
+  for(const contact of contacts){const button=make('button',`${contact.name} · ${contact.role_title}\n${contact.number}${contact.required?' · обязательный разговор':''}`);button.type='button';button.disabled=!contact.available;button.title=contact.available?'Выбрать номер':'Сначала назначьте эту бригаду';button.onclick=()=>{dialNumber=contact.number;input.value=dialNumber;input.focus();};book.append(button);}
+ }).catch(e=>{if(request===directoryRequest)book.replaceChildren(make('p',e.message));});
 }
 async function fillDevices(){
  const select=byId('softphoneMic');if(!select||!navigator.mediaDevices?.enumerateDevices)return;
@@ -114,6 +138,11 @@ function incoming(sessionObject,request){
  if(session){sessionObject.terminate({status_code:486,reason_phrase:'Busy Here'});return;}
  session=sessionObject;const identity=sessionObject.remote_identity;caller=[identity?.display_name,identity?.uri?.user].filter(Boolean).join(' · ')||'Учебный вызов';
  attach(sessionObject);startRinging();renderBar('ringing');setState('ringing','Входящий вызов');
+ // The application bridges a student-initiated call back to the student's SIP
+ // number. Auto-answer only this exact, explicitly requested contact, briefly.
+ if(pendingOutgoing&&pendingOutgoing.until>Date.now()&&pendingOutgoing.number===String(identity?.uri?.user||'').replace(/\D/g,'')){
+  pendingOutgoing=null;answer();
+ }
 }
 function answer(){if(!session)return;session.answer({mediaConstraints:{audio:audioConstraints(),video:false},pcConfig:{iceServers:[]},rtcOfferConstraints:{offerToReceiveAudio:true}});stopRinging();renderBar('connecting');}
 function hangup(){if(session&&!session.isEnded())session.terminate();}
@@ -145,13 +174,13 @@ async function init(){
  const lesson=new URLSearchParams(location.search).get('lesson');
  try{const response=await fetch('/api/v1/student/softphone'+(lesson&&/^[0-9a-f-]{36}$/i.test(lesson)?'?lesson_id='+lesson:''),{headers:{'X-Voice-UI':'1'}});account=response.ok?await response.json():{enabled:false};}catch{account={enabled:false};}
  // Кнопка в верхней полосе рабочего места: телефон нужен и до открытия карточки.
- const cabinet=document.querySelector('.training-strip a[href="/portal"]');
- if(cabinet)cabinet.before(toggle);else document.querySelector('.phone-row .mini-buttons')?.append(toggle);
+ const clock=document.querySelector('.console-meta #clock'),cabinet=document.querySelector('.training-strip a[href="/portal"]');
+ if(clock)clock.before(toggle);else if(cabinet)cabinet.before(toggle);else document.querySelector('.phone-row .mini-buttons')?.append(toggle);
  document.body.append(bar,dialog,remote);
  setState(account.enabled?'off':'unavailable',account.enabled?'Не подключён':(account.reason||'Недоступен'));
  toggle.onclick=()=>{buildDialog();dialog.showModal();};
  if(account.enabled&&store.get(PREF)==='1')connectPhone();
 }
-window.trainerSoftphone={connect:connectPhone,disconnect,answer,hangup,get state(){return toggle.dataset.state;},get account(){return account;}};
+window.trainerSoftphone={connect:connectPhone,disconnect,answer,hangup,expectOutgoing,get state(){return toggle.dataset.state;},get account(){return account;}};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

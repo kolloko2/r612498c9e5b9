@@ -17,6 +17,7 @@ import llm
 from practice_plan import PracticeStep, fingerprint as practice_fingerprint, validate_plan, draft as practice_draft
 from llm import complete, configuration, reply as speak
 from briefing import join_speech as briefing_join_speech, check_live as briefing_check_live, duty_reply as briefing_duty_reply, SUPERIOR_TITLE, CREW_VOICE
+from phone_directory import PhoneContact, number as phone_number, check_contact
 from field_dialogue import answer as field_answer, crew_speech, report_speech
 from categories import CategoryId
 from curriculum import Difficulty, DdsProfile
@@ -132,6 +133,7 @@ class Scenario(BaseModel):
     # реальный АРМ.
     owner_service: str = Field("", max_length=160)
     crew_options: list[CrewOption] = Field(default_factory=list, max_length=20)
+    phone_contacts: list[PhoneContact] = Field(default_factory=list, max_length=10)
     # Проверенная преподавателем карточка, которую Служба 112 передаёт ДДС.
     # Валидируется схемой Card при подготовке занятия; произвольные поля
     # сценария не превращаются в адрес или назначение службы догадкой.
@@ -142,6 +144,27 @@ class Scenario(BaseModel):
 
     @model_validator(mode='after')
     def visible_correction_evidence(self):
+        if len({contact.id for contact in self.phone_contacts}) != len(self.phone_contacts):
+            raise ValueError('Коды контактов должны быть уникальными')
+        if len({phone_number(contact.number) for contact in self.phone_contacts}) != len(self.phone_contacts):
+            raise ValueError('Номера контактов должны быть уникальными')
+        crew_ids = {crew.id for crew in self.crew_options}
+        for contact in self.phone_contacts:
+            if contact.crew_id and contact.crew_id not in crew_ids:
+                raise ValueError('Контакт ссылается на отсутствующую бригаду')
+            if contact.role == 'crew_leader' and not contact.crew_id:
+                raise ValueError('Для руководителя бригады выберите бригаду')
+            if contact.role not in ('crew_leader', 'crew_specialist') and contact.crew_id:
+                raise ValueError('Привязка к бригаде доступна только её участникам')
+            card_phone = phone_number(str(self.prefilled_card.get('phone', '')))
+            if contact.role == 'applicant' and card_phone and phone_number(contact.number) != card_phone:
+                # ДДС звонит заявителю по номеру, который видит в карточке.
+                raise ValueError('Номер заявителя должен совпадать с телефоном в карточке')
+        if self.enabled and self.phone_contacts and self.owner_service and (not self.dds_expectation or self.dds_expectation.should_accept):
+            if (not self.dds_expectation or self.dds_expectation.brief_service) and not any(c.role == 'superior' for c in self.phone_contacts):
+                raise ValueError('Для обязательного доклада добавьте начальника смены в справочник')
+            if self.crew_options and not any(c.role == 'crew_leader' for c in self.phone_contacts):
+                raise ValueError('Добавьте руководителя бригады для передачи задачи')
         validate_plan(self.model_dump())
         if self.enabled and self.dds_expectation:
             expected = self.dds_expectation.expected_corrections
@@ -424,7 +447,9 @@ class Engine:
             # Полнота доклада считается по сохранённой карточке, а не моделью:
             # ответ собеседника не может подтвердить приём вместо проверки.
             started = asyncio.get_running_loop().time()
-            if duty.get('purpose') == 'progress':
+            if duty.get('purpose') == 'coordination':
+                state['duty_report'] = check_contact(spoken, duty['contact'])
+            elif duty.get('purpose') == 'progress':
                 from briefing import check_progress
                 state['duty_report'] = check_progress(spoken, duty['progress_reference'])
             else:
@@ -439,7 +464,8 @@ class Engine:
                                                               transcript=spoken, report=state["duty_report"],
                                                               timeout_seconds=llm.VOICE_REPLY_TIMEOUT_SECONDS - (asyncio.get_running_loop().time() - started),
                                                               purpose=duty.get('purpose', 'initial'),
-                                                              progress=duty.get('progress_reference')))
+                                                              progress=duty.get('progress_reference'),
+                                                              counterpart=duty.get('contact')))
             except (httpx.HTTPError, ValueError, KeyError, TypeError):
                 text = "Повторите, пожалуйста, последнюю фразу."
                 state["provider_error"] = "Сервис диалога недоступен. Повторите запрос позднее."
@@ -506,7 +532,7 @@ warmup_task = None
 
 async def warm_model():
     try:
-        await llm.warm_phone_model()
+        await llm.warm_phone_model_with_retry()
     except (httpx.HTTPError, ValueError) as error:
         llm.logger.warning('Phone model preload failed: %s', type(error).__name__)
 
@@ -516,6 +542,13 @@ async def preload_model():
     global warmup_task
     if configuration()["provider"] == "ollama":
         warmup_task = asyncio.create_task(warm_model())
+
+
+@app.on_event("shutdown")
+async def cancel_model_preload():
+    if warmup_task is not None and not warmup_task.done():
+        warmup_task.cancel()
+        await asyncio.gather(warmup_task, return_exceptions=True)
 
 
 def authorized(authorization: str = Header("")):
@@ -539,10 +572,26 @@ app.include_router(accounts.router(authorized))
 from directory_routes import router as directory_router
 from directory_auth import authenticate as directory_authenticate, status as directory_status
 app.include_router(directory_router(accounts, authorized, directory_authenticate, lambda: directory_status()['configured']))
-app.include_router(workspace_router(store, engine, authorized, accounts, learning, coordinator))
-app.include_router(learning.router(authorized))
 from generation import router as generation_router
-app.include_router(generation_router(store, accounts, authorized, Scenario, coordinator))
+generation_api = generation_router(store, accounts, authorized, Scenario, coordinator)
+from ai_pool import Pool as AiPool
+# ИИ заранее готовит карточки ДДС: обучающийся получает новую без участия преподавателя.
+ai_pool = AiPool(store, coordinator, generation_api.generate_dds, lambda: configuration()['provider'])
+llm.phone_activity_hooks.append(ai_pool.mark_phone)
+llm.phone_call_hooks.append(ai_pool.mark_call)
+app.include_router(workspace_router(store, engine, authorized, accounts, learning, coordinator, ai_pool))
+app.include_router(learning.router(authorized))
+app.include_router(generation_api)
+
+
+@app.on_event("startup")
+async def start_ai_pool():
+    ai_pool.start()
+
+
+@app.on_event("shutdown")
+async def stop_ai_pool():
+    await ai_pool.stop()
 from teacher_guidance import router as guidance_router
 app.include_router(guidance_router(store, accounts, authorized))
 from materials import router as materials_router, install_upload_limit

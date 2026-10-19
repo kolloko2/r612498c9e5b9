@@ -22,6 +22,10 @@ from typing import Callable
 
 _UUID_PATH = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}"
 _FINE_GRAINED_MUTATIONS = (
+    # Both authoring routes hold generation-teacher for their complete lifetime;
+    # approval shares that lease too. Model latency must not lock unrelated writes.
+    ("POST", re.compile(r"^/api/v1/instructor/generations$")),
+    ("POST", re.compile(rf"^/api/v1/instructor/generations/{_UUID_PATH}/revise$")),
     ("PUT", re.compile(rf"^/api/v1/student/sessions/{_UUID_PATH}/card$")),
     ("POST", re.compile(rf"^/api/v1/student/sessions/{_UUID_PATH}/(?:messages|services|notifications|processed|links|call|call/recover|finish)$")),
     ("POST", re.compile(rf"^/api/v1/instructor/sessions/{_UUID_PATH}/(?:finish|feedback)$")),

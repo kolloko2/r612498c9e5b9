@@ -186,6 +186,11 @@ def unfinished(value: dict, expectation: dict | None) -> list[str]:
             missing.append('статусы цикла: ' + ', '.join(skipped))
     if expectation.get('brief_service') and not _superior_reports(value, expectation):
         missing.append('доклад вышестоящему начальнику по телефону')
+    completed_contacts = {item.get('contact_id') for item in _spoken_reports(value)
+                          if item.get('briefing_report', {}).get('complete')}
+    for contact in value.get('required_phone_contacts', []):
+        if contact['id'] not in completed_contacts:
+            missing.append('разговор: ' + contact['name'])
     if not value.get('processed_at'):
         missing.append('отметка об отработке происшествия')
     delivered = {item.get('detail', {}).get('id') for item in value.get('events', [])
@@ -226,7 +231,7 @@ def _spoken_reports(value: dict) -> list[dict]:
 def _superior_reports(value: dict, expectation: dict) -> list[dict]:
     service = expectation.get("brief_service", "")
     return [item for item in _spoken_reports(value)
-            if item.get("service") == service and item.get('counterpart') != 'crew']
+            if item.get("service") == service and item.get('counterpart', 'superior') == 'superior']
 
 
 def _briefing(value: dict, expectation: dict) -> list[dict]:
@@ -361,6 +366,13 @@ def review(value: dict, expectation: dict | None) -> dict | None:
         checks += _update_reactions(value, expectation, service)
     checks += _result_recorded(value, service, expectation)
     checks += _briefing(value, expectation)
+    completed_contacts = {item.get('contact_id') for item in _spoken_reports(value)
+                          if item.get('briefing_report', {}).get('complete')}
+    for contact in value.get('required_phone_contacts', []):
+        passed = contact['id'] in completed_contacts
+        checks.append(_check('contact:' + contact['id'], 'Разговор: ' + contact['name'], passed,
+                             '' if passed else 'Обязательный разговор не завершён или сведения не переданы.',
+                             critical=True))
     checks += _card_corrections(value, expectation)
     if not _closed_without_brigade(value, service) or expectation.get('expected_crew_id'):
         checks += _crew_decision(value, expectation)

@@ -11,17 +11,16 @@
  <link rel="stylesheet" href="/assets/login.css">
  <script src="/assets/login.js" defer></script>
 </head>
-<body>
- <header><strong>Тренажёр диспетчера ДДС</strong></header>
+<body class="login-city">
  <main>
   <section class="login-panel" aria-labelledby="heading">
-   <h1 id="heading">Вход</h1>
-   <p class="login-intro">Приём карточек, связь с бригадой и управление реагированием.</p>
+   <h1 class="login-title"><span class="big112" aria-hidden="true">112</span> <span id="heading">Вход в систему</span></h1>
+   <p class="login-intro">Тренажёр диспетчера ДДС</p>
    <form id="loginForm"><fieldset id="controls" disabled>
     <label>Логин<input name="username" required minlength="3" maxlength="40" pattern="[a-zA-Z0-9_.\-]+" autocomplete="username"></label>
     <label>Пароль<input name="password" type="password" required maxlength="128" autocomplete="current-password"></label>
     <label id="workstationLabel">Номер АРМ<input name="workstation" maxlength="80" autocomplete="off" placeholder="Например, АРМ-1"></label>
-    <button type="submit">Продолжить</button>
+    <button type="submit">Войти</button>
    </fieldset></form>
    <form id="mfaForm" hidden><fieldset id="mfaControls">
     <p>Введите код из приложения-аутентификатора или резервный код.</p>
@@ -31,9 +30,8 @@
    <p id="status" role="alert"></p>
   </section>
   <section id="demoAccess" class="demo-panel" aria-labelledby="demoHeading" hidden>
-   <span class="demo-label">Демонстрационный стенд</span>
-   <h2 id="demoHeading">Выберите роль</h2>
-   <p>Нажмите «Выбрать», чтобы подставить логин и пароль в форму входа.</p>
+   <h2 id="demoHeading">Учётные записи для проверки</h2>
+   <p>Нажмите «Выбрать» — логин и пароль подставятся в форму, затем «Войти».</p>
    <div id="demoAccounts" class="demo-accounts"></div>
   </section>
  </main>

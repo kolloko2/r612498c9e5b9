@@ -11,7 +11,7 @@ const show=value=>value===null||value===undefined||value===''?'—':Array.isArra
 function mark(passed){return passed===true?node('span','Выполнено','status good'):passed===false?node('span','Не выполнено','status critical'):node('span','Не измерено','status neutral');}
 function pairs(rows){const list=node('dl',undefined,'pairs');for(const [label,value] of rows){if(value===undefined)continue;list.append(node('dt',label),node('dd',show(value)));}return list;}
 function table(columns,rows){const t=node('table'),head=node('tr');for(const c of columns)head.append(node('th',c));const thead=node('thead');thead.append(head);const body=node('tbody');for(const r of rows){const tr=node('tr');for(const cell of r){const td=node('td');if(cell instanceof Node)td.append(cell);else td.textContent=show(cell);tr.append(td);}body.append(tr);}t.append(thead,body);const wrap=node('div',undefined,'table-wrap');wrap.append(t);return wrap;}
-const profiles={general:'Общий профиль 112',fire:'Пожарная охрана',police:'Полиция',medical:'Скорая медицинская помощь',gas:'Аварийная газовая служба'},levels={basic:'Базовый',standard:'Стандартный',advanced:'Повышенный'};
+const profiles={general:'Общий профиль ДДС',fire:'Пожарная охрана',police:'Полиция',medical:'Скорая медицинская помощь',gas:'Аварийная газовая служба',utilities:'ЖКХ и городские службы'},levels={basic:'Базовый',standard:'Стандартный',advanced:'Повышенный'};
 const outcomes={timed_out:'Закрыта системой: не было действий',restarted:'Прервана для повтора'},closers={teacher:'преподаватель',system:'система',student:'обучающийся'};
 function renderTask(r){
  const t=r.task;$('taskBody').replaceChildren(pairs([
@@ -80,7 +80,8 @@ function renderVerdict(r){
  if(a.policy_result)rows.push(['Правила преподавателя',a.policy_result.passed===true?'выполнены':a.policy_result.passed===false?'не выполнены':'не определено'],['Ошибок последовательности',a.policy_result.sequence_errors]);
  if(rows.length)root.append(pairs(rows));
  const g=r.grammar;if(g){root.append(node('h3','Ручной ввод и грамотность'),node('p',`Ошибок ввода: ${g.errors??0}, из них критичных: ${g.critical_errors??0}.`));const items=[...(g.typos||[]),...(g.mechanical||[])];if(items.length)root.append(table(['Поле','Что найдено'],items.slice(0,20).map(x=>[x.field,[x.fragment?'«'+x.fragment+'»':'',x.hint||''].filter(Boolean).join(' ')])));}
- const ai=r.ai_review;if(ai&&['ready','mock'].includes(ai.status)){root.append(node('h3','ИИ-разбор (рекомендательный)'));if(ai.summary)root.append(node('p',ai.summary));const items=(ai.findings||[]).filter(f=>f.kind!=='good');if(items.length)root.append(table(['Замечание','Цитата','Как лучше'],items.map(f=>[f.explanation,f.quote,f.suggestion])));}
+ const ai=r.ai_review;if(ai?.status==='pending'){root.append(node('h3','ИИ-разбор (рекомендательный)'),node('p','Разбор ИИ готовится… Страница обновится сама через несколько секунд.'));setTimeout(()=>location.reload(),15000);}
+ if(ai&&['ready','mock'].includes(ai.status)){root.append(node('h3','ИИ-разбор (рекомендательный)'));if(ai.summary)root.append(node('p',ai.summary));const items=(ai.findings||[]).filter(f=>f.kind!=='good');if(items.length)root.append(table(['Замечание','Цитата','Как лучше'],items.map(f=>[f.explanation,f.quote,f.suggestion])));}
 }
 const params=new URLSearchParams(location.search),sid=params.get('session');let base='';
 (async()=>{try{

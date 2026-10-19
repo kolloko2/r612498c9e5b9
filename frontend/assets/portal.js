@@ -26,8 +26,8 @@ function addLessonCurriculumControls(){
 function addLessonTransportControls(){
  if(el('lessonTransport'))return;
  const modeLabel=el('lessonMode').closest('label'),wrap=node('div',undefined,'stack');wrap.id='lessonTransportControls';
- const label=node('label');label.append('Канал карточек');const select=document.createElement('select');select.id='lessonTransport';select.add(new Option('Текстовый диалог','text'));select.add(new Option('SIP-звонок','sip'));label.append(select);
- const note=node('p','Для SIP укажите внутренний номер каждого студента группы. Номера должны быть уникальны и заранее добавлены в Voice ALLOWED_EXTENSIONS и Asterisk.');note.id='lessonTransportNote';
+ const label=node('label');label.append('Канал карточек');const select=document.createElement('select');select.id='lessonTransport';select.add(new Option('Текст (без гарнитур)','text'));select.add(new Option('Голос: IP-телефон или телефон на сайте','sip'));label.append(select);
+ const note=node('p','Для телефона укажите учебный номер каждого обучающегося. Номера должны быть разными и заранее заведены администратором.');note.id='lessonTransportNote';
  const extensions=node('div',undefined,'stack');extensions.id='lessonExtensions';wrap.append(label,note,extensions);(el('lessonHow')?.querySelector('legend')||modeLabel).after(wrap);
  select.onchange=refreshLessonTransportControls;el('lessonGroup').addEventListener('change',refreshLessonTransportControls);
  refreshLessonTransportControls();
@@ -37,17 +37,17 @@ function refreshLessonTransportControls(){
  const select=el('lessonTransport'),container=el('lessonExtensions');if(!select||!container)return;
  // Телефония нужна и в режиме ДДС: по ней идёт доклад дежурному службы.
  const mode=el('lessonMode').value;select.disabled=false;
- el('lessonTransportNote').textContent=mode==='actions'?'Готовая карточка поступает данными; назначенный SIP-номер нужен для исходящего доклада дежурному. Номера должны быть доступны в Voice и Asterisk.':mode==='mixed'?'SIP используется для вызова заявителя в режиме 112 и для исходящего доклада в режиме ДДС. Номера должны быть доступны в Voice и Asterisk.':'Укажите внутренний номер каждого студента группы. Номера должны быть доступны в Voice и Asterisk.';
+ el('lessonTransportNote').textContent=mode==='actions'?'Готовая карточка поступает на рабочее место; учебный номер телефона нужен для докладов по телефону. Номера заводит администратор.':mode==='mixed'?'Телефон используется для вызова заявителя и для докладов. Номера заводит администратор.':'Укажите учебный номер телефона каждого обучающегося. Номера заводит администратор.';
  container.hidden=select.value!=='sip';container.replaceChildren();if(container.hidden)return;
  const group=currentLessonGroup(),saved=lessonExtensions.get(group?.id)||{};lessonExtensions.set(group?.id,saved);
- for(const member of group?.students||[]){const label=node('label');label.append(member.display_name||member.username||member.id);const input=document.createElement('input');input.inputMode='numeric';input.pattern='[0-9]{1,8}';input.maxLength=8;input.required=true;input.placeholder='Например, 201';input.value=saved[member.id]||'';input.dataset.studentId=member.id;input.setAttribute('aria-label',`SIP-номер: ${member.display_name||member.id}`);input.addEventListener('input',()=>{saved[member.id]=input.value;});label.append(input);container.append(label);}
+ for(const member of group?.students||[]){const label=node('label');label.append(member.display_name||member.username||member.id);const input=document.createElement('input');input.inputMode='numeric';input.pattern='[0-9]{1,8}';input.maxLength=8;input.required=true;input.placeholder='Например, 201';input.value=saved[member.id]||'';input.dataset.studentId=member.id;input.setAttribute('aria-label',`Учебный номер: ${member.display_name||member.id}`);input.addEventListener('input',()=>{saved[member.id]=input.value;});label.append(input);container.append(label);}
  if(!(group?.students||[]).length)container.append(node('p','В выбранной группе пока нет студентов.','empty'));
 }
 function lessonSipExtensions(){
  if(el('lessonTransport')?.value!=='sip')return {};
  const inputs=[...el('lessonExtensions').querySelectorAll('input[data-student-id]')],result={},used=new Set();
- if(!inputs.length)throw Error('Для SIP-занятия в группе должны быть студенты');
- for(const input of inputs){const value=input.value.trim();if(!/^[0-9]{1,8}$/.test(value))throw Error('Укажите для каждого студента SIP-номер из 1–8 цифр');if(used.has(value))throw Error('SIP-номера студентов должны быть уникальны');used.add(value);result[input.dataset.studentId]=value;}
+ if(!inputs.length)throw Error('Для голосового занятия в группе должны быть обучающиеся');
+ for(const input of inputs){const value=input.value.trim();if(!/^[0-9]{1,8}$/.test(value))throw Error('Укажите для каждого обучающегося учебный номер из 1–8 цифр');if(used.has(value))throw Error('Учебные номера обучающихся должны быть разными');used.add(value);result[input.dataset.studentId]=value;}
  return result;
 }
 // Рабочие места и адресные задания задаются поштучно: обучающийся определяется
@@ -136,7 +136,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)pollTeache
 
 function setStatus(text,error=false){el('status').textContent=text;el('status').className=error?'error':'';}
 async function api(path,method='GET',body){
- if(method==='POST'&&body&&path==='/api/v1/instructor/lessons')body={...body,practice_with_hints:el('lessonPractice').checked};
+ if(method==='POST'&&body&&path==='/api/v1/instructor/lessons')body=el('lessonAiCards')?.checked?{...body,ai_cards:true,allow_applicant_calls:!!el('lessonApplicant')?.checked,mode:'actions',allow_mode_switch:false,practice_with_hints:false,dds_profile:'utilities',prefilled_scenario_ids:[],scenario_ids:[],source_session_ids:[],category_ids:[],student_scenarios:{}}:{...body,practice_with_hints:el('lessonPractice').checked};
  if(method==='POST'&&body&&path==='/api/v1/instructor/assignments')body={...body,practice_with_hints:el('assignmentPractice').checked};
  const options={method,headers:{'X-Voice-UI':'1'}};
  if(body!==undefined){options.headers['Content-Type']='application/json';options.body=JSON.stringify(body);}
@@ -228,7 +228,9 @@ async function loadLessons(){
  const finishedCount=values.filter(v=>v.state==='finished').length,done=node('details',undefined,'lessons-done');done.append(node('summary',`Завершённые занятия (${finishedCount})`));
  const labels={planned:'Подготовлено',running:'Идёт',stopping:'Завершается — повторите завершение',finished:'Завершено'};
  for(const value of values){const card=node('article',undefined,'card'),meta=[value.difficulty&&curriculumTitle('difficulties',value.difficulty),value.dds_profile&&curriculumTitle('profiles',value.dds_profile)].filter(Boolean).join(' · ');card.append(node('h3',value.title),node('p',`${labels[value.state]} · ${value.cards_per_student===null?'До остановки преподавателем':value.cards_per_student+' карточек каждому'}${meta?' · '+meta:''} · завершено ${value.cards.filter(c=>c.status==='Завершена').length} из ${value.cards.length} выданных`));
- if(['planned','running'].includes(value.state))card.append(button('Настроить IP-телефоны',()=>configurePhones(value)));
+ // Редкие действия занятия — в «Ещё», чтобы карточка занятия не была перегружена.
+ const more=node('details',undefined,'card-more');more.append(node('summary','Ещё'));const moreActions=node('div',undefined,'card-more-actions');more.append(moreActions);
+ if(['planned','running'].includes(value.state))moreActions.append(button('Настроить IP-телефоны',()=>configurePhones(value)));
  if(value.state==='planned')card.append(button('Начать',()=>act(async()=>{await api(`/api/v1/instructor/lessons/${value.id}/start`,'POST');await loadLessons();})));
  card.append(node('p',value.practice_with_hints?'Практика с подсказками':'Самостоятельное выполнение без подсказок'));
  if(['planned','running'].includes(value.state)&&!value.practice_with_hints&&value.practice_available===false)card.append(node('p','Подсказки недоступны: не у всех сценариев занятия утверждены подсказки','muted'));
@@ -236,8 +238,10 @@ async function loadLessons(){
  if(value.state==='running'&&value.practice_with_hints){
   // «Делай как я»: преподаватель ведёт группу по шагам вводного курса.
   const guided=node('div',undefined,'guided-control');
-  const step=document.createElement('input');step.type='number';step.min='1';step.max='11';
-  step.value=value.guided_step||1;step.setAttribute('aria-label','Шаг обучения');
+  // Шаг выбирается по названию: тот же список видит обучающийся в туре.
+  const step=document.createElement('select');step.setAttribute('aria-label','Шаг обучения');
+  (window.ONBOARDING_STEPS||[]).forEach((s,i)=>step.add(new Option(`${i+1}. ${s.title}`,String(i+1))));
+  step.value=String(value.guided_step||1);
   guided.append(node('span','Показ шага группе:'),step,
    button('Показать',()=>act(async()=>{
     await api(`/api/v1/instructor/lessons/${value.id}/guided-step`,'PUT',{step:Number(step.value)});
@@ -245,13 +249,13 @@ async function loadLessons(){
    button('Убрать показ',()=>act(async()=>{
     await api(`/api/v1/instructor/lessons/${value.id}/guided-step`,'PUT',{step:null});
     await loadLessons();})));
-  if(value.guided_step)guided.append(node('span',`сейчас показывается шаг ${value.guided_step}`,'muted'));
+  if(value.guided_step)guided.append(node('span',`сейчас показывается: ${(window.ONBOARDING_STEPS||[])[value.guided_step-1]?.title||'шаг '+value.guided_step}`,'muted'));
   card.append(guided);
  }
  if(['planned','running','stopping'].includes(value.state))card.append(button('Завершить всем',()=>openLessonStop(value)));
  // Пройти то же занятие с нуля: прежние результаты остаются в отчётах.
- card.append(button('Начать заново',()=>{if(!confirm(`Начать «${value.title}» заново? Текущие карточки будут завершены, группа получит новые с нуля. Прежние результаты сохранятся в отчётах.`))return;act(async()=>{await api(`/api/v1/instructor/lessons/${value.id}/restart`,'POST');await loadLessons();await loadSessions();},'Занятие начато заново');}));
- card.append(button('Участники в реальном времени',()=>openLiveLesson(value.id,value.title)),button('Отчёт и участники',()=>act(()=>showLessonReport(value.id))));(value.state==='finished'?done:el('lessons')).append(card);}
+ moreActions.append(button('Начать заново',()=>{if(!confirm(`Начать «${value.title}» заново? Текущие карточки будут завершены, группа получит новые с нуля. Прежние результаты сохранятся в отчётах.`))return;act(async()=>{await api(`/api/v1/instructor/lessons/${value.id}/restart`,'POST');await loadLessons();await loadSessions();},'Занятие начато заново');}));
+ card.append(button('Участники в реальном времени',()=>openLiveLesson(value.id,value.title)),button('Отчёт и участники',()=>act(()=>showLessonReport(value.id))),more);(value.state==='finished'?done:el('lessons')).append(card);}
  if(finishedCount)el('lessons').append(done);
 }
 el('lessonMode').onchange=()=>{refreshLessonChoices();const mixed=el('lessonMode').value==='mixed';el('lessonModeSwitch').disabled=!mixed;if(!mixed)el('lessonModeSwitch').checked=false;};el('lessonModeSwitch').disabled=el('lessonMode').value!=='mixed';
@@ -377,12 +381,14 @@ async function loadTeacher(){
  try{routingServices=(await api('/api/v1/instructor/routing/catalog')).services||[];}catch{routingServices=[];}
  const categories=await api('/api/v1/instructor/categories');
  for(const c of categories)el('lessonCategories').add(new Option(c.title,c.id));
- refreshLessonChoices();await Promise.all([loadAssignments(),loadSessions(),loadLessons()]);teacherReady=true;updateLessonSummary();
+ refreshLessonChoices();await Promise.all([loadAssignments(),loadSessions(),loadLessons()]);teacherReady=true;updateLessonSummary();loadAiPool();setInterval(loadAiPool,30000);
 }
 // Кабинет ученика: сначала то, что можно делать сейчас, затем свободная
 // тренировка; завершённые занятия свёрнуты, чтобы не теряться в длинном списке.
 async function loadStudent(){
- const assignments=await api('/api/v1/student/assignments'),lessons=await api('/api/v1/student/lessons');
+ const assignments=await api('/api/v1/student/assignments'),allLessons=await api('/api/v1/student/lessons');
+ let aiPractice={available:false};try{aiPractice=await api('/api/v1/student/ai-practice');}catch{}
+ const practice=allLessons.find(l=>l.self_practice),lessons=allLessons.filter(l=>!l.self_practice);
  try{curriculum=await api('/api/v1/student/curriculum');}catch{curriculum=fallbackCurriculum;}
  const states={planned:'Ожидание старта',running:'Идёт',stopping:'Завершается',finished:'Завершено'};
  const meta=item=>[curriculumTitle('difficulties',item.difficulty||'basic'),curriculumTitle('profiles',item.dds_profile||'general')].join(' · ');
@@ -396,7 +402,12 @@ async function loadStudent(){
   return card;};
  const section=(title,hint,items)=>{const box=node('section',undefined,'student-section');box.append(node('h2',title));if(hint)box.append(node('p',hint,'muted'));const grid=node('div',undefined,'cards student-grid');items.forEach(i=>grid.append(i));box.append(grid);return box;};
  const container=el('studentAssignments');container.replaceChildren();
- if(!assignments.length&&!lessons.length){empty(container,'Активных заданий пока нет');return;}
+ if(aiPractice.available){const card=node('article',undefined,'card card-featured card-ai');
+  card.append(node('h3','Новая карточка от ИИ'),node('p','Искусственный интеллект сам сформирует для вас учебную карточку ДДС, оценит ваши действия и даст рекомендации. Преподаватель не нужен.'));
+  card.append(node('p',practice?`Выполнено карточек ИИ: ${practice.completed}`:(aiPractice.ready?`Готово карточек: ${aiPractice.ready}`:'ИИ готовит карточки'),'muted'));
+  const go=node('a','Получить карточку от ИИ','button primary');go.href='/?ai=1';card.append(go);
+  container.append(section('Тренировка с ИИ','',[card]));}
+ if(!assignments.length&&!lessons.length){if(!aiPractice.available)empty(container,'Активных заданий пока нет');return;}
  if(active.length)container.append(section('Идут сейчас','Занятия группы, которые ведёт преподаватель.',active.map(l=>lessonCard(l,true))));
  else container.append(section('Идут сейчас','Сейчас нет запущенных занятий. Преподаватель запустит занятие, и оно появится здесь.',[]));
  if(assignments.length)container.append(section('Свободная тренировка','Задания для самостоятельной практики в рабочем месте.',assignments.map(item=>{const card=node('article',undefined,'card');
@@ -416,14 +427,29 @@ el('refreshSessions').addEventListener('click',()=>act(async()=>{await loadSessi
 
 act(async()=>{me=await api('/api/v1/auth/me');el('identity').textContent=`${me.display_name} · ${roleNames[me.role]||me.role}`;await window.trainerMfa?.render(me);if(me.mfa?.required&&!me.mfa?.enabled)return;const panel=el(`${me.role}Panel`);if(!panel){throw Error('Для этой роли кабинет не настроен');}panel.hidden=false;if(me.role==='admin')await loadAdmin();else if(me.role==='teacher')await loadTeacher();else await loadStudent();});
 // Сводка занятия: что получит каждый обучающийся при текущих настройках.
+async function loadAiPool(){
+ const target=el('aiPoolStatus');if(!target||document.hidden)return;
+ try{const p=await api('/api/v1/instructor/ai-pool');if(!p.enabled){target.textContent='Запас карточек ИИ отключён администратором.';return;}
+  const ready=Object.values(p.ready||{}).reduce((a,b)=>a+b,0);
+  target.textContent=`Запас карточек ИИ: готово ${ready}, выдано ${p.issued}`+(p.generating?` · сейчас ИИ формирует: ${p.generating.topic}`:'')+(p.recent?.length?` · последние: ${p.recent.slice(0,3).map(r=>/[а-яё]/.test(r.title)?r.title:r.title.charAt(0)+r.title.slice(1).toLowerCase().replace(/ддс/g,'ДДС')).join('; ')}`:'');}
+ catch{target.textContent='';}
+}
+function updateLessonAiCards(){
+ const ai=!!el('lessonAiCards')?.checked;
+ // Источники карточек выбирает ИИ: шаги подбора сценариев скрываются.
+ const step=el('lessonCategories')?.closest('fieldset');if(step)step.hidden=ai;
+ if(el('lessonHowNumber'))el('lessonHowNumber').textContent=ai?'2':'3';
+ if(el('lessonApplicantLabel'))el('lessonApplicantLabel').hidden=!ai;
+ if(el('lessonPractice'))el('lessonPractice').closest('label').style.display=ai?'none':'';
+}
 function updateLessonSummary(){
- const target=el('lessonSummary');if(!target)return;const group=currentLessonGroup(),mode=el('lessonMode').value;
+ const target=el('lessonSummary');if(!target)return;updateLessonAiCards();const group=currentLessonGroup(),mode=el('lessonMode').value;
  const people=group?group.member_ids.length:0,count=el('lessonUnlimited').checked?'карточки до остановки преподавателем':`${el('lessonCount').value||0} карт.`;
  const pool=mode==='actions'?el('lessonGenerated').selectedOptions.length+el('lessonSources').selectedOptions.length:mode==='fill'?el('lessonScenarios').selectedOptions.length:el('lessonScenarios').selectedOptions.length+el('lessonGenerated').selectedOptions.length+el('lessonSources').selectedOptions.length;
  const filters=[el('lessonDifficulty')?.value&&el('lessonDifficulty').selectedOptions[0].text,el('lessonProfile')?.value&&el('lessonProfile').selectedOptions[0].text,el('lessonCategories').selectedOptions.length&&`категорий: ${el('lessonCategories').selectedOptions.length}`].filter(Boolean);
  const modes={actions:'работа ДДС с готовыми карточками',fill:'приём вызова 112 и заполнение карточки',mixed:'смешанное занятие'};
  const parts=[group?`Группа «${group.title}»: ${people} обучающ.`:'Выберите группу',`каждому — ${count}, одновременно ${el('lessonParallel').value||1}`,modes[mode],
-  pool?`выбрано источников: ${pool}`:filters.length?`подбор по фильтрам (${filters.join(', ')})`:'выберите карточки или фильтры',
+  el('lessonAiCards')?.checked?'карточки формирует ИИ — каждому своя новая'+(el('lessonApplicant')?.checked?', звонок заявителю разрешён':''):pool?`выбрано источников: ${pool}`:filters.length?`подбор по фильтрам (${filters.join(', ')})`:'выберите карточки или фильтры',
   el('lessonTransport')?.value==='sip'?'канал: IP-телефон':'канал: текст',`норматив реакции ${el('lessonNorm').value||30} с`,
   el('lessonPass').value!==''?`порог зачёта ${el('lessonPass').value} б.`:'порог — по правилам сценария',el('lessonPractice')?.checked?'с подсказками':'без подсказок'];
  target.textContent='Итог: '+parts.join(' · ')+'.';target.classList.toggle('warning',!group||!people);

@@ -51,6 +51,12 @@ services:
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       PHONE_LLM_MODEL: ${PHONE_LLM_MODEL:-qwen3:4b-instruct-2507-q4_K_M}
       PHONE_LLM_THREADS: ${PHONE_LLM_THREADS:-6}
+      # Модель авторинга может совпадать с телефонной: одна резидентная модель на CPU.
+      LLM_MODEL: ${LLM_MODEL:-}
+      # ИИ заранее формирует карточки ДДС и выдаёт их обучающимся без преподавателя.
+      AI_POOL_TARGET: ${AI_POOL_TARGET:-4}
+      AI_POOL_PROFILES: ${AI_POOL_PROFILES:-utilities}
+      AI_POOL_DIFFICULTY: ${AI_POOL_DIFFICULTY:-basic}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
     volumes:

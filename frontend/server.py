@@ -107,11 +107,14 @@ async def gateway(path, method='GET', body=None):
     return r.json()
 
 async def dialogue(path, method='GET', body=None, params=None):
+    generating = method == 'POST' and (path == 'instructor/generations' or
+                                       path.startswith('instructor/generations/') and path.endswith('/revise'))
+    timeout = 960 if generating else 240 if path.startswith('instructor/materials') else 65
     try:
         r = await app.state.dialogue_client.request(method, DIALOGUE + '/api/v1/' + path,
                                                     headers={'Authorization': 'Bearer ' + DIALOGUE_TOKEN,
                                                              'X-User-Session': USER_SESSION.get()},
-                                                    json=body, params=params, timeout=240 if path.startswith('instructor/materials') else 65)
+                                                    json=body, params=params, timeout=timeout)
     except httpx.HTTPError:
         raise HTTPException(503, 'Сервис сценариев недоступен')
     if r.status_code >= 400:

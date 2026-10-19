@@ -88,6 +88,12 @@ reacquires the session lease for its final reload/persist so concurrent feedback
 not overwritten. A
 route added beneath an allowed prefix is not automatically allowed.
 
+Exact POST generation creation and UUID `/revise` routes also use their own
+`generation-teacher` lease instead of the global HTTP guard. Create, revise and
+approve acquire that same teacher lease before reading or writing drafts, so a
+long model request does not block logins or unrelated teachers. Approval keeps
+the additional global guard for its short publication transaction.
+
 ## Start and inspect
 
 On an empty PostgreSQL database, bootstrap one Backend first. Router construction

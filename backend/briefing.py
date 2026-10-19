@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import asyncio
 import re
 from datetime import datetime, timezone
@@ -26,11 +27,12 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 import llm
 import incident_meaning
 import report_facts
+import phone_directory
 from text_facts import asserted, incident_asserted, object_named, spoken_numbers_to_digits
 from teacher_guidance import examples as guidance_examples, initialize as initialize_guidance
 from materials import material_context
@@ -56,9 +58,22 @@ Do not give medical/operational orders or grade the student. Unknown casualties 
 FEMALE_VOICE, MALE_VOICE, CREW_VOICE = 'baya', 'aidar', 'eugene'
 
 
+class Dial(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    message_id: UUID
+    number: str = Field(min_length=2, max_length=40)
+    transport: Literal['text', 'sip'] = 'sip'
+
+    @field_validator('number')
+    @classmethod
+    def valid_number(cls, value):
+        return phone_directory.PhoneContact.valid_number(value)
+
+
 class StartBriefing(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
     message_id: UUID
+    contact_id: str = Field(default='', max_length=64)
     crew_id: str = Field(default='', max_length=160)
     service: str = Field(min_length=1, max_length=160)
     destination: str = Field('', max_length=160)
@@ -272,7 +287,8 @@ async def check_live(transcript: str, card: dict, previous: dict | None = None) 
     read once per new transcript within the shared phone-turn budget.
     """
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + llm.VOICE_REPLY_TIMEOUT_SECONDS
+    # The reply needs its own time: checks get at most CHECK_SECONDS of the turn.
+    deadline = loop.time() + min(CHECK_SECONDS, llm.VOICE_REPLY_TIMEOUT_SECONDS)
     semantic = (previous or {}).get('semantic_evidence')
     fields = (previous or {}).get('field_evidence')
     card_reference = report_facts.reference(card)
@@ -353,7 +369,8 @@ def progress_reference(value: dict, prior: list[dict], service: str, crew_id: st
     if crew_id or value.get('exercise_mode') != 'actions':
         return None
     earlier = [item for item in prior if item.get('state') == 'accepted' and
-               item.get('service') == service and not item.get('crew_id')]
+               item.get('service') == service and not item.get('crew_id') and
+               item.get('contact_role', 'superior') == 'superior']
     if not earlier:
         return None
     after = max(item.get('finished_at', '') for item in earlier)
@@ -382,15 +399,30 @@ def check_progress(transcript: str, reference: dict) -> dict:
             'note': 'Повторный доклад сверяется с новой вводной, без повторного опроса карточки.'}
 
 
+PREFILL_WAIT_SECONDS = 15
+CHECK_SECONDS = 10
+
+# Ответ в роли, если модель не успела ответить на вопрос диспетчера.
+ROLE_REPLIES = {
+    'crew_leader': 'Принял, выезжаем. Подробности доложу с места.',
+    ('superior', 'initial'): 'Доклад принял. Держите на контроле и докладывайте о ходе работ.',
+    ('superior', 'progress'): 'Принял. Доложите, когда работы будут завершены.',
+    'superior': 'Принял. Держите меня в курсе.',
+    'response_chief': 'Принял. Сведений об этом пока нет, уточню и сообщу.',
+}
+
+
 async def duty_reply(history: list[dict], card: dict, service: str, missing: list[str],
                      corrections: list[dict] | None = None,
                      materials: list[dict] | None = None, *,
                      transcript: str | None = None, report: dict | None = None,
                      timeout_seconds: float | None = None, purpose: str = 'initial',
-                     progress: dict | None = None) -> str:
+                     progress: dict | None = None, counterpart: dict | None = None) -> str:
     """Реплика дежурного. Отказ провайдера не ломает занятие."""
     transcript = transcript if transcript is not None else join_speech(
         m['content'] for m in history if m.get('role') == 'user')
+    if counterpart and purpose == 'coordination':
+        return await phone_directory.reply(history, card, counterpart, report or {}, timeout_seconds)
     fallback = clarification(missing, transcript)
     if purpose == 'progress':
         fallback = ('Уточните по последнему докладу: ' + ', '.join(missing) + '.'
@@ -408,6 +440,11 @@ async def duty_reply(history: list[dict], card: dict, service: str, missing: lis
     question = '?' in last or re.search(r'\b(?:почему|зачем|когда|сколько|можете|расскажи|уточни)', last)
     if not question or ('Дом' in missing and len(set(HOUSE_NUMBER.findall(report_text(transcript)))) > 1):
         return fallback
+    # A question the model could not answer in time gets a reply in the role,
+    # not a bare «Информация принята» that ignores what was asked.
+    if counterpart and not missing:
+        fallback = (ROLE_REPLIES.get((counterpart.get('role'), purpose))
+                    or ROLE_REPLIES.get(counterpart.get('role'), fallback))
     budget = llm.VOICE_REPLY_TIMEOUT_SECONDS if timeout_seconds is None else max(0, timeout_seconds)
     if budget <= 0:
         return fallback
@@ -420,10 +457,16 @@ async def duty_reply(history: list[dict], card: dict, service: str, missing: lis
                'уже_переданные_сведения': [
                    {'поле': item['label'], 'значение': card.get(item['id'])}
                    for item in (report or check(transcript, card))['checks'] if item['passed']]}
+    # Phone context must stay small: the CPU reads every character before replying,
+    # and an oversized context is refused outright (no reply at all).
+    if counterpart:
+        context['собеседник'] = {'имя': counterpart.get('name', ''), 'роль': phone_directory.ROLES[counterpart['role']],
+                                 'знает': counterpart.get('facts') or []}
     if corrections:
-        context['исправления_преподавателя'] = corrections[:4]
+        context['исправления_преподавателя'] = corrections[:2]
     if materials:
-        context['методические_материалы'] = materials
+        context['методические_материалы'] = [{'документ': item.get('title', ''), 'текст': str(item.get('excerpt', ''))[:300]}
+                                             for item in materials[:2]]
     if purpose == 'progress':
         context['цель_звонка'] = 'Повторный доклад руководителю о ходе или результате работ'
         context['последний_доклад_бригады'] = (progress or {}).get('text', '')
@@ -434,14 +477,20 @@ async def duty_reply(history: list[dict], card: dict, service: str, missing: lis
                  'Не объявляй доклад принятым: это делает система проверки.')
     if purpose == 'progress':
         directive += ' Это повторный звонок. Не проси заново назвать город, адрес и тип происшествия.'
+    if counterpart:
+        # A directory contact: the same system turn was prepared while the call
+        # connected, so only the new question is read — seconds instead of a cold
+        # read of the whole context. Acceptance and counter-questions stay filtered below.
+        messages = [phone_directory._system(card, counterpart), *history[-8:]]
+    else:
+        messages = [{'role': 'system', 'content': SYSTEM_PROMPT},
+                    {'role': 'user', 'content': json.dumps(context, ensure_ascii=False, separators=(',', ':'))},
+                    *history[-6:],
+                    {'role': 'user', 'content': directive}]
     try:
-        text = await asyncio.wait_for(llm.reply([
-            {'role': 'system', 'content': SYSTEM_PROMPT},
-            {'role': 'user', 'content': json.dumps(context, ensure_ascii=False, separators=(',', ':'))},
-            *history[-6:],
-            {'role': 'user', 'content': directive}], max_tokens=120),
-            timeout=budget)
-    except Exception:
+        text = await asyncio.wait_for(llm.reply(messages, max_tokens=120), timeout=budget)
+    except Exception as error:
+        logging.getLogger('briefing').info('duty reply fallback: %s', type(error).__name__)
         return fallback
     text = re.sub(r'<think>.*?</think>', '', str(text or ''), flags=re.S)
     text = re.sub(r'\s+', ' ', text.replace('*', '').replace('`', '')).strip(' «»"')
@@ -450,6 +499,9 @@ async def duty_reply(history: list[dict], card: dict, service: str, missing: lis
     # The model may answer free questions, but cannot select mandatory fields,
     # reopen accepted facts, or announce completion on behalf of the evaluator.
     if re.search(r'\?|\b(?:уточните|назовите|подтвердите|сообщите|какой|какая|какие|где|когда|сколько)\b', text, re.I):
+        return fallback
+    # The model invents clock times («доложить в 14:30»); the card has none.
+    if counterpart and re.search(r'\b\d{1,2}[:.]\d{2}\b', text):
         return fallback
     if missing and re.search(r'\b(?:принят[аоы]?|принял|подтверждаю)\b', text, re.I):
         return fallback
@@ -518,9 +570,42 @@ def router(store, accounts, authorize, learning=None, voice=None):
                     else briefing['messages'])
         spoken = join_speech(m['content'] for m in messages if m['role'] == 'user')
         previous = state.get('duty_report') or briefing.get('report') or {}
-        report = (check_progress(spoken, briefing['progress_reference']) if briefing.get('purpose') == 'progress'
+        report = (phone_directory.check_contact(spoken, contact_of(briefing)) if briefing.get('purpose') == 'coordination'
+                  else check_progress(spoken, briefing['progress_reference']) if briefing.get('purpose') == 'progress'
                   else check(spoken, card, previous.get('semantic_evidence'), previous.get('field_evidence')))
         return {**briefing, 'messages': messages, 'report': report}
+
+    def directory(value):
+        scenario = store.load(value['id']).get('scenario') or {}
+        return phone_directory.contacts(scenario, value)
+
+    def contact_of(briefing):
+        row = store.db.execute('SELECT body FROM workspace WHERE id=?', (briefing['session_id'],)).fetchone()
+        value = json.loads(row[0]) if row else {}
+        contact = next((item for item in directory(value) if item['id'] == briefing.get('contact_id')), {})
+        if contact:
+            contact = {**contact, 'current_reports': [event['detail'].get('text', '') for event in value.get('events', [])
+                                                     if event.get('type') == 'situation.update'],
+                       'service_state': value.get('service_states', {}).get(value.get('owner_service'), {}),
+                       'card_text': ' '.join(str(value.get('card', {}).get(key) or '')
+                                             for key in ('incident_type', 'description', 'address_note'))}
+        return contact
+
+    @api.get('/{sid}/phone/contacts')
+    async def phone_contacts(sid: UUID, user=Depends(student)):
+        value = card_of(sid, user)
+        return [phone_directory.public_contact(item, value) for item in directory(value)]
+
+    @api.post('/{sid}/phone/dial', status_code=201)
+    async def dial(sid: UUID, body: Dial, user=Depends(student)):
+        value = card_of(sid, user)
+        contact = next((item for item in directory(value)
+                        if phone_directory.number(item['number']) == phone_directory.number(body.number)), None)
+        if not contact:
+            raise HTTPException(422, 'Номер отсутствует в учебном справочнике этой ДДС')
+        return await start(sid, StartBriefing(message_id=body.message_id, contact_id=contact['id'],
+                                            service=value['owner_service'], phone=contact['number'],
+                                            transport=body.transport), user)
 
     @api.get('/{sid}/briefings')
     async def briefings(sid: UUID, user=Depends(student)):
@@ -532,11 +617,24 @@ def router(store, accounts, authorize, learning=None, voice=None):
     async def start(sid: UUID, body: StartBriefing, user=Depends(student)):
         value = card_of(sid, user)
         editable(value)
+        available = directory(value)
+        contact = next((item for item in available if item['id'] == body.contact_id), None) if body.contact_id else None
+        if body.contact_id and not contact:
+            raise HTTPException(422, 'Контакт отсутствует в справочнике этой ДДС')
+        if contact:
+            if body.service != value.get('owner_service') or (body.phone and phone_directory.number(body.phone) != phone_directory.number(contact['number'])):
+                raise HTTPException(422, 'Номер и служба не соответствуют выбранному контакту')
+            body = body.model_copy(update={'phone': contact['number'], 'destination': contact['name'],
+                                         'crew_id': contact.get('crew_id', '') if contact['role'] == 'crew_leader' else ''})
+            if contact.get('crew_id') and contact['crew_id'] != (value.get('assigned_crew') or {}).get('id'):
+                raise HTTPException(409, 'Сначала назначьте эту бригаду')
+        elif (store.load(value['id']).get('scenario') or {}).get('phone_contacts'):
+            raise HTTPException(422, 'Выберите контакт из справочника ДДС')
         if not value.get('text_input_allowed', True) and body.transport != 'sip':
             raise HTTPException(409, 'Преподаватель отключил текстовый ввод. Используйте IP-телефон.')
         existing = next((item for item in listing(sid, user) if item['message_id'] == str(body.message_id)), None)
         if existing:
-            if existing['service'] != body.service or existing.get('crew_id', '') != body.crew_id or existing['phone'] != body.phone:
+            if existing['service'] != body.service or existing.get('crew_id', '') != body.crew_id or existing['phone'] != body.phone or existing.get('contact_id', '') != body.contact_id:
                 raise HTTPException(409, 'Идентификатор доклада уже использован')
             return existing
         if body.service not in value['card']['services']:
@@ -546,32 +644,37 @@ def router(store, accounts, authorize, learning=None, voice=None):
             raise HTTPException(422, 'Можно позвонить только назначенной бригаде своей ДДС')
         if value.get('exercise_mode') == 'actions':
             listed_phone = crew.get('phone', '') if body.crew_id else value['card'].get('service_phones', {}).get(body.service, '')
-            if not listed_phone:
+            if not listed_phone and not contact:
                 raise HTTPException(409, 'У этой службы нет номера телефона для связи')
-            if body.phone != listed_phone:
+            if not contact and body.phone != listed_phone:
                 raise HTTPException(422, 'Укажите номер службы из входящей карточки')
-            if value.get('sip_extension') and body.transport != 'sip':
-                raise HTTPException(409, 'Для этого рабочего места доклад выполняется через IP-телефон')
         if len(listing(sid, user)) >= MAX_BRIEFINGS:
             raise HTTPException(409, f'Достигнут лимит {MAX_BRIEFINGS} докладов на карточку')
-        progress = progress_reference(value, listing(sid, user), body.service, body.crew_id)
+        progress = progress_reference(value, listing(sid, user), body.service, body.crew_id) if not contact or contact['role'] == 'superior' else None
+        coordination = bool(contact and contact['role'] not in ('superior', 'crew_leader'))
         # Собеседник: руководитель назначенной бригады либо вышестоящий начальник.
         greeting = (crew.get('leader') or 'Старший бригады') if body.crew_id else f'{SUPERIOR_TITLE}, {body.service}'
+        if contact:
+            greeting = contact['name'] + ' · ' + phone_directory.ROLES[contact['role']]
         opening = (f'{greeting}. Слушаю доклад о ходе работ.' if progress else f'{greeting}. Слушаю вас.')
         identifier = str(uuid4())
         briefing = {'id': identifier, 'session_id': str(sid), 'student_id': user['id'],
+                    'contact_id': body.contact_id, 'contact_role': contact['role'] if contact else ('crew_leader' if body.crew_id else 'superior'),
                     'crew_id': body.crew_id,
-                    'recipient_hint': (crew.get('leader') or 'Старший бригады') if body.crew_id else SUPERIOR_TITLE,
+                    'recipient_hint': contact['name'] if contact else (crew.get('leader') or 'Старший бригады') if body.crew_id else SUPERIOR_TITLE,
                     'caller_name': greeting,
                     'message_id': str(body.message_id), 'service': body.service,
                     'destination': body.destination, 'phone': body.phone,
                     'transport': body.transport, 'call_id': None,
                     'state': 'open', 'started_at': now(),
-                    'voice': CREW_VOICE if body.crew_id else duty_voice(body.service),
+                    'voice': (CREW_VOICE if contact and contact['role'] in ('crew_leader', 'crew_specialist')
+                              else FEMALE_VOICE if contact and contact['role'] in ('organization_head', 'applicant')
+                              else MALE_VOICE if contact and contact['role'] == 'response_chief'
+                              else CREW_VOICE if body.crew_id else duty_voice(body.service)),
                     'messages': [] if body.transport == 'sip' else [{'role': 'assistant', 'content': opening, 'at': now()}],
-                    'purpose': 'progress' if progress else 'initial',
+                    'purpose': 'coordination' if coordination else 'progress' if progress else 'initial',
                     'progress_reference': progress,
-                    'report': check_progress('', progress) if progress else check('', reference_card(value)),
+                    'report': phone_directory.check_contact('', contact) if coordination else check_progress('', progress) if progress else check('', reference_card(value)),
                     'simulated': True}
         if body.transport == 'sip':
             if not value.get('sip_extension'):
@@ -580,6 +683,7 @@ def router(store, accounts, authorize, learning=None, voice=None):
             # диалога по ним понимает, что играет дежурного, а не заявителя.
             store.save(identifier, {'step': 0, 'seq': 0, 'messages': [], 'replies': {}, 'ended': False,
                                     'duty': {'service': body.service, 'greeting': greeting,
+                                             'contact': contact_of(briefing),
                                              'card': reference_card(value),
                                              'known_card': known_card(value),
                                              'purpose': briefing['purpose'],
@@ -597,6 +701,15 @@ def router(store, accounts, authorize, learning=None, voice=None):
             briefing['call_id'] = result.get('call_id')
         with store.db:
             save(briefing)
+        if contact:
+            # The greeting carries no question; warm the dialogue context now for
+            # every directory contact, the shift chief and crew leader included.
+            task = phone_directory.prefill(known_card(value), contact_of(briefing), f'{greeting}. Слушаю вас.')
+            if task:
+                # The contact "picks up" once the role is read (as the phone rings):
+                # otherwise the first question reads the same text in parallel and
+                # both requests share the CPU until the reply deadline.
+                await asyncio.wait({task}, timeout=PREFILL_WAIT_SECONDS)
         return briefing
 
     @api.post('/{sid}/briefings/{bid}/recover')
@@ -666,7 +779,9 @@ def router(store, accounts, authorize, learning=None, voice=None):
             raise HTTPException(409, 'Доклад уже завершён')
         if briefing.get('transport') == 'sip':
             raise HTTPException(409, 'Доклад идёт голосом: говорите по учебному телефону')
-        if not value.get('text_input_allowed', True) or (value.get('exercise_mode') == 'actions' and value.get('sip_extension')):
+        # Учебный номер не запрещает текст: без гарнитуры разговор идёт с клавиатуры.
+        # Голос обязателен, только если преподаватель отключил текстовый ввод.
+        if not value.get('text_input_allowed', True):
             raise HTTPException(409, 'Для этого рабочего места используйте IP-телефон')
         for message in briefing['messages']:
             if message.get('message_id') == str(body.message_id):
@@ -677,7 +792,8 @@ def router(store, accounts, authorize, learning=None, voice=None):
                                      'message_id': str(body.message_id)})
         spoken = join_speech(m['content'] for m in briefing['messages'] if m['role'] == 'user')
         started = asyncio.get_running_loop().time()
-        briefing['report'] = (check_progress(spoken, briefing['progress_reference']) if briefing.get('purpose') == 'progress'
+        briefing['report'] = (phone_directory.check_contact(spoken, contact_of(briefing)) if briefing.get('purpose') == 'coordination'
+                              else check_progress(spoken, briefing['progress_reference']) if briefing.get('purpose') == 'progress'
                               else await check_live(spoken, reference_card(value), briefing.get('report')))
         reply = await duty_reply([{'role': m['role'], 'content': m['content']} for m in briefing['messages']],
                                  known_card(value),
@@ -687,7 +803,7 @@ def router(store, accounts, authorize, learning=None, voice=None):
                                                   value.get('group_id'), query=value['card'].get('incident_type', '') + ' ' + value['card'].get('description', '')),
                                  transcript=spoken, report=briefing['report'],
                                  timeout_seconds=llm.VOICE_REPLY_TIMEOUT_SECONDS - (asyncio.get_running_loop().time() - started),
-                                 purpose=briefing.get('purpose', 'initial'), progress=briefing.get('progress_reference'))
+                                 purpose=briefing.get('purpose', 'initial'), progress=briefing.get('progress_reference'), counterpart=contact_of(briefing))
         briefing['messages'].append({'role': 'assistant', 'content': reply, 'at': now()})
         with store.db:
             save(briefing)
@@ -723,7 +839,8 @@ def router(store, accounts, authorize, learning=None, voice=None):
                   'purpose': briefing.get('purpose', 'initial'),
                   # Бригада или вышестоящий начальник: разные адресаты доклада.
                   'crew_id': briefing.get('crew_id', ''),
-                  'counterpart': 'crew' if briefing.get('crew_id') else 'superior'}
+                  'contact_id': briefing.get('contact_id', ''),
+                  'counterpart': 'crew' if briefing.get('contact_role') == 'crew_leader' else briefing.get('contact_role', 'superior')}
         with store.db:
             row = store.db.execute('SELECT body FROM workspace WHERE id=?', (str(sid),)).fetchone()
             card = json.loads(row[0])

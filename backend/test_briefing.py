@@ -265,3 +265,19 @@ def test_spoken_numbers_next_to_punctuation_count():
     card = {'street': 'Учебная', 'house': '12', 'incident_type': 'Прорыв трубы'}
     assert check('улица Учебная, дом двенадцать, прорыв трубы.', card)['complete']
     assert not check('улица Учебная, дом двенадцать. Уточнение: дом тринадцать.', card)['complete']
+
+
+def test_absence_incident_and_house_before_it_are_recognised():
+    # «Отсутствует освещение» — состояние, как «Нет доступа»; запятая отделяет его от номера дома.
+    card = {'city': 'Москва', 'street': 'Ленинградская', 'house': '12', 'incident_type': 'Отсутствует освещение',
+            'description': 'Отсутствует освещение на лестничной клетке.'}
+    assert check('Докладываю: Ленинградская, дом 12, отсутствует освещение. Бригада 1 направлена.', card)['missing'] == []
+    assert 'Тип происшествия' in check('Ленинградская, дом 12, освещение есть.', card)['missing']
+    assert 'Дом' in check('Ленинградская, дом 12 отсутствует, освещения нет.', card)['missing']
+
+
+def test_incident_paraphrase_with_the_same_root_is_recognised():
+    from text_facts import incident_asserted
+    incident = 'Переполнение контейнерной площадки'
+    assert incident_asserted('Контейнерная площадка переполнена, нужен вывоз.', incident)
+    assert not incident_asserted('Контейнерная площадка не переполнена.', incident)

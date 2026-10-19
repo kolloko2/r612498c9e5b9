@@ -1,0 +1,73 @@
+@page { size: A4; }
+:root { --ink: #1d2a33; --muted: #5d6b75; --line: #d8dee3; --soft: #f3f6f8; --accent: #1f6f8b; --ai: #1f7a4d; --warn: #a8571a; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: 'Golos Text', 'Segoe UI', Arial, sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.55; }
+main, .toc { padding: 0 18mm; }
+.i { width: 1.15em; height: 1.15em; vertical-align: -0.2em; color: var(--accent); }
+
+/* Обложка */
+.cover { height: 263mm; padding: 22mm 18mm 0; display: flex; flex-direction: column; page-break-after: always; }
+.brand { font-weight: 700; letter-spacing: .32em; font-size: 13pt; color: var(--ink); border-bottom: 2px solid var(--ink); padding-bottom: 5mm; }
+.cover-body { margin-top: 48mm; }
+.cover-icon { width: 22mm; height: 22mm; color: var(--accent); stroke-width: 1.3; }
+.kicker { margin: 8mm 0 2mm; color: var(--muted); font-size: 11pt; }
+.cover h1 { font-size: 30pt; line-height: 1.15; margin: 0 0 6mm; font-weight: 700; max-width: 150mm; }
+.lead { font-size: 12.5pt; color: var(--muted); max-width: 140mm; margin: 0; }
+.cover-foot { margin-top: auto; padding-bottom: 6mm; display: flex; justify-content: space-between; color: var(--muted); font-size: 10pt; border-top: 1px solid var(--line); padding-top: 4mm; }
+
+/* Содержание */
+.toc { page-break-after: always; }
+.toc h2 { border: 0; margin-top: 0; }
+.toc ol { padding-left: 0; list-style: none; counter-reset: t; }
+.toc li { counter-increment: t; padding: 2.2mm 0; border-bottom: 1px solid var(--line); font-size: 11.5pt; }
+.toc li::before { content: counter(t, decimal-leading-zero); color: var(--accent); font-weight: 600; margin-right: 5mm; }
+.toc a { color: var(--ink); text-decoration: none; }
+
+/* Текст */
+h2 { font-size: 17pt; margin: 9mm 0 3mm; padding-top: 2mm; font-weight: 700; page-break-after: avoid; break-before: auto; }
+main > h2:not(:first-child) { break-before: page; }
+h3 { font-size: 12pt; margin: 6mm 0 2mm; font-weight: 600; page-break-after: avoid; }
+p { margin: 0 0 3mm; }
+a { color: var(--accent); }
+code { font-family: Consolas, 'Courier New', monospace; font-size: 9.5pt; background: var(--soft); padding: 0 1.2mm; border-radius: 2px; }
+ul, ol { margin: 0 0 3.5mm; padding-left: 6mm; }
+li { margin: 1mm 0; }
+main > ol { counter-reset: step; list-style: none; padding-left: 0; }
+main > ol > li { counter-increment: step; position: relative; padding-left: 9mm; margin: 2mm 0; }
+main > ol > li::before { content: counter(step); position: absolute; left: 0; top: .1em; width: 6mm; height: 6mm; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 8.5pt; font-weight: 600; text-align: center; line-height: 6mm; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0 5mm; font-size: 9.8pt; page-break-inside: avoid; }
+th { text-align: left; font-weight: 600; background: var(--soft); border-bottom: 1.5px solid var(--ink); padding: 2mm 2.5mm; }
+td { border-bottom: 1px solid var(--line); padding: 2mm 2.5mm; vertical-align: top; }
+
+/* Скриншоты с указателями */
+figure { margin: 3mm 0 6mm; page-break-inside: avoid; }
+.shot { position: relative; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.shot img { display: block; width: 100%; }
+.frame { position: absolute; border: 2px solid #e8590c; border-radius: 3px; }
+.pin { position: absolute; transform: translate(-45%, -45%); width: 7mm; height: 7mm; border-radius: 50%; background: #e8590c; color: #fff;
+  font-weight: 700; font-size: 9pt; text-align: center; line-height: 7mm; box-shadow: 0 0 0 1.5px #fff; }
+figcaption { color: var(--muted); font-size: 9pt; margin-top: 1.5mm; }
+.legend { list-style: none; padding: 0; margin: 2mm 0 0; }
+.legend li { display: flex; gap: 2.5mm; margin: 1.2mm 0; font-size: 9.8pt; }
+.legend .num { flex: 0 0 5.5mm; height: 5.5mm; border-radius: 50%; background: #e8590c; color: #fff; font-weight: 700; font-size: 8pt; text-align: center; line-height: 5.5mm; }
+
+/* Выделенные абзацы */
+.note { display: flex; gap: 3mm; padding: 3mm 4mm; margin: 3mm 0 5mm; border-left: 3px solid var(--accent); background: #eef5f8; page-break-inside: avoid; }
+.note.warn { border-color: var(--warn); background: #fbf2ea; }
+.note.ai { border-color: var(--ai); background: #ecf6f0; }
+.ni { flex: 0 0 6mm; width: 6mm; height: 6mm; color: var(--accent); margin-top: .5mm; }
+.note.warn .ni { color: var(--warn); } .note.ai .ni { color: var(--ai); }
+.note p { margin: 1mm 0 0; }
+
+/* Плитки — короткий обзор на одной странице */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin: 3mm 0 6mm; }
+.tile { border: 1px solid var(--line); border-radius: 3px; padding: 3.5mm; page-break-inside: avoid; }
+.tile b { display: block; margin: 1.5mm 0 1mm; }
+.tile span { color: var(--muted); font-size: 9.5pt; }
+.ti { width: 7mm; height: 7mm; color: var(--accent); }
+p:has(+ table), p:has(+ ul), h2, h3 { break-after: avoid; } table, aside.note, figure { break-inside: avoid; }
+
+/* flow: compact — разделы идут подряд, без обязательного перехода на новую страницу. */
+body.compact main > h2:not(:first-child){break-before:auto;margin-top:12mm}

@@ -71,6 +71,12 @@ def test_local_proxy_origin_and_server_token(monkeypatch):
         assert client.get('/api/v1/instructor/statistics?group_id=example-group').status_code==200
         assert requests[-1].url.params['group_id']=='example-group'
         assert client.post('/api/v1/instructor/lessons/example/start', headers={'X-Voice-UI':'1'}).status_code==200
+        assert client.post('/api/v1/instructor/generations',json={'request_id':'example'},headers={'X-Voice-UI':'1'}).status_code==200
+        assert requests[-1].extensions['timeout']['read']==960
+        assert client.post('/api/v1/instructor/generations/example/revise',json={},headers={'X-Voice-UI':'1'}).status_code==200
+        assert requests[-1].extensions['timeout']['read']==960
+        assert client.get('/api/v1/instructor/generations').status_code==200
+        assert requests[-1].extensions['timeout']['read']==65
         assert client.put('/api/v1/instructor/scenarios/test/rubric',json={}).status_code==403
         assert client.put('/api/v1/instructor/scenarios/test/rubric',json={},headers={'X-Voice-UI':'1','Origin':'http://127.0.0.1:3000'}).status_code==200
         body={'title':'Synthetic material','body':'Text','file_base64':'dGV4dA==','filename':'example.txt'}

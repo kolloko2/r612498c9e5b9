@@ -91,3 +91,23 @@ def test_voice_only_lesson_cannot_start_without_phone(classroom):
         'sip_extensions': {c['users']['student1']['id']: '201'}})
     assert configured.status_code == 200, configured.text
     assert c['client'].post(path + '/start', headers=c['headers']['teacher1']).status_code == 200
+
+
+def test_assigned_number_still_allows_typing_without_headset(reporting):
+    # Учебный номер не запрещает текст: без гарнитуры обучающийся говорит с клавиатуры.
+    c = reporting
+    card = saved_card(c)
+    card.update(sip_extension='201', exercise_mode='actions', owner_service='Служба 101')
+    card['card']['service_phones'] = {'Служба 101': '+7 900 000-00-01'}
+    save(c, card)
+    started = c['client'].post(base(card), headers=c['headers']['student1'], json={
+        'message_id': str(uuid4()), 'service': 'Служба 101', 'phone': '+7 900 000-00-01', 'transport': 'text'})
+    assert started.status_code == 201, started.text
+    reply = c['client'].post(base(card) + '/' + started.json()['id'] + '/messages', headers=c['headers']['student1'],
+                             json={'message_id': str(uuid4()), 'text': 'Докладываю: пожар'})
+    assert reply.status_code == 200, reply.text
+    card['text_input_allowed'] = False
+    save(c, card)
+    blocked = c['client'].post(base(card) + '/' + started.json()['id'] + '/messages', headers=c['headers']['student1'],
+                               json={'message_id': str(uuid4()), 'text': 'Ещё раз'})
+    assert blocked.status_code == 409

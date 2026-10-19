@@ -1,5 +1,87 @@
 # API Contract
 
+## Полный комплект генерации ДДС — 16.10.2026
+
+`POST /api/v1/instructor/generations` в режиме `dds` требует только
+`request_id`; `brief` теперь необязателен (пустая строка означает автоматический
+выбор темы). Сохраняются `dds_profile`, `difficulty`, `category_id`,
+`learning_objectives` и необязательный `owner_service`. Без явной службы она
+определяется из профиля, затем категории, для общего случая — `Деп. ЖКХ`.
+Ответ дополнительно содержит `automatic_topic: boolean`.
+
+Генерация возвращает связанную карточку, бригады, `phone_contacts`,
+оперативные вводные, `dds_expectation.update_keywords` и `practice_plan`.
+Четыре последовательных доклада обязательны для профильного цикла; для отказа
+нет обязательных оперативных разговоров и докладов. Модель формирует роли и
+сведения контактов; сервер выделяет внутренние номера 8101–8110 и согласует
+`crew_options.phone` и `prefilled_card.service_phones` со справочником.
+Каждая бригада имеет ровно одного доступного руководителя; все ссылки и
+критерии проверяются до сохранения. При структурной ошибке — одна попытка
+исправления моделью. После двух неудачных ответов — 502 без изменения черновика.
+Сетевые ошибки и тайм-ауты не повторяются автоматически.
+
+Адаптер принимает до 5000 токенов только для схем авторинга с `scenario`;
+обычные ответы сохраняют предел 2000 токенов, телефонный профиль не получает
+расширенный лимит. BFF отводит 960 секунд только POST создания/доработки
+черновика; TLS-балансировщик — 950 секунд на маршрут генерации. Остальные
+обычные API-запросы сохраняют короткие тайм-ауты.
+Для комплекта ДДС общий бюджет модели — 900 секунд, включая исправление
+структуры. Повтор не начинает новый пятнадцатиминутный отсчёт.
+В профиле `fast` внутренняя схема модели компактная: карта исходных фактов,
+тексты докладов и роли. Backend разворачивает повторные поля, ссылки одной
+бригады, номера и порядок этапов. Публичный ответ содержит прежний полный комплект.
+Внутренняя схема ограничивает `refusal_kind` значениями DdsExpectation.
+Маркер `none`/null нормализуется в пустую строку только при `should_accept=true`;
+неизвестная причина настоящего отказа остаётся ошибкой проверки.
+Создание и доработка черновика удерживают отдельную блокировку преподавателя,
+не общую блокировку изменений: длительная генерация не блокирует вход в кабинеты.
+Публикация использует ту же блокировку преподавателя и короткую транзакцию.
+
+План готовится до выдачи упражнения. `PracticeStep` дополнительно принимает
+`phase: contact` и `contact_id` (до 64 символов); такой шаг обязан ссылаться на
+контакт сценария. Только текущая подсказка выходит в студенческом API.
+Публикация утверждает план отпечатком всего включённого сценария, но не включает
+`practice_with_hints` в назначении или занятии. Ответ опубликованного черновика
+содержит тот же включённый сценарий и утверждённый план, что библиотечная запись.
+Повтор запроса остаётся идемпотентным по фактическим настройкам и разрешённой службе.
+
+## Телефонный справочник ДДС — 16.10.2026
+
+- `Scenario.phone_contacts` — до 10 контактов своей ДДС. `id` и номер уникальны;
+  номер содержит 2–15 цифр. Поля контакта: `id`, `name`, `role`, `number`,
+  `crew_id`, `facts`, `required_keywords`, `required`.
+  Роли: `superior`, `organization_head`, `response_chief`, `crew_leader`,
+  `crew_specialist`. Руководитель бригады обязан ссылаться на бригаду сценария.
+  Явный справочник профильного сценария должен сохранять обязательных адресатов
+  первичного доклада. Справочник замораживается в снимке попытки.
+- `GET /api/v1/student/sessions/{sid}/phone/contacts` — безопасный справочник
+  только своей попытки: код, имя, роль, название роли, номер, бригада,
+  обязательность и доступность. `facts` и `required_keywords` не возвращаются.
+  Участники бригады доступны только после её назначения.
+- `POST /api/v1/student/sessions/{sid}/phone/dial` принимает
+  `{message_id: UUID, number: string, transport: "sip" | "text"}` и возвращает
+  обычный `Briefing` (201). Набор сопоставляется с замороженным справочником;
+  несуществующий номер — 422, неназначенная бригада — 409. Это учебный вызов
+  через Voice на SIP-номер ученика, а не произвольный исходящий SIP/PSTN-маршрут.
+- `POST .../{sid}/briefings` дополнительно принимает `contact_id`. При явном
+  справочнике он обязателен; номер, служба и роль разрешаются сервером.
+  Повтор `message_id` с другим контактом возвращает 409. Старые сценарии без
+  справочника сохраняют прежний контракт по `service`, `crew_id`, `phone`.
+- Ответ доклада содержит `contact_id`, `contact_role` и `purpose`:
+  `initial` — первичный доклад, `progress` — повторный доклад начальнику,
+  `coordination` — уточнение/согласование с другим участником.
+  Для `coordination` полнота проверяется по цели и фактам разговора, без
+  принудительного повторного заполнения всех полей адреса.
+- Телефонограмма сохраняет настоящий `counterpart`: начальник `superior`,
+  руководитель бригады `crew`, остальные — соответствующий код роли.
+  Только `crew` с назначенным `crew_id` открывает цикл оперативных докладов.
+  Другие контакты не заменяют начальника и руководителя бригады в оценке.
+  Обязательные контакты добавляют проверки `contact:<id>` и блокируют завершение
+  учеником до принятого разговора. Разрешение текста и ограничения SIP одинаковы
+  для набора номера и существующей формы доклада.
+
+Описание настройки и двух простых упражнений: [DDS_PHONE.md](DDS_PHONE.md).
+
 ## DDS release 2026-10-16
 
 New training is DDS-only by default (`OPERATOR_112_ENABLED=false`). Lesson creation
@@ -457,7 +539,8 @@ fields appear in student scenario/assignment discovery and are frozen in new
 session responses and teacher summaries. They contain no hidden scenario facts.
 Generation POST accepts the same fields; they enter the model's teaching context,
 survive revisions, and are server-controlled during validation. Request-ID retries
-must match these fields as well as brief/category. Mock remains a fixed example.
+must match these fields as well as brief/category. Mock remains explicitly marked;
+automatic DDS requests use profile-consistent fixtures, not model inference.
 
 Lesson POST additionally accepts nullable `difficulty` and `dds_profile` filters.
 All selected scenarios/action sources must match, otherwise422. Filters without
@@ -572,12 +655,12 @@ teacher session. Drafts are private to their author; foreign ID = 404, wrong rol
 = 403. No draft appears in the scenario library or student assignments.
 
 - `GET /generations`: own summaries `{id,status,revision,title,updated_at}`.
-- `POST /generations`: `{request_id: UUID, brief: string (3–3000), category_id}`;
+- `POST /generations`: `{request_id: UUID, brief?: string (0–3000), category_id}`;
   201 full draft. Category defaults to other. A successful request ID is reusable
   with identical input (no additional model call); different input = 409.
-  `mode=dds` additionally requires `owner_service` and produces a ready incoming
-  DDS card, operational updates and a decision expectation. `mode=caller` keeps
-  the previous 112 flow and remains the API default; the browser defaults to DDS.
+  `mode=dds` defaults the service from profile/category and produces the complete
+  incoming DDS exercise bundle. `mode=caller` is the archived 112 flow and requires
+  the explicit host feature flag plus a nonempty brief; the release defaults to DDS.
 - `GET /generations/{id}`: full persisted draft and revision history.
 - `POST /generations/{id}/revise`: `{revision: integer >=1, comment: string
   (3–2000, nonblank)}`. Returns an updated preview, not a published scenario.
@@ -588,22 +671,24 @@ teacher session. Drafts are private to their author; foreign ID = 404, wrong rol
 Full draft: id, brief, category_id, mode, owner_service, status (draft/approved), revision, scenario,
 rubric, provider, model, updated_at, history. History entries contain revision,
 comment, at, scenario and rubric. Approval adds approved_scenario_id, approved_at,
-approved_by. The scenario inside the draft remains the original disabled preview;
-the published library copy is enabled. Published drafts cannot be revised (409);
+approved_by. Before publication the scenario is disabled. The approved response
+contains the enabled library copy with its approved practice plan. Published drafts cannot be revised (409);
 edit their library scenario/rubric through the existing manual editors instead.
 Stale revisions = 409 without mutation. Maximum 20 draft versions. Model errors,
 timeouts, malformed JSON or invalid references = sanitized 502; prior draft remains
 unchanged. Failed initial requests can be retried with the same request ID.
 
 Generation uses the existing ENV-selected mock/OpenRouter/Ollama provider with a
-2000-token caller or 2500-token DDS budget and 45-second operation deadline. Only the brief, category,
+2500-token caller or 4500-token DDS budget and the configured
+`LLM_TIMEOUT_SECONDS` per-model-request deadline. Only synthetic authoring data: brief, category,
 previous preview, correction comment and up to four teacher-approved correction examples
 are sent, never student sessions. OpenRouter
 sends these synthetic materials outside the machine. Mock returns a marked fixture
-and records comments without interpreting them. Generated criteria currently cover
-literal text fields caller_name/address_note/description/street/house/city/apartment;
-each expected string must occur in a scenario fact. Service/regulatory criteria are
-not generated. Structural/reference checks do not establish methodological accuracy:
+and records comments without interpreting them. Caller criteria cover literal text
+fields caller_name/address_note/description/street/house/city/apartment. DDS criteria
+cover phone reports, crew choice and factual comments to operational statuses;
+each expected fact must be grounded in the generated material. Official regulatory
+requirements are not invented. Structural checks do not establish methodological accuracy:
 the teacher must review the complete scenario and rubric before approval.
 
 ### Accounts and classroom access
@@ -737,6 +822,39 @@ It also exposes `restart_session_id`, the student's latest non-superseded card
 in that lesson (or null before the first card). In a running one-card lesson,
 the trainee can restart this card after completion or while it is open; earlier
 attempts remain in history.
+### AI-authored cards without a teacher (`ai_pool`)
+
+The Backend keeps a pool of complete DDS exercises authored by the local model in
+the background (`AI_POOL_TARGET` per profile from `AI_POOL_PROFILES`, default 4 ×
+`utilities`; simple household topics). Every pool exercise passes the same
+structural validation as a teacher draft and is stored as an enabled scenario
+owned by `ai-pool` (hidden from teacher libraries). Background generation yields
+to phone calls: any phone LLM request on any replica pauses it and cancels the
+request in progress; it resumes after `AI_POOL_PHONE_QUIET_SECONDS` (600) of silence.
+After each background exercise the runner is unloaded to reset its memory and the
+phone model is loaded again at once, so calls always find it resident.
+Phone replies are plain text (one line, stop at newline), not a JSON schema; a reply
+mixing Cyrillic and Latin letters inside a word is discarded for the grounded fallback.
+A directory call whose question the model cannot answer in time gets a role reply
+(crew leader, shift superior) instead of «Информация принята».
+
+- `CreateLesson.ai_cards: boolean` (default false, `actions` mode only, no hints):
+  `next` issues every student an unused pool exercise (topics not yet seen by this
+  student first); empty pool → 409 «ИИ готовит для вас новую карточку…».
+- `CreateLesson.allow_applicant_calls: boolean` (default false): AI cards keep an
+  `applicant` phone contact only when the teacher allows calls to the applicant;
+  otherwise the contact is removed from the issued card's directory (self-practice: false).
+- `GET /student/ai-practice` → `{available, ready, generating}`;
+  `POST /student/ai-practice` (optional `NextCard`) issues an AI card into the
+  student's permanent lesson «Тренировка с ИИ» (`self_practice: true`, owned by the
+  teacher of the student's group, unlimited cards) — no teacher action required.
+  Assessment, AI review and recommendations work as for any lesson card.
+- Cards from the pool carry `source_kind: ai_pool` and
+  `ai_generated: {model, provider, generated_at, topic}`; the student UI marks them
+  «сформирована ИИ».
+- `GET /instructor/ai-pool` → pool status for the teacher cabinet.
+- `GET /student/lessons` items add `ai_cards` and `self_practice`.
+
 `POST /student/lessons/{lid}/next` accepts an optional `{after_session_id: UUID}`:
 opens the existing active card or creates a random text card from the frozen pool.
 The predecessor must be a completed own card of this lesson (otherwise 409).

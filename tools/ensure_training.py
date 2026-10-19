@@ -44,6 +44,17 @@ def main() -> None:
             current = teacher.call("GET", f"/scenarios/{guided['id']}")[1]
             teacher.call("PUT", f"/scenarios/{guided['id']}",
                          {**guided, "enabled": True, "version": current["version"]})
+        # The data file carries no hint plan, and any edit resets approval. Build the
+        # server-side step template and approve it, as the editor's "Утвердить" does.
+        current = teacher.call("GET", f"/scenarios/{guided['id']}")[1]
+        stale = any(not step.get("sample") for step in current.get("practice_plan") or []
+                    if step.get("phase") in ("accept", "update"))
+        if not current.get("practice_plan") or not current.get("practice_approved_version") or stale:
+            fields = {key: value for key, value in current.items() if key not in ("editable", "version")}
+            steps = teacher.call("POST", "/scenarios/practice-draft", fields)[1]["steps"]
+            teacher.call("PUT", f"/scenarios/{guided['id']}",
+                         {**fields, "practice_plan": steps, "practice_confirm": True, "version": current["version"]})
+            print("подсказки обучающего сценария утверждены")
     finally:
         teacher.base_path = saved
     by_login = {item["username"]: item["id"] for item in teacher.call("GET", "/instructor/students")[1]}

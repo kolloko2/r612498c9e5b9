@@ -164,3 +164,58 @@ dialog input::placeholder,dialog textarea::placeholder,.response-input input::pl
 .softphone-meter{height:8px;background:#e7eaec;border-radius:4px;overflow:hidden;margin:4px 0 10px}.softphone-meter i{display:block;height:100%;width:0;background:#2a78d6;transition:width .1s}
 .training-strip #softphoneToggle{background:transparent;color:#d6dfe4;border:1px solid #71818c;border-radius:4px;padding:3px 9px;font-size:11px;cursor:pointer;margin-left:auto;margin-right:12px}.training-strip #softphoneToggle[data-state=ready]{background:#0ca30c;border-color:#0ca30c;color:#fff}.training-strip #softphoneToggle[data-state=ringing]{background:#fab219;border-color:#fab219;color:#1a1a1a}
 .message.pending{color:#6b7478;font-style:italic;background:transparent;border:1px dashed #b9bcc0}
+.softphone-dialog{width:min(660px,95vw);max-width:660px;max-height:90vh;overflow:auto;color:#162b39;background:#fff}
+.softphone-dialer{border-block:1px solid #cbd5dd;padding:12px 0;margin:12px 0;display:grid;grid-template-columns:minmax(140px,210px) minmax(180px,1fr);gap:10px 20px}
+.softphone-dialer>label{grid-column:1;margin:0}.softphone-dialer input{font:20px monospace;width:100%;box-sizing:border-box}
+.softphone-keypad{grid-column:1;display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.softphone-keypad button{font-size:20px;padding:8px;color:#162b39;background:#f0f5f8;border:1px solid #aabcc9;border-radius:5px}
+#softphoneDial,.softphone-dial-error{grid-column:1;margin:0}.softphone-dial-error{color:#9b2525;font-size:13px}
+.softphone-directory{grid-column:2;grid-row:1/5;display:flex;flex-direction:column;gap:7px;max-height:340px;overflow:auto}.softphone-directory h3{margin:0 0 4px;font-size:15px}.softphone-directory button{white-space:pre-line;text-align:left;padding:10px;border:1px solid #bacbd6;background:#f5f8fa;color:#162b39;border-radius:5px}.softphone-directory button:disabled{opacity:.55}.softphone-directory button:focus-visible,.softphone-keypad button:focus-visible{outline:3px solid #146c9c;outline-offset:2px}
+@media(max-width:500px){.softphone-dialer{grid-template-columns:1fr}.softphone-directory{grid-column:1;grid-row:auto;max-height:240px}}
+/* Карточка от ИИ: заметная, но не мешающая пометка в блоке номера происшествия. */
+.card-ident .ai-badge{display:inline-block;margin:3px 0 2px;padding:1px 6px;background:#1f7a4d;color:#fff;font-size:10px;font-weight:bold;letter-spacing:.2px}
+.ai-practice{background:#e6f2ec;border-left:4px solid #1f7a4d;padding:12px 14px;margin:0 0 16px}
+.ai-practice h3{margin:0 0 6px;font-size:15px}.ai-practice p{margin:0 0 10px;line-height:1.5}
+.ai-practice .primary{background:#1f7a4d;border-color:#1f7a4d}.ai-practice .primary:hover{background:#17623d}
+.ai-practice small{display:block;margin-top:8px}
+/* Верх рабочего места как в оригинальном АРМ: без служебной полосы. Полоса
+   появляется только при потере связи. */
+.training-strip[hidden]{display:none}
+.training-strip#healthStrip{background:#8f2f1d;color:#fff;justify-content:flex-start;gap:12px}
+/* Телефон — зелёный кружок с трубкой рядом с часами. */
+.phone-circle{display:flex;flex-direction:column;align-items:center;gap:3px;border:0;background:transparent;padding:2px 6px;color:#d6dfe4;margin-left:auto}
+.phone-circle .phone-dot{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#6b7a83;color:#fff;box-shadow:0 0 0 3px #ffffff14;transition:background .2s}
+.phone-circle svg{width:20px;height:20px}
+.phone-circle small{font-size:10px;letter-spacing:.2px}
+.phone-circle:hover .phone-dot,.phone-circle:focus-visible .phone-dot{box-shadow:0 0 0 3px #ffffff40}
+.phone-circle[data-state=ready] .phone-dot,.phone-circle[data-state=registered] .phone-dot{background:#13a538}
+.phone-circle[data-state=call] .phone-dot,.phone-circle[data-state=ringing] .phone-dot,.phone-circle[data-state=busy] .phone-dot{background:#f0a12a}
+.phone-circle[data-state=error] .phone-dot{background:#c8442b}
+.phone-circle:not([data-state]) .phone-dot,.phone-circle[data-state=off] .phone-dot{background:#3f8a55}
+.phone-circle[data-state=connecting] .phone-dot{background:#c99a2e}
+.phone-circle[data-state=ready] .phone-dot{box-shadow:0 0 0 3px #7fe3a0}
+.console-meta .headset{margin-left:0}
+nav .nav-link{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#d6dfe4;text-decoration:none;padding:0 12px;border-left:1px solid #ffffff1a;font-size:16px}
+nav .nav-link span{font-size:11px}
+nav .nav-link:hover,nav .nav-link:focus-visible{background:#ffffff1a;color:#fff}
+/* Строка занятия — узкая, в цветах АРМ, без крупных кнопок. */
+.lesson-control{padding:5px 18px;gap:10px;background:#5b6971;color:#e6ecef;border-bottom:1px solid #46535b;font-size:12px}
+.lesson-control.in-lesson{background:#5b6971;border-bottom-color:#46535b}
+.lesson-control .lesson-badge{color:#fff;font-weight:600}
+.lesson-control button{padding:2px 9px;font-size:12px;border-color:#8b9aa3;color:#fff;background:transparent}
+.lesson-control button:hover{background:#ffffff1f}
+.lesson-control #leaveLesson{background:transparent;border-color:#8b9aa3;color:#fff;font-weight:normal}
+.lesson-control label{color:#e6ecef}
+.lesson-control select{color:#303638;padding:3px 6px}
+.lesson-control #lessonState{color:#d3dbe0}
+/* Сообщения не закрывают кнопки нижней панели карточки. */
+#notice{bottom:86px}
+/* На экране карточки шапка журнала скрыта, а телефон остаётся под рукой:
+   кружок закреплён в верхней полосе над карточкой. */
+body.card-open .phone-circle{visibility:visible;position:fixed;top:6px;right:18px;z-index:25;flex-direction:row;gap:8px;padding:0}
+body.card-open .phone-circle .phone-dot{width:34px;height:34px}
+body.card-open .phone-circle small{color:#303638;font-size:12px}
+/* Строка занятия в одну линию: подробности — по наведению. */
+.lesson-control{flex-wrap:nowrap}
+.lesson-control #lessonState{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lesson-control #startTraining{display:none}
+nav .nav-link{gap:0;font-size:14px;line-height:1.2}

@@ -45,7 +45,24 @@ function controlsAllowed(){return Boolean(latestSnapshot?.enabled)&&!latestSnaps
 function backupAllowed(){return Boolean(latestSnapshot?.enabled)&&Boolean(latestSnapshot?.backup_available);}
 function eventTone(event){const value=normalizedState(event?.severity||event?.level||event?.status||event?.type);if(/critical|fatal|error|failed|failure|unavailable|down/.test(value))return 'bad';if(/warn|stale|degrad/.test(value))return 'warn';return '';}
 function eventKey(event,index){return String(event?.id||event?.event_id||`${event?.at||event?.created_at||event?.timestamp||''}:${event?.type||event?.title||index}`);}
-function eventTitle(event){return formatValue(event?.title||event?.message||event?.type||event?.event_type||'Техническое событие');}
+// Технический журнал пишется по-английски; администратору показываем русский текст.
+const RESOURCE_NAMES={memory:'память',cpu:'процессор',disk:'диск'};
+const EVENT_TEXT=[
+ [/^host (\w+) usage above 90 percent$/,m=>`Сервер: ${RESOURCE_NAMES[m[1]]||m[1]} загружен более чем на 90%`],
+ [/^host (\w+) metric unavailable$/,m=>`Нет данных о показателе сервера: ${RESOURCE_NAMES[m[1]]||m[1]}`],
+ [/^host (\w+) metric recovered$/,m=>`Показатель сервера снова доступен: ${RESOURCE_NAMES[m[1]]||m[1]}`],
+ [/^service is not healthy$/,()=>'Служба не прошла проверку работоспособности'],
+ [/^service recovered$/,()=>'Служба восстановлена'],
+ [/^service sampling unavailable$/,()=>'Нет данных о состоянии служб'],
+ [/^service sampling recovered$/,()=>'Данные о состоянии служб снова поступают'],
+ [/^scheduled backup completed$/,()=>'Плановая резервная копия создана'],
+ [/^scheduled backup (\w+)$/,m=>`Плановая резервная копия: ${m[1]==='failed'?'ошибка':m[1]}`],
+ [/^invalid settings; defaults applied$/,()=>'Неверные настройки: применены значения по умолчанию'],
+ [/^request archival failed$/,()=>'Не удалось перенести запрос в архив'],
+ [/^invalid request$/,()=>'Неверный запрос на обслуживание'],
+];
+function eventText(text){const value=String(text||'');for(const [pattern,render] of EVENT_TEXT){const m=value.match(pattern);if(m)return render(m);}return value;}
+function eventTitle(event){return formatValue(eventText(event?.title||event?.message||event?.type||event?.event_type)||'Техническое событие');}
 function eventDetail(event){return formatValue(event?.detail||event?.description||event?.service||event?.action||'');}
 function eventTime(event){return formatDate(event?.at||event?.created_at||event?.timestamp);}
 
@@ -114,7 +131,9 @@ function isAlert(event){return event?.alert===true||eventTone(event)==='bad'||ev
 function renderAlerts(events){
  const alerts=events.map((event,index)=>({event,key:eventKey(event,index)})).filter(item=>isAlert(item.event)&&!dismissedAlertKeys.has(item.key)).slice(0,5),section=el('alertsSection'),container=el('alerts');container.replaceChildren();
  section.hidden=!alerts.length;
- for(const {event} of alerts){const item=node('div',undefined,'alert-item');item.append(node('strong',eventTitle(event)),node('span',`${eventDetail(event)} · ${eventTime(event)}`));container.append(item);}
+ // Одинаковые предупреждения (например, повторная загрузка процессора) — одной строкой с числом повторов.
+ const grouped=new Map();for(const {event} of alerts){const title=eventTitle(event),same=grouped.get(title);if(same){same.count++;same.event=event;}else grouped.set(title,{event,count:1});}
+ for(const {event,count} of grouped.values()){const item=node('div',undefined,'alert-item');item.append(node('strong',eventTitle(event)+(count>1?` · ${count} раза`:'')),node('span',`${eventDetail(event)} · последнее: ${eventTime(event)}`));container.append(item);}
 }
 function applySettings(data,force=false){
  savedSettings={backup_enabled:Boolean(data.settings?.backup_enabled),backup_hour_utc:Number.isInteger(data.settings?.backup_hour_utc)?data.settings.backup_hour_utc:0};

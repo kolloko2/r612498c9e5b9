@@ -1,5 +1,26 @@
 # Backend
 
+Phone startup preload retries transient Ollama errors with bounded backoff
+(six attempts, 90 seconds total). It never explicitly unloads the shared model.
+Permanent HTTP errors stop retries; shutdown cancels an unfinished preload.
+The preload uses the same context/device/threads as calls; CPU default is six
+threads. This loads weights, not every scenario's prompt prefix.
+Regression: `python -m pytest backend/test_phone_llm.py -q`.
+
+DDS authoring now creates one complete exercise bundle, including typed phone
+contacts, crews, operational updates, grounded per-update criteria and prepared
+practice steps. `brief` and `owner_service` are optional in DDS generation;
+`dds_authoring.py` resolves profile defaults and validates cross-references.
+Internal contact numbers are allocated by Backend. Structured model failures get
+one repair attempt; network timeouts do not. Publication explicitly approves the
+prepared plan, but assignment/lesson coaching remains opt-in.
+Run `python -m pytest backend/test_dds_auto_generation.py -q` from the root.
+The complete DDS request has one 900-second model budget including its repair.
+Create/revise use the shared teacher lease without holding the cluster's global
+mutation guard; publication acquires the same teacher lease before its transaction.
+The fast profile uses compact internal model output and expands duplicate facts,
+one-crew references and ordered report metadata into the unchanged full response.
+
 Student lesson summaries include `restart_session_id` for the latest
 non-superseded own card. This lets the training strip restart a completed
 one-card lesson without relying on which incident the student currently views.
@@ -296,6 +317,15 @@ mutation guard protect multi-replica updates; see CLUSTER.md for limits. ReportL
 needs DejaVu Sans (`CERTIFICATE_FONT` overrides the Docker-provided font).
 
 # DDS release 2026-10-16
+
+DDS phone contacts are configured per scenario (`phone_contacts`, maximum 10)
+and frozen per attempt. Student directory and dial endpoints live in `briefing.py`;
+`phone_directory.py` validates numbers and supplies role-specific local-model
+context without future updates. Coordination calls cannot replace a chief report
+or a crew dispatch. Required contacts participate in completion and grading.
+`simple_dds.py` supplies two synthetic exercises, published by `tools/seed_demo.py`.
+Run `python -m pytest backend/test_phone_directory.py -q` from the repository root;
+full-cycle cases cover both correct and uninformative final comments.
 
 `OPERATOR_112_ENABLED=false` is the default. New lessons and single assignments
 run DDS actions on prefilled cards. Operator/mixed lessons and mode switching

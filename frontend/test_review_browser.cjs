@@ -19,6 +19,7 @@ async function serve(page){await page.route('**/*',async route=>{const request=r
  if(p==='/api/v1/auth/me')return json({id:'s1',display_name:'Учебный студент',role:'student',mfa:{enabled:false,required:false}});
  if(p===`/api/v1/student/sessions/${sid}/review`)return json(review);
  if(p===`/api/v1/student/sessions/${sid}/calls/${callId}/recording`)return json({content_type:url.searchParams.get('format')==='wav'?'audio/wav':'audio/mpeg',duration_seconds:1.5,size_bytes:12288,file_base64:wav});
+ if(p==='/api/v1/auth/demo-access')return json({enabled:false,accounts:[]});
  if(p==='/api/v1/auth/status')return json({bootstrap_required:false});
  if(p==='/api/v1/auth/directory-status')return json({configured:false});
  if(p==='/api/v1/auth/login')return json({mfa_required:true,mfa_token:'t'.repeat(40),expires_in:300});
@@ -42,7 +43,7 @@ async function serve(page){await page.route('**/*',async route=>{const request=r
  if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Horizontal overflow');
  await page.setViewportSize({width:390,height:800});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile overflow');
  // Вход со вторым фактором: после пароля — форма кода; неверный код не пускает.
- await page.goto(`${origin}/login`);await page.locator('[name=username]').fill('student1');await page.locator('[name=password]').fill('correct horse battery');await page.getByRole('button',{name:'Продолжить'}).click();
+ await page.goto(`${origin}/login`);await page.locator('[name=username]').fill('student1');await page.locator('[name=password]').fill('correct horse battery');await page.getByRole('button',{name:'Войти',exact:true}).click();
  await expect(page.locator('#mfaForm')).toBeVisible();await page.locator('[name=code]').fill('000000');await page.getByRole('button',{name:'Войти'}).click();
  await expect(page.locator('#status')).toHaveText('Неверный код подтверждения');
  await page.locator('[name=code]').fill('123456');await page.getByRole('button',{name:'Войти'}).click();await page.waitForURL('**/portal');

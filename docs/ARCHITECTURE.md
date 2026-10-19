@@ -1,5 +1,23 @@
 # Architecture
 
+Complete DDS authoring stays in Backend (`generation.py`, `dds_authoring.py`).
+One existing local-model request authors the card, crews, role-specific contacts
+and operational reports. Optional empty briefs request a new situation within the
+selected profile/difficulty. Backend allocates internal contact extensions and
+validates references and grounded criteria, then derives practice steps from the
+validated structure. One bounded repair request is allowed for invalid model JSON
+or structure, not network failures. No new model service, broker or storage split.
+Publication atomically enables the scenario/rubric and approves the prepared plan;
+student coaching still requires the separately issued teacher permission.
+Full DDS authoring has one 900-second budget including structural repair. Its
+exact create/revise routes use the existing teacher aggregate lease rather than
+the global mutation guard; approval shares that lease and keeps its short global
+publication guard. The TLS proxy gives authoring its own 950-second server timeout.
+The fast CPU profile requests compact semantic content rather than repeated
+descriptions. Backend derives duplicate card descriptions, single-crew references
+and report IDs/times/statuses without inventing report text. The external draft
+and publication contract remains the complete validated Scenario.
+
 Live DDS incident semantics stays inside Backend (`incident_meaning.py`), using
 the existing local phone model adapter. It can credit only the otherwise failed
 incident_type fact, never address/number checks. Strict JSON, a literal quote and
@@ -17,6 +35,10 @@ existing grounded fallback rather than silently dropping facts. All system
 instructions, including role repair, are retained. Fifteen seconds bounds model
 wait including a 112 role retry, but not speech recognition/synthesis/playback.
 Startup warms the actual configured host/model/options; weights stay resident.
+Startup preload retries transient failures up to six times within 90 seconds,
+with bounded exponential backoff. Replicas never explicitly unload the shared
+model during preload, and shutdown cancels any unfinished task. Default CPU
+phone threads are six. Weight residency does not imply a warmed prompt prefix.
 
 Silero synthesis uses a bounded per-event-loop/model warm process pool (default
 two workers, two CPU threads each). It remains inside Voice, not a service split.
@@ -258,3 +280,17 @@ and their grades are never mutated. Deterministic scenario templates copy only
 known caller name/location/incident; AI generation remains separate work. Category
 labels constrain the pool without changing the incident classifier. Group reports
 aggregate persisted cards and audit events; no separate queue or report service.
+
+## DDS phone directory — 2026-10-16
+
+The scenario owns up to ten typed training contacts; the attempt freezes that
+configuration in its existing private scenario snapshot. `briefing.py` resolves
+numbers against this snapshot, and the existing Voice callback connects to the
+student's assigned SIP endpoint. There is no arbitrary outgoing PSTN route and
+no new service or storage subsystem. Student views expose only public contact
+identity/availability, not role facts or expected keywords. Coordination calls
+have their own completeness rule and counterpart identity: only an assigned
+crew leader unlocks operational reports; only a shift chief satisfies the chief
+briefing requirement. Accepted calls and comments feed the existing audit-based
+DDS assessment. Role context includes known card facts and delivered reports,
+not the scenario's unplayed future updates.

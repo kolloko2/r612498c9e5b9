@@ -39,7 +39,7 @@ const accounts=[
   await expect(page.locator('[name=username]')).toHaveValue('demo.student2');
   await expect(page.locator('[name=password]')).toHaveValue('example-student-only');
   await expect(page.locator('[name=workstation]')).toHaveValue('АРМ-2');
-  await page.getByRole('button',{name:'Продолжить',exact:true}).click();
+  await page.getByRole('button',{name:'Войти',exact:true}).click();
   await expect(page).toHaveURL(origin+'/portal');
   expect(loginBody).toEqual({username:'demo.student2',password:'example-student-only'});
   expect(await page.evaluate(()=>localStorage.getItem('workstation'))).toBe('АРМ-2');
@@ -51,7 +51,7 @@ const accounts=[
   await page.screenshot({path:path.join(root,'../artifacts/final-prep-2026-10-16/login-mobile.png'),fullPage:true});
   secondFactor=true;
   await page.getByRole('button',{name:'Выбрать: Преподаватель',exact:true}).click();
-  await page.getByRole('button',{name:'Продолжить',exact:true}).click();
+  await page.getByRole('button',{name:'Войти',exact:true}).click();
   await expect(page.locator('#mfaForm')).toBeVisible();
   await page.getByRole('button',{name:'Выбрать: Слушатель 1',exact:true}).click();
   await expect(page.locator('#mfaForm')).toBeHidden();

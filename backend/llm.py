@@ -1,7 +1,9 @@
 """Server-only dialogue providers. Never expose credentials or upstream errors to UI."""
+import asyncio
 import json
 import logging
 import os
+import re
 import time
 
 import httpx
@@ -21,18 +23,35 @@ PROFILES = {
 }
 DEFAULT_PROFILE = "mock"
 LOCAL_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "300"))
+# Full authoring is bounded as one operation, including a possible repair.
+AUTHORING_TIMEOUT_SECONDS = 900
 # A phone turn must not inherit the minutes-long scenario-generation budget.
-VOICE_REPLY_TIMEOUT_SECONDS = 15.0
+# Below the Voice provider limit (20 s) with room for speech recognition.
+VOICE_REPLY_TIMEOUT_SECONDS = 18.0
 DEFAULT_PHONE_MODEL = 'qwen3:4b-instruct-2507-q4_K_M'
+# Called before every interactive request: background authoring yields the CPU.
+phone_activity_hooks = []
+# Called before every phone (call) request: lets AI reviews wait for a quiet moment.
+phone_call_hooks = []
+PHONE_WARMUP_TIMEOUT_SECONDS = 90
+PHONE_WARMUP_ATTEMPTS = 6
 
 
 def phone_configuration():
     """Short dialogue uses its own local weights; authoring profiles stay intact."""
     config = configuration().copy()
     if config['provider'] == 'ollama':
-        config['model'] = os.getenv('PHONE_LLM_MODEL') or DEFAULT_PHONE_MODEL
-        config['context'] = 4096
+        phone_model = os.getenv('PHONE_LLM_MODEL') or DEFAULT_PHONE_MODEL
+        # Same weights as authoring: identical runner options keep one resident
+        # model. Different num_ctx would make Ollama reload the phone runner
+        # after every generation and stall the first reply for ~15 seconds.
+        config['context'] = config.get('context') or 8192 if shares_runner(config['model'], phone_model) else 4096
+        config['model'] = phone_model
     return config
+
+
+def shares_runner(model, phone_model):
+    return model == phone_model or os.getenv('LLM_SHARED_RUNNER', '').lower() in ('1', 'true', 'yes')
 
 
 DEVICES = {
@@ -55,8 +74,14 @@ def local_options(config, max_tokens, *, phone=False):
     # CPU. Значение передаётся явно: иначе модель, загруженная ранее в режиме
     # cpu (keep_alive=-1), так и осталась бы на процессоре.
     options['num_gpu'] = {'cpu': 0, 'gpu': 999}.get(selected, -1)
-    if phone and selected != 'gpu':
+    if selected != 'gpu' and (phone or shares_runner(config.get('model'), os.getenv('PHONE_LLM_MODEL') or DEFAULT_PHONE_MODEL)):
+        # num_thread is a runner option: authoring must use the phone value or
+        # Ollama restarts the shared runner. More threads were slower on the VM.
         options['num_thread'] = max(1, min(32, int(os.getenv('PHONE_LLM_THREADS', '6'))))
+        # A cancelled request stops only between batches. With the default 1024
+        # tokens a cancelled review kept the CPU for ~35 s and starved the call that
+        # cancelled it; 128 reads equally fast here (~27 tokens/s) and stops in ~5 s.
+        options['num_batch'] = max(32, min(1024, int(os.getenv('LLM_NUM_BATCH', '128'))))
     return options
 
 
@@ -66,15 +91,34 @@ async def warm_phone_model():
     if config['provider'] != 'ollama':
         return
     async with httpx.AsyncClient(timeout=90, trust_env=False) as client:
-        # Смена LLM_DEVICE перезапускает Backend. Модель, загруженная с прежним
-        # устройством (keep_alive=-1), выгружается, иначе Ollama продолжит
-        # работать на старом устройстве.
-        await client.post(os.getenv('OLLAMA_URL', 'http://127.0.0.1:11434') + '/api/generate',
-                          json={'model': config['model'], 'keep_alive': 0})
+        # All replicas share Ollama. Never unload another replica's active model
+        # during startup. Explicit options let Ollama select the proper runner.
         response = await client.post(os.getenv('OLLAMA_URL', 'http://127.0.0.1:11434') + '/api/chat',
             json={'model': config['model'], 'messages': [], 'stream': False,
                   'keep_alive': -1, 'options': local_options(config, 120, phone=True)})
         response.raise_for_status()
+
+
+async def warm_phone_model_with_retry():
+    """Bound startup races with Ollama; cancellation must remain immediate."""
+    try:
+        async with asyncio.timeout(PHONE_WARMUP_TIMEOUT_SECONDS):
+            for attempt in range(PHONE_WARMUP_ATTEMPTS):
+                try:
+                    await warm_phone_model()
+                    logger.info('Phone model preload ready attempt=%d', attempt + 1)
+                    return True
+                except httpx.HTTPError as error:
+                    retryable = not isinstance(error, httpx.HTTPStatusError) or (
+                        error.response.status_code == 429 or error.response.status_code >= 500)
+                    logger.warning('Phone model preload failed attempt=%d reason=%s',
+                                   attempt + 1, type(error).__name__)
+                    if not retryable or attempt + 1 == PHONE_WARMUP_ATTEMPTS:
+                        return False
+                    await asyncio.sleep(min(2 ** attempt, 15))
+    except TimeoutError:
+        logger.warning('Phone model preload deadline exceeded')
+    return False
 
 
 def profile_name():
@@ -88,7 +132,10 @@ def configuration():
     if selected:
         profile = PROFILES[selected]
         provider = "mock" if selected == "mock" else "ollama"
-        return {"provider": provider, "model": profile["model"], "profile": selected,
+        # The administrator may point a profile at already installed weights,
+        # e.g. the phone model, so one resident runner serves both tasks.
+        model = (os.getenv("LLM_MODEL") or profile["model"]) if provider == "ollama" else profile["model"]
+        return {"provider": provider, "model": model, "profile": selected,
                 "profile_title": profile["title"], "context": profile["context"],
                 "configured": True}
     provider = os.getenv("LLM_PROVIDER", "mock").lower()
@@ -98,7 +145,23 @@ def configuration():
             "configured": provider in ("mock", "ollama") or (provider == "openrouter" and bool(os.getenv("OPENROUTER_API_KEY")))}
 
 
-async def complete(messages, *, max_tokens=220, json_mode=False, phone=False):
+def _mark_activity():
+    for hook in phone_activity_hooks:
+        try:
+            hook()
+        except Exception:
+            logger.warning('Phone activity hook failed')
+
+
+async def _keep_marking_activity():
+    # A review on a CPU server lasts minutes: keep background authoring paused
+    # for the whole request, not only for the quiet period after its start.
+    while True:
+        await asyncio.sleep(20)
+        _mark_activity()
+
+
+async def complete(messages, *, max_tokens=220, json_mode=False, phone=False, timeout=None):
     """`json_mode` принуждает провайдера выдавать валидный JSON.
 
     Значение `True` требует просто корректный JSON, а словарь — конкретную JSON
@@ -109,7 +172,8 @@ async def complete(messages, *, max_tokens=220, json_mode=False, phone=False):
     разбирается, даже когда режим рассуждений выключен параметром. Ограничение
     формата на стороне провайдера надёжнее любых указаний в промпте.
     """
-    if not isinstance(max_tokens, int) or not 1 <= max_tokens <= 2000:
+    authoring = isinstance(json_mode, dict) and 'scenario' in json_mode.get('properties', {}) and not phone
+    if not isinstance(max_tokens, int) or not 1 <= max_tokens <= (5000 if authoring else 2000):
         raise ValueError("Invalid completion budget")
     config = phone_configuration() if phone else configuration()
     if config["provider"] == "mock":
@@ -121,7 +185,28 @@ async def complete(messages, *, max_tokens=220, json_mode=False, phone=False):
     # Локальная модель на процессоре выдаёт единицы токенов в секунду, поэтому
     # генерация сценария законно занимает минуты. Облачный провайдер отвечает
     # быстро, и для него прежний короткий лимит остаётся.
-    budget = LOCAL_TIMEOUT_SECONDS if config["provider"] == "ollama" else 35
+    budget = (timeout or (AUTHORING_TIMEOUT_SECONDS if authoring else LOCAL_TIMEOUT_SECONDS)) if config["provider"] == "ollama" else 35
+    heartbeat = None
+    if phone:
+        for hook in phone_call_hooks:
+            try:
+                hook()
+            except Exception:
+                logger.warning('Phone call hook failed')
+    if not authoring:
+        # Calls, live grading and reviews wait for a student: background
+        # authoring yields the CPU to every interactive request, not only calls.
+        _mark_activity()
+        if phone_activity_hooks:
+            heartbeat = asyncio.ensure_future(_keep_marking_activity())
+    try:
+        return await _request(config, messages, max_tokens, json_mode, phone, authoring, budget)
+    finally:
+        if heartbeat:
+            heartbeat.cancel()
+
+
+async def _request(config, messages, max_tokens, json_mode, phone, authoring, budget):
     started = time.monotonic()
     async with httpx.AsyncClient(timeout=httpx.Timeout(budget, connect=8), trust_env=False) as client:
         if config["provider"] == "openrouter":
@@ -140,9 +225,12 @@ async def complete(messages, *, max_tokens=220, json_mode=False, phone=False):
                 # keep_alive держит модель в памяти между редкими запросами:
                 # иначе каждый из них платит десяток секунд за загрузку весов.
                 json={"model": config["model"], "messages": messages, "stream": False, "think": False,
-                      "keep_alive": -1 if phone else os.getenv("OLLAMA_KEEP_ALIVE", "30m"),
+                      "keep_alive": -1 if phone or shares_runner(config["model"], os.getenv('PHONE_LLM_MODEL') or DEFAULT_PHONE_MODEL)
+                      else os.getenv("OLLAMA_KEEP_ALIVE", "30m"),
                       **({"format": json_mode if isinstance(json_mode, dict) else "json"} if json_mode else {}),
-                      "options": local_options(config, max_tokens, phone=phone)})
+                      "options": {**local_options(config, max_tokens, phone=phone),
+                                  # A spoken reply is one line: stop instead of writing more.
+                                  **({'stop': ['\n']} if phone and not json_mode and max_tokens > 1 else {})}})
             response.raise_for_status()
             text = response.json()["message"]["content"]
             if phone:
@@ -153,20 +241,42 @@ async def complete(messages, *, max_tokens=220, json_mode=False, phone=False):
     if not isinstance(text, str) or not text.strip():
         raise ValueError("Empty model reply")
     if max_tokens > 220:
-        if len(text) > 20000:
+        if len(text) > (40000 if authoring else 20000):
             raise ValueError("Model reply exceeds review limit")
         return text.strip()
     return text.strip()[:1200]
 
-REPLY_INSTRUCTION = 'Return only JSON {"reply":"your spoken reply"}. Speak Russian, at most 25 words. No reasoning or explanations.'
+# Plain text, not a JSON schema: on the CPU server the schema grammar made the
+# small model mix alphabets («Пёtra») and spent tokens on the wrapper.
+REPLY_INSTRUCTION = ('Ответь одной короткой репликой по-русски, как в телефонном разговоре: '
+                     'не больше 15 слов, без кавычек, имён и пояснений.')
 REPLY_SCHEMA = {"type": "object", "properties": {"reply": {"type": "string"}},
                 "required": ["reply"]}
+QUOTES = '«»"\'“”„ '
+MIXED_SCRIPT = re.compile(r'[А-Яа-яЁё][A-Za-z]|[A-Za-z][А-Яа-яЁё]')
+SPEAKER_PREFIX = re.compile(r'^(?:[А-ЯЁA-Z][А-Яа-яЁёA-Za-z .\-]{0,40}|Ответ|Реплика):\s*')
+
+
+def clean_reply(raw) -> str:
+    """First spoken line of the model output; empty when it is unusable."""
+    text = str(raw or '').strip()
+    if text.startswith('{'):
+        try:
+            text = str(json.loads(text).get('reply', ''))
+        except (ValueError, AttributeError):
+            return ''
+    text = next((line.strip() for line in text.splitlines() if line.strip()), '')
+    text = SPEAKER_PREFIX.sub('', text).strip().strip(QUOTES)
+    # A word glued from Cyrillic and Latin letters is a broken token, not speech.
+    if not text or MIXED_SCRIPT.search(text):
+        return ''
+    return text[:400]
 
 
 async def reply(messages, *, max_tokens=220):
-    """One short phone utterance. Schema bounds structure, not factual accuracy.
+    """One short phone utterance. The caller supplies a grounded fallback.
 
-    Invalid/truncated JSON returns an empty reply for the caller's grounded fallback.
+    An unusable output returns an empty reply for the caller's grounded fallback.
     All system messages survive, including a final role-repair instruction.
     """
     system = [message for message in messages if message.get("role") == "system"]
@@ -177,9 +287,4 @@ async def reply(messages, *, max_tokens=220):
     # the initial scenario, address or constraints. Normal turns are much smaller.
     if sum(len(message['content']) for message in instructed) > 9000:
         raise ValueError('Phone context exceeds safe budget')
-    raw = await complete(instructed, max_tokens=min(max_tokens, 120), json_mode=REPLY_SCHEMA, phone=True)
-    try:
-        value = json.loads(raw).get("reply", "")
-    except (ValueError, AttributeError):
-        return ""
-    return value.strip() if isinstance(value, str) else ""
+    return clean_reply(await complete(instructed, max_tokens=min(max_tokens, 120), phone=True))

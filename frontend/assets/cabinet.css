@@ -38,5 +38,38 @@ body:has(#loginForm){background:#e8edf0}body:has(#loginForm)>main{max-width:470p
 .mfa-panel .mfa-pair{display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin:12px 0}.mfa-panel svg{width:180px;height:180px;background:#fff;border:1px solid #d5dbe0;border-radius:8px}.mfa-secret{display:block;font-size:17px;letter-spacing:1px;margin-top:4px;word-break:break-all}.mfa-codes{columns:2;font-family:monospace;font-size:16px;max-width:360px}.mfa-required{background:#fff4e5;border-left:4px solid #b7791f;padding:10px 12px}.mfa-status.error{color:#b3261e}fieldset.checks{border:1px solid #d5dbe0;border-radius:8px;padding:8px 12px}
 .lesson-builder fieldset.step{border:1px solid #d5dbe0;border-radius:10px;padding:12px 14px 14px;margin:0 0 12px}.lesson-builder legend{font-weight:700;padding:0 6px;display:flex;align-items:center;gap:8px}.lesson-builder legend b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#34495a;color:#fff;font-size:12px}
 .lesson-summary{background:#eef4fa;border-left:4px solid #2a78d6;padding:10px 12px;margin:4px 0 12px;line-height:1.45}.lesson-summary.warning{background:#fff6e0;border-left-color:#fab219}
-.lesson-builder label.check,.mfa-panel label.check,fieldset.checks label.check{display:flex!important;flex-direction:row!important;align-items:center;gap:8px}.lesson-builder label.check input,fieldset.checks label.check input{width:auto;margin:0}
+.lesson-builder label.check,.mfa-panel label.check,fieldset.checks label.check,#assignmentForm label.check{display:flex!important;flex-direction:row!important;align-items:center;gap:8px}.lesson-builder label.check input,fieldset.checks label.check input,#assignmentForm label.check input{width:auto;margin:0}
 .lesson-builder fieldset.step{align-self:start}
+.card-ai{border-color:#1f7a4d;background:#eef7f2}.card-ai .button.primary{background:#1f7a4d;border-color:#1f7a4d}
+.ai-cards-toggle{display:flex;flex-direction:column;gap:4px;background:#eef7f2;border-left:4px solid #1f7a4d;padding:10px 12px}.ai-cards-toggle small{color:#4a5a52;line-height:1.4}
+.ai-pool-status{font-weight:bold;color:#1f5f3d!important}
+/* Упрощённый кабинет: редкие разделы и настройки свёрнуты, функции не убраны. */
+.more-menu{position:relative;display:inline-block}
+.more-menu>summary{list-style:none;cursor:pointer;user-select:none}
+.more-menu>summary::-webkit-details-marker{display:none}
+.more-menu>summary::after{content:" ▾"}
+.more-menu>div{position:absolute;right:0;top:calc(100% + 6px);z-index:30;display:grid;min-width:240px;background:#fff;border:1px solid #cfd8de;border-radius:8px;box-shadow:0 8px 24px #0002;padding:6px}
+.more-menu>div a{padding:9px 12px;border-radius:6px;color:#26313c;text-decoration:none}
+.more-menu>div a:hover,.more-menu>div a:focus-visible{background:#eef3f6}
+#lessonForm>details.lesson-more{grid-column:1/-1;border:1px solid #d6dee4;border-radius:8px;padding:10px 14px;background:#fafcfd}
+#lessonForm>details.lesson-more>summary{cursor:pointer;font-weight:600;color:#40596a}
+#lessonForm>details.lesson-more[open]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+#lessonForm>details.lesson-more[open]>summary,#lessonForm>details.lesson-more>.response-tools,#lessonForm>details.lesson-more>p{grid-column:1/-1}
+details.fold>summary{cursor:pointer;list-style:none;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary h2{margin:0;display:inline}
+details.fold>summary h2::before{content:"▸ ";color:#7b8b97}
+details.fold[open]>summary h2::before{content:"▾ "}
+details.fold>summary span{color:#657585;font-size:13px}
+details.fold[open]>summary{margin-bottom:16px}
+details.sessions-fold{margin-top:24px}
+.card-more{display:inline-block;vertical-align:top}
+.card-more>summary{cursor:pointer;list-style:none;display:inline-block;border:1px solid #bcc7d0;border-radius:6px;padding:8px 14px;background:#fff;font-weight:600;font-size:13px}
+.card-more>summary::-webkit-details-marker{display:none}
+.card-more>summary::after{content:" ▾"}
+.card-more[open]>.card-more-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+@media(max-width:650px){#lessonForm>details.lesson-more[open]{grid-template-columns:1fr}.more-menu>div{right:auto;left:0}}
+details.ops-more{grid-column:1/-1}
+details.ops-more>.dashboard-grid{margin-top:8px}
+.card-more{vertical-align:middle}
+.card-more>summary{min-height:40px;padding:10px 16px;display:inline-flex;align-items:center}

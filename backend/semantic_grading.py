@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 
 import llm
 
@@ -149,6 +150,8 @@ __all__ = ["review", "reviewable", "REVIEWABLE_FIELDS", "MAX_REVIEWS"]
 
 
 MAX_DDS_FACTS = 10
+# The whole semantic pass at card completion: the student is waiting for the result.
+DDS_TOTAL_SECONDS = float(os.environ.get('SEMANTIC_DDS_TOTAL_SECONDS', '30'))
 
 
 async def review_dds(result: dict, expectation: dict) -> dict:
@@ -166,6 +169,10 @@ async def review_dds(result: dict, expectation: dict) -> dict:
         return result
     budget = MAX_DDS_FACTS
     granted = 0
+    deadline = asyncio.get_running_loop().time() + DDS_TOTAL_SECONDS
+
+    def remaining():
+        return deadline - asyncio.get_running_loop().time()
     for check in result.get("checks", []):
         if check.get("passed") is not False or not check.get("missing") or not str(check.get("actual", "")).strip():
             continue
@@ -174,8 +181,12 @@ async def review_dds(result: dict, expectation: dict) -> dict:
         conveyed = True
         for fact in check["missing"]:
             budget -= 1
+            if remaining() < 3:
+                conveyed = False
+                break
             try:
-                same, _ = await asyncio.wait_for(_same_meaning(check["actual"], [fact]), timeout=TIMEOUT_SECONDS)
+                same, _ = await asyncio.wait_for(_same_meaning(check["actual"], [fact]),
+                                                 timeout=min(TIMEOUT_SECONDS, remaining()))
             except Exception as error:
                 LOGGER.warning("Смысловая проверка ДДС пропущена: %s: %s", type(error).__name__, error)
                 same = False
@@ -193,14 +204,14 @@ async def review_dds(result: dict, expectation: dict) -> dict:
     # бывают ложные «не совпадает», а итог остаётся за правилами и преподавателем.
     warned = 0
     for check in result.get("checks", []):
-        if budget <= 0:
+        if budget <= 0 or remaining() < 3:
             break
         if check.get("passed") is not True or not check.get("reference") or not str(check.get("actual", "")).strip():
             continue
         budget -= 1
         try:
             same, reason = await asyncio.wait_for(
-                _same_meaning(check["actual"], [check["reference"]]), timeout=TIMEOUT_SECONDS)
+                _same_meaning(check["actual"], [check["reference"]]), timeout=min(TIMEOUT_SECONDS, remaining()))
         except Exception as error:
             LOGGER.warning("Сверка смысла записи ДДС пропущена: %s: %s", type(error).__name__, error)
             continue

@@ -38,18 +38,18 @@ async function serve(page){
   // Первый вход: тур запускается сам.
   const box=page.locator('.onboarding-box');
   await expect(box).toBeVisible({timeout:5000});
-  await expect(box.locator('.onboarding-step')).toHaveText('Шаг 1 из 13');
-  await expect(box.locator('h3')).toHaveText('Список происшествий');
+  await expect(box.locator('.onboarding-step')).toHaveText('Шаг 1 из 14');
+  await expect(box.locator('h3')).toHaveText('Журнал происшествий');
   await expect(box.locator('[data-onboarding="back"]')).toBeDisabled();
   await page.screenshot({path:path.join(shots,'onboarding.png')});
 
   await box.locator('[data-onboarding="next"]').click();
-  await expect(box.locator('.onboarding-step')).toHaveText('Шаг 2 из 13');
+  await expect(box.locator('.onboarding-step')).toHaveText('Шаг 2 из 14');
   await expect(box.locator('[data-onboarding="back"]')).toBeEnabled();
-  // Шаг про адрес обязан предупреждать об ошибке в названии улицы.
+  // Карточку заполняет Служба 112: диспетчер ДДС её не редактирует.
   for(let i=2;i<5;i++)await box.locator('[data-onboarding="next"]').click();
-  await expect(box.locator('h3')).toContainText('Адрес');
-  await expect(box.locator('p')).toContainText('Дубнинская');
+  await expect(box.locator('h3')).toContainText('Сведения от Службы 112');
+  await expect(box.locator('p')).toContainText('Изменить их нельзя');
 
   await box.locator('[data-onboarding="stop"]').click();
   await expect(page.locator('.onboarding-box')).toHaveCount(0);
@@ -62,7 +62,7 @@ async function serve(page){
   await expect(page.locator('.onboarding-box')).toBeVisible();
 
   // Последний шаг закрывает тур.
-  for(let i=0;i<13;i++)await page.locator('[data-onboarding="next"]').click();
+  for(let i=0;i<14;i++)await page.locator('[data-onboarding="next"]').click();
   await expect(page.locator('.onboarding-box')).toHaveCount(0);
 
   if(errors.length)throw Error(errors.join('\n'));

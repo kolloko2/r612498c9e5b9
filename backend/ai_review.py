@@ -8,6 +8,7 @@ text and server-created scenario/rubric references before anything is returned.
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any, Literal
 
@@ -239,8 +240,8 @@ records — записи ученика: комментарии к статус�
 Каждое замечание опирается на дословную цитату из поля text одной записи ученика: копируй фрагмент посимвольно, без исправлений. Если сведения пропущены целиком, процитируй запись, где они должны были быть, и прямо скажи, чего не хватает.
 Виды: omission — упущены сведения доклада; inaccuracy — сведения искажены; clarity — неясная или неполная формулировка; grammar — ошибка языка; good — удачная запись, которую стоит повторять.
 Не выставляй балл и не пересматривай итог проверки. Не придумывай факты и регламенты.
-Пиши по-русски, обращайся к ученику на «вы». summary — 2–4 предложения живым языком: что получилось и что главное исправить.
-Верни только JSON: {"summary":"строка","findings":[{"kind":"omission|inaccuracy|clarity|grammar|good","record":"идентификатор записи","quote":"точная цитата","explanation":"объяснение","suggestion":"как записать лучше","reference_ids":["идентификатор источника"]}]}. Не более 6 замечаний."""
+Пиши по-русски, обращайся к ученику на «вы». summary — 2–3 коротких предложения живым языком: что получилось и что главное исправить.
+Верни только JSON: {"summary":"строка","findings":[{"kind":"omission|inaccuracy|clarity|grammar|good","record":"идентификатор записи","quote":"точная цитата","explanation":"объяснение","suggestion":"как записать лучше","reference_ids":["идентификатор источника"]}]}. Не более 2 замечаний — самые важные. explanation и suggestion — по одному короткому предложению, до 150 знаков; summary — до 300 знаков. Последнее предложение summary — рекомендация, что потренировать в следующей карточке."""
 
 
 class _DdsFinding(BaseModel):
@@ -289,7 +290,7 @@ def dds_records(value: dict[str, Any]) -> list[dict[str, str]]:
     for event in value.get("events", []):
         detail = event.get("detail") or {}
         if event.get("type") == "service.updated" and detail.get("service") == service:
-            comment = _text(detail.get("comment"), 1000).strip()
+            comment = _text(detail.get("comment"), 600).strip()
             if comment:
                 records.append({"id": f"status.{len(records) + 1}",
                                 "label": f"Комментарий к статусу «{detail.get('status', '')}»",
@@ -300,9 +301,11 @@ def dds_records(value: dict[str, Any]) -> list[dict[str, str]]:
     for note in value.get("notifications", []):
         if note.get("message_id") not in briefings:
             continue
-        text = _text(note.get("comment"), 1500).strip()
+        text = _text(note.get("comment"), 700).strip()
         if text:
-            whom = "бригаде" if note.get("counterpart") == "crew" else "вышестоящему начальнику"
+            whom = {'crew': 'руководителю бригады', 'superior': 'вышестоящему начальнику',
+                    'organization_head': 'руководителю организации', 'response_chief': 'руководителю реагирования',
+                    'crew_specialist': 'специалисту бригады', 'applicant': 'заявителю'}.get(note.get('counterpart'), 'собеседнику')
             records.append({"id": f"briefing.{len(records) + 1}",
                             "label": f"Доклад по телефону {whom}", "text": text, "at": note.get("at", "")})
     for report in value.get("error_reports", []):
@@ -323,11 +326,68 @@ def _dds_references(value: dict[str, Any], dds_review: dict[str, Any]) -> list[d
     for update in value.get("situation_updates", []):
         references.append({"id": f"report.{update.get('id', len(references))}", "at": update.get("at", ""),
                            "text": _text(f"{update.get('source') or 'Бригада'}: {update.get('text', '')}", 600)})
-    for check in (dds_review or {}).get("checks", [])[:30]:
+    # Only what went wrong: passed checks add thousands of tokens on a CPU server
+    # without changing the advice.
+    for check in [c for c in (dds_review or {}).get("checks", []) if c.get("passed") is not True][:12]:
         state = {True: "пройдена", False: "не пройдена"}.get(check.get("passed"), "не оценивалась")
         references.append({"id": f"check.{check.get('id')}", "text": _text(
             f"Проверка «{check.get('label', '')}»: {state}. {check.get('detail', '')}".strip(), 600)})
     return references
+
+
+# What the model is asked to produce. A CPU server generates about three tokens
+# per second, so the grammar caps the answer: three short findings and a short
+# summary fit in a few minutes, a free-length answer did not fit at all.
+DDS_REVIEW_FINDINGS = int(os.getenv('AI_REVIEW_MAX_FINDINGS', '2'))
+DDS_LIMITS = {'quote': 120, 'explanation': 180, 'suggestion': 180, 'summary': 320}
+
+
+DDS_MAX_RECORDS = 12
+DDS_MATERIAL_CHARS = int(os.getenv('AI_REVIEW_MATERIAL_CHARS', '1500'))
+
+
+def _material_budget(materials: list[dict]) -> list[dict]:
+    result, used = [], 0
+    for item in materials:
+        excerpt = str(item.get('excerpt') or '')[:max(0, DDS_MATERIAL_CHARS - used)]
+        if not excerpt:
+            break
+        result.append({**item, 'excerpt': excerpt})
+        used += len(excerpt)
+    return result
+
+
+def _already_written(explanation: str, record_text: str) -> bool:
+    """An «omission» whose every number and time is in the record contradicts it."""
+    numbers = re.findall(r"\d+(?:[:.]\d+)?", explanation)
+    return bool(numbers) and all(number in record_text for number in numbers)
+
+
+def _whole_sentences(text: str, limit: int) -> str:
+    """The grammar stops a field at its limit mid-word; end it on a sentence or word."""
+    text = text.strip()
+    if len(text) < limit:
+        return text
+    text = text[:limit]
+    end = max(text.rfind(mark) for mark in '.!?»')
+    if end >= limit // 3:
+        return text[:end + 1]
+    return text[:text.rfind(' ')].rstrip(',;:—- ') + '…' if ' ' in text else text
+
+
+def _dds_request_schema() -> dict:
+    text = lambda limit: {"type": "string", "minLength": 1, "maxLength": limit}
+    finding = {"type": "object", "additionalProperties": False,
+               "properties": {"kind": {"type": "string", "enum": ["omission", "inaccuracy", "clarity", "grammar", "good"]},
+                              "record": text(64), "quote": text(DDS_LIMITS['quote']),
+                              "explanation": text(DDS_LIMITS['explanation']),
+                              "suggestion": text(DDS_LIMITS['suggestion']),
+                              "reference_ids": {"type": "array", "items": text(64), "maxItems": 2}},
+               "required": ["kind", "record", "quote", "explanation", "suggestion", "reference_ids"]}
+    return {"type": "object", "additionalProperties": False,
+            "properties": {"summary": text(DDS_LIMITS['summary']),
+                           "findings": {"type": "array", "items": finding, "maxItems": DDS_REVIEW_FINDINGS}},
+            "required": ["summary", "findings"]}
 
 
 async def review_dds(value: dict, dds_review: dict | None,
@@ -346,26 +406,37 @@ async def review_dds(value: dict, dds_review: dict | None,
                 "summary": "В карточке нет ни одной записи: комментарии к статусам и доклады не внесены, "
                            "разбирать нечего. Отражайте каждый доклад бригады текстом при смене статуса."}
     references = _dds_references(value, dds_review or {})
+    # Prompt size is what a CPU server pays for first: keep the latest records
+    # and only the best-matching passages of the teacher's materials.
+    records = records[-DDS_MAX_RECORDS:]
     payload = {"service": value.get("owner_service", ""), "records": records, "references": references,
-               "teacher_corrections": (corrections or [])[:4], "teacher_materials": materials or []}
+               "teacher_corrections": (corrections or [])[:2], "teacher_materials": _material_budget(materials or [])}
     reply = await llm.complete(
         [{"role": "system", "content": DDS_SYSTEM_PROMPT},
          {"role": "user", "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))}],
-        max_tokens=1800, json_mode=_DdsResponse.model_json_schema())
+        max_tokens=900, json_mode=_dds_request_schema(),
+        timeout=int(os.getenv('AI_REVIEW_REQUEST_SECONDS', '720')))
     parsed = _DdsResponse.model_validate(_json_object(reply))
+    parsed.summary = _whole_sentences(parsed.summary, DDS_LIMITS['summary'])
+    for finding in parsed.findings:
+        finding.explanation = _whole_sentences(finding.explanation, DDS_LIMITS['explanation'])
+        finding.suggestion = _whole_sentences(finding.suggestion, DDS_LIMITS['suggestion'])
     by_record = {record["id"]: record for record in records}
     by_reference = {reference["id"]: reference for reference in references}
-    findings = []
+    findings, literal = [], 0
     for finding in parsed.findings:
         record = by_record.get(finding.record)
         # Цитаты, которой нет в записях ученика, модель выдумала: замечание отбрасывается.
         if record is None or finding.quote not in record["text"]:
+            continue
+        literal += 1
+        if finding.kind == "omission" and _already_written(finding.explanation, record["text"]):
             continue
         item = finding.model_dump()
         item["reference_ids"] = [ref for ref in dict.fromkeys(finding.reference_ids) if ref in by_reference]
         item["record_label"] = record["label"]
         item["references"] = [dict(by_reference[ref]) for ref in item["reference_ids"]]
         findings.append(item)
-    if parsed.findings and not findings:
+    if parsed.findings and not literal:
         raise ValueError("AI review quotes are not literal student records")
     return {**base, "status": "ready", "summary": parsed.summary, "findings": findings}

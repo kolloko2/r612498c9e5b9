@@ -1,5 +1,12 @@
 # Local web console
 
+The generation page can create a complete DDS exercise with an empty topic and
+service, using the selected profile/difficulty. The preview exposes contacts,
+their facts, crews, status-comment criteria and prepared practice steps. Explicit
+publication approves the complete bundle; it does not automatically assign it or
+enable student coaching. Browser check in PowerShell:
+`$env:AUTO_GENERATION_TEST='1'; node frontend/test_generation_browser.cjs`.
+
 The 16 October DDS release exposes only dispatcher training. Lesson creation uses
 `actions`, generation uses `dds`, and the learner has no operator-112 switch.
 The source-matched incident card itself retains its original layout.
@@ -294,6 +301,15 @@ white-on-white comments and status selectors inherited from the dark response pa
 Browser verification includes visible typing, saved actions and two completed cards.
 
 # 26 September DDS hardening
+
+16 October phone extension: the browser phone has a numeric keypad and the current
+attempt's DDS directory (up to ten contacts). Authoring has a structured contact
+editor with role, known facts, required conversation and crew binding. Selecting a
+number uses Backend's training dial endpoint, never an arbitrary external SIP URI.
+An exact callback for a just-dialed number can be auto-answered while registered;
+unrelated inbound calls still require the Answer button.
+Run `node frontend/test_phone_directory_browser.cjs` and
+`node frontend/test_softphone_browser.cjs` for isolated UI/SIP signaling checks.
 
 DDS tiles display time and state together, with upper overflow rows and compact
 response controls. Scenario authoring exposes explicit recipient affiliations.

@@ -202,7 +202,8 @@ def test_dds_contact_without_number_is_view_only(classroom):
         'message_id': '00000000-0000-4000-8000-000000000003',
         'service': 'Служба 101', 'phone': '+7 900 000-00-01',
         'transport': 'text'})
-    assert response.status_code == 409
+    # Без гарнитуры обучающийся говорит текстом и при назначенном учебном номере.
+    assert response.status_code == 201, response.text
     response = c.post(path + '/briefings', headers=h, json={
         'message_id': '00000000-0000-4000-8000-000000000005',
         'service': 'Служба 101', 'phone': '+7 900 000-00-01',

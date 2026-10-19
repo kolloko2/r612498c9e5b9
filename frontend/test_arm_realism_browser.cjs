@@ -127,7 +127,7 @@ async function serve(page) {
     // Номер АРМ введён на экране входа и хранится в этом браузере.
     await page.addInitScript(() => localStorage.setItem('workstation', 'АРМ-9'));
     await page.goto(origin);
-    await expect(page.locator('#operatorSeat')).toHaveText('Курсант Петров · АРМ АРМ-9');
+    await expect(page.locator('#operatorSeat')).toHaveText('Курсант Петров · АРМ-9');
 
     // Статус оператора в телефонии: свободен, пока карточка не открыта.
     await expect(page.locator('#phonePresence')).toHaveAttribute('data-state', 'available');

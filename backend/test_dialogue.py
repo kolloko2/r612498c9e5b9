@@ -32,7 +32,7 @@ async def test_phone_turn_uses_fifteen_second_model_budget(monkeypatch):
     import asyncio
     import llm
 
-    assert llm.VOICE_REPLY_TIMEOUT_SECONDS == 15.0
+    assert llm.VOICE_REPLY_TIMEOUT_SECONDS == 18.0
     monkeypatch.setattr(llm, 'VOICE_REPLY_TIMEOUT_SECONDS', .01)
 
     async def slow_model(_messages):
