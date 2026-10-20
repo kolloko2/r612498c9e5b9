@@ -28,8 +28,8 @@ PASSWORD = "Trener112-2026"
 GROUP_TITLE = "Смена А (демо)"
 ACCOUNTS = [
     ("prepod", "Преподаватель Иванов", "teacher"),
-    ("kursant1", "Курсант Петров", "student"),
-    ("kursant2", "Курсант Сидорова", "student"),
+    ("kursant1", "Мария Молодова", "student"),
+    ("kursant2", "Дмитрий Лазарев", "student"),
 ]
 # Шесть заготовок из двух билетов: два пожарных, два полицейских, медицина и ЖКХ.
 TICKET_DRAFTS = [
