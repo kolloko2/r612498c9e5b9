@@ -6,6 +6,7 @@
 (()=>{
 const byId=id=>document.getElementById(id);
 const PREF='softphone.enabled',MIC='softphone.mic';
+const BROWSER_OFF='Звонки приходят на IP-телефон (MicroSIP). Телефон в браузере работает, когда сайт открыт по https.';
 const store={get(k){try{return localStorage.getItem(k);}catch{return null;}},set(k,v){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch{}}};
 function make(tag,text,className){const x=document.createElement(tag);if(text!==undefined)x.textContent=String(text);if(className)x.className=className;return x;}
 let account=null,ua=null,session=null,ringer=null,statsTimer=null,levelStop=null,callStarted=0,clockTimer=null;
@@ -30,6 +31,7 @@ function buildDialog(){
  dialog.append(head,info,state);
  buildDialer();
  if(!account?.enabled)return;
+ if(!window.isSecureContext){dialog.append(make('p',BROWSER_OFF,'hint'));return;}
  const micLabel=make('label','Микрофон / гарнитура');const mic=make('select');mic.id='softphoneMic';micLabel.append(mic);
  const meter=make('div',undefined,'softphone-meter');meter.append(make('i'));meter.id='softphoneMeter';meter.setAttribute('aria-label','Уровень микрофона');
  const actions=make('div',undefined,'card-actions');
@@ -102,6 +104,8 @@ function showStats(s){
 // ---- Регистрация ----
 async function connectPhone(manual=false){
  if(!account?.enabled||ua)return;
+ // Браузер даёт микрофон только на https или localhost: в классе по http звонки идут на IP-телефон.
+ if(!window.isSecureContext){store.set(PREF,null);setState('off',BROWSER_OFF);return;}
  if(!window.JsSIP){setState('error','Библиотека телефона не загрузилась');return;}
  try{const probe=await navigator.mediaDevices.getUserMedia({audio:audioConstraints()});probe.getTracks().forEach(t=>t.stop());await fillDevices();}
  catch(error){setState('error','Нет доступа к микрофону: разрешите его в браузере');return;}
@@ -179,6 +183,7 @@ async function init(){
  document.body.append(bar,dialog,remote);
  setState(account.enabled?'off':'unavailable',account.enabled?'Не подключён':(account.reason||'Недоступен'));
  toggle.onclick=()=>{buildDialog();dialog.showModal();};
+ if(account.enabled&&!window.isSecureContext)setState('off',BROWSER_OFF);
  if(account.enabled&&store.get(PREF)==='1')connectPhone();
 }
 window.trainerSoftphone={connect:connectPhone,disconnect,answer,hangup,expectOutgoing,get state(){return toggle.dataset.state;},get account(){return account;}};
