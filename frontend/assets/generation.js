@@ -1,4 +1,6 @@
 'use strict';
+// crypto.randomUUID есть только на https и localhost; в учебном классе сайт открыт по http.
+if(window.crypto&&!crypto.randomUUID)crypto.randomUUID=()=>'10000000-1000-4000-8000-100000000000'.replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const el=id=>document.getElementById(id);
 const categoryNames={fire:'Пожары',traffic:'ДТП и транспорт',medical:'Медицина',utilities:'ЖКХ и инженерные сети',public:'Общественная безопасность',other:'Прочее'};
 const difficultyNames={basic:'Базовый',standard:'Стандартный',advanced:'Повышенный'},profileNames={general:'Общий',fire:'Пожарная охрана',police:'Полиция',medical:'Скорая медицинская помощь',gas:'Аварийная газовая служба',utilities:'ЖКХ и инженерные сети'};
