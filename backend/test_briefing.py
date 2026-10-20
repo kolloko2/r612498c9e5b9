@@ -276,6 +276,14 @@ def test_absence_incident_and_house_before_it_are_recognised():
     assert 'Дом' in check('Ленинградская, дом 12 отсутствует, освещения нет.', card)['missing']
 
 
+def test_negation_after_house_number_in_speech_belongs_to_the_next_statement():
+    # Распознанная речь без запятых: «дом 12 нет доступа» не отрицает номер дома.
+    card = {'city': 'Москва', 'street': 'Улица Кирова', 'house': '12', 'incident_type': 'Нет доступа в подъезд',
+            'description': 'Не работает домофон и замок в подъезде.'}
+    assert check('москва улица кирова дом 12 нет доступа в подъезд не работают домофон', card)['missing'] == []
+    assert 'Дом' in check('москва улица кирова не дом 12 а дом 14 нет доступа в подъезд', card)['missing']
+
+
 def test_incident_paraphrase_with_the_same_root_is_recognised():
     from text_facts import incident_asserted
     incident = 'Переполнение контейнерной площадки'

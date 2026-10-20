@@ -79,6 +79,13 @@ def asserted(text, phrase):
                 continue
             end = i + len(core)
             after = [w for w, k in zip(words[end:end+3], chunk[end:end+3]) if k == chunk[end-1]]
+            if len(core) == 1 and core[0][:1].isdigit():
+                # «дом 12 не работает домофон»: in speech there is no comma, and a
+                # negation followed by more words starts the next statement.
+                # «дом 12 отсутствует,» still negates the number itself.
+                rest = [w for w, k in zip(words[end:], chunk[end:]) if k == chunk[end-1]]
+                if len(rest) > 1:
+                    after = []
             negated = any(negates(raw_words, words, j, i) for j in range(max(0, i-3), i))
             negated |= bool(after and after[0] in {'не', 'нет', 'отсутствовать'})
             negated |= after[:2] in [['не', 'подтвердить'], ['не', 'подтвержденный']]

@@ -204,7 +204,7 @@ async def test_unanswered_question_gets_a_reply_in_the_role(monkeypatch):
     assert await duty_reply(history, {}, 'ДДС', [], counterpart=crew) == 'Принял, выезжаем. Подробности доложу с места.'
     boss = {'id': 's', 'name': 'Сергей Киселёв', 'role': 'superior'}
     answer = await duty_reply(history, {}, 'ДДС', [], counterpart=boss, purpose='progress')
-    assert answer == 'Принял. Доложите, когда работы будут завершены.'
+    assert answer == 'Доклад о ходе работ принял, держу на контроле.'
     # Недостающие сведения по-прежнему запрашиваются, а не принимаются.
     asked = await duty_reply(history, {}, 'ДДС', ['Дом'], counterpart=boss)
     assert asked not in llm_roles() and 'дом' in asked.casefold()
